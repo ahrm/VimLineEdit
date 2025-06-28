@@ -6,6 +6,7 @@
 #include <QStyle>
 #include <QCommonStyle>
 #include <vector>
+#include <QRegularExpression>
 
 
 class LineEditStyle : public QCommonStyle
@@ -54,6 +55,51 @@ void VimLineEdit::keyPressEvent(QKeyEvent *event){
             }
 
             return;
+        }
+
+        if (!is_keypress_a_modifier && action_waiting_for_motion.has_value()){
+
+            if (action_waiting_for_motion->surrounding_scope == SurroundingScope::None){
+
+                if (event->key() == Qt::Key_I) {
+                    action_waiting_for_motion->surrounding_scope = SurroundingScope::Inside;
+                    return;
+                }
+                else if (event->key() == Qt::Key_A) {
+                    action_waiting_for_motion->surrounding_scope = SurroundingScope::Around;
+                    return;
+                }
+
+            }
+            else{
+                switch (event->key()) {
+                    case Qt::Key_ParenLeft:
+                        action_waiting_for_motion->surrounding_kind = SurroundingKind::Parentheses;
+                        break;
+                    case Qt::Key_BraceLeft:
+                        action_waiting_for_motion->surrounding_kind = SurroundingKind::Braces;
+                        break;
+                    case Qt::Key_BracketLeft:
+                        action_waiting_for_motion->surrounding_kind = SurroundingKind::Brackets;
+                        break;
+                    case Qt::Key_QuoteLeft:
+                        action_waiting_for_motion->surrounding_kind = SurroundingKind::SingleQuotes;
+                        break;
+                    case Qt::Key_QuoteDbl:
+                        action_waiting_for_motion->surrounding_kind = SurroundingKind::DoubleQuotes;
+                        break;
+                    case Qt::Key_W:
+                        action_waiting_for_motion->surrounding_kind = SurroundingKind::Word;
+                        break;
+                    default:
+                        // If the key is not recognized, we reset the action waiting for motion
+                        action_waiting_for_motion = {};
+                        return;
+
+                }
+
+            }
+            handle_surrounding_motion_action();
         }
 
         if (!is_keypress_a_modifier){
@@ -303,7 +349,7 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
             break;
         case VimLineEditCommand::Delete:
             push_history(current_state.text, current_state.cursor_position);
-            action_waiting_for_motion = ActionWaitingForMotion::Delete;
+            action_waiting_for_motion = {ActionWaitingForMotionKind::Delete, SurroundingScope::None, SurroundingKind::None};
             break;
         case VimLineEditCommand::FindForward:{
             last_find_state = FindState{FindDirection::Forward, symbol};
@@ -356,7 +402,7 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
 
     if (new_pos != -1){
         if (action_waiting_for_motion.has_value()){
-            if (action_waiting_for_motion.value() == ActionWaitingForMotion::Delete) {
+            if (action_waiting_for_motion.value().kind == ActionWaitingForMotionKind::Delete) {
                 // delete from old_pos to new_pos
                 if (old_pos < new_pos) {
                     QString new_text = text().remove(old_pos, new_pos + 1 - old_pos);
@@ -590,4 +636,34 @@ KeyboardModifierState KeyboardModifierState::from_qt_modifiers(Qt::KeyboardModif
         modifiers.testFlag(Qt::AltModifier)
     };
     #endif
+}
+
+void VimLineEdit::handle_surrounding_motion_action(){
+  if (action_waiting_for_motion.has_value()){
+    if (action_waiting_for_motion->surrounding_scope == SurroundingScope::Inside) {
+        if (action_waiting_for_motion->surrounding_kind == SurroundingKind::Word) {
+            // Handle surrounding word action
+            int cursor_pos = cursorPosition();
+            QString current_text = text();
+            int start = current_text.lastIndexOf(QRegularExpression("\\W"), cursor_pos);
+            int end = current_text.indexOf(QRegularExpression("\\W"), cursor_pos);
+            if (start == -1) start = 0;
+            else{
+                start++;
+            }
+
+            if (end == -1) end = current_text.length();
+            else{
+                end--;
+            }
+            // setSelection(start, end - start);
+            if (action_waiting_for_motion->kind == ActionWaitingForMotionKind::Delete) {
+                // delete the selected text
+                QString new_text = current_text.remove(start, end - start);
+                setText(new_text);
+                setCursorPosition(start);
+            }
+        }
+    }
+  }
 }

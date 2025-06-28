@@ -42,11 +42,34 @@ enum class VimLineEditCommand{
     Redo
 };
 
-enum class ActionWaitingForMotion{
+enum class ActionWaitingForMotionKind{
     Delete,
     Change,
     Yank,
     Visual,
+};
+
+enum class SurroundingScope{
+    None,
+    Around,
+    Inside,
+};
+
+enum class SurroundingKind{
+    None,
+    Parentheses,
+    Brackets,
+    Braces,
+    SingleQuotes,
+    DoubleQuotes,
+    Backticks,
+    Word,
+};
+
+struct ActionWaitingForMotion{
+    ActionWaitingForMotionKind kind;
+    SurroundingScope surrounding_scope = SurroundingScope::None;
+    SurroundingKind surrounding_kind = SurroundingKind::None;
 };
 
 std::string to_string(VimLineEditCommand cmd);
@@ -146,6 +169,7 @@ private:
     int calculate_move_to_end_of_word(bool with_symbols) const;
     int calculate_move_word_backward(bool with_symbols) const;
     void delete_char();
+    void handle_surrounding_motion_action();
 
     void push_history(const QString& text, int cursor_position);
     void undo();
