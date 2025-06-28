@@ -130,6 +130,15 @@ void VimLineEdit::add_vim_keybindings(){
         KeyBinding{{KeyChord{Qt::Key_F, Qt::NoModifier}}, VimLineEditCommand::FindForward},
         KeyBinding{{KeyChord{Qt::Key_F, Qt::ShiftModifier}}, VimLineEditCommand::FindBackward},
         KeyBinding{{KeyChord{Qt::Key_Semicolon, Qt::NoModifier}}, VimLineEditCommand::RepeatFind},
+        KeyBinding{{KeyChord{Qt::Key_W, Qt::NoModifier}}, VimLineEditCommand::MoveWordForward},
+        KeyBinding{{KeyChord{Qt::Key_W, Qt::ShiftModifier}}, VimLineEditCommand::MoveWordForwardWithSymbols},
+        KeyBinding{{KeyChord{Qt::Key_E, Qt::NoModifier}}, VimLineEditCommand::MoveToEndOfWord},
+        KeyBinding{{KeyChord{Qt::Key_E, Qt::ShiftModifier}}, VimLineEditCommand::MoveToEndOfWordWithSymbols},
+        KeyBinding{{KeyChord{Qt::Key_B, Qt::NoModifier}}, VimLineEditCommand::MoveWordBackward},
+        KeyBinding{{KeyChord{Qt::Key_B, Qt::ShiftModifier}}, VimLineEditCommand::MoveWordBackwardWithSymbols},
+        KeyBinding{{KeyChord{Qt::Key_T, Qt::NoModifier}}, VimLineEditCommand::FindForwardTo},
+        KeyBinding{{KeyChord{Qt::Key_T, Qt::ShiftModifier}}, VimLineEditCommand::FindBackwardTo},
+        KeyBinding{{KeyChord{Qt::Key_X, Qt::NoModifier}}, VimLineEditCommand::DeleteChar},
     };
 
     for (const auto &binding : key_bindings) {
@@ -171,14 +180,21 @@ std::string to_string(VimLineEditCommand cmd) {
         case VimLineEditCommand::MoveRight: return "MoveRight";
         case VimLineEditCommand::MoveToBeginning: return "MoveToBeginning";
         case VimLineEditCommand::MoveToEnd: return "MoveToEnd";
-        case VimLineEditCommand::MoveWordLeft: return "MoveWordLeft";
-        case VimLineEditCommand::MoveWordRight: return "MoveWordRight";
+        case VimLineEditCommand::MoveWordForward: return "MoveWordForward";
+        case VimLineEditCommand::MoveWordForwardWithSymbols: return "MoveWordForwardWithSymbols";
+        case VimLineEditCommand::MoveToEndOfWord: return "MoveToEndOfWord";
+        case VimLineEditCommand::MoveToEndOfWordWithSymbols: return "MoveToEndOfWordWithSymbols";
+        case VimLineEditCommand::MoveWordBackward: return "MoveWordBackward";
+        case VimLineEditCommand::MoveWordBackwardWithSymbols: return "MoveWordBackwardWithSymbols";
+        case VimLineEditCommand::DeleteChar: return "DeleteChar";
         case VimLineEditCommand::DeleteInsideWord: return "DeleteInsideWord";
         case VimLineEditCommand::DeleteInsideParentheses: return "DeleteInsideParentheses";
         case VimLineEditCommand::DeleteInsideBrackets: return "DeleteInsideBrackets";
         case VimLineEditCommand::DeleteInsideBraces: return "DeleteInsideBraces";
         case VimLineEditCommand::FindForward: return "FindForward";
         case VimLineEditCommand::FindBackward: return "FindBackward";
+        case VimLineEditCommand::FindForwardTo: return "FindForwardTo";
+        case VimLineEditCommand::FindBackwardTo: return "FindBackwardTo";
         case VimLineEditCommand::RepeatFind: return "RepeatFind";
         default: return "Unknown";
     }
@@ -188,6 +204,8 @@ bool requires_symbol(VimLineEditCommand cmd){
     switch (cmd) {
         case VimLineEditCommand::FindForward:
         case VimLineEditCommand::FindBackward:
+        case VimLineEditCommand::FindForwardTo:
+        case VimLineEditCommand::FindBackwardTo:
             return true;
         default:
             return false;
@@ -230,6 +248,27 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
         case VimLineEditCommand::MoveRight:
             cursorForward(false);
             break;
+        case VimLineEditCommand::MoveWordForward:
+            move_word_forward(false);
+            break;
+        case VimLineEditCommand::MoveWordForwardWithSymbols:
+            move_word_forward(true);
+            break;
+        case VimLineEditCommand::MoveToEndOfWord:
+            move_to_end_of_word(false);
+            break;
+        case VimLineEditCommand::MoveToEndOfWordWithSymbols:
+            move_to_end_of_word(true);
+            break;
+        case VimLineEditCommand::MoveWordBackward:
+            move_word_backward(false);
+            break;
+        case VimLineEditCommand::MoveWordBackwardWithSymbols:
+            move_word_backward(true);
+            break;
+        case VimLineEditCommand::DeleteChar:
+            delete_char();
+            break;
         case VimLineEditCommand::FindForward:{
             last_find_state = FindState{FindDirection::Forward, symbol};
             handle_find(last_find_state.value());
@@ -237,6 +276,16 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
         }
         case VimLineEditCommand::FindBackward:{
             last_find_state = FindState{FindDirection::Backward, symbol};
+            handle_find(last_find_state.value());
+            break;
+        }
+        case VimLineEditCommand::FindForwardTo:{
+            last_find_state = FindState{FindDirection::ForwardTo, symbol};
+            handle_find(last_find_state.value());
+            break;
+        }
+        case VimLineEditCommand::FindBackwardTo:{
+            last_find_state = FindState{FindDirection::BackwardTo, symbol};
             handle_find(last_find_state.value());
             break;
         }
@@ -255,18 +304,136 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
 
 void VimLineEdit::handle_find(FindState find_state){
 
-    if (find_state.direction == FindDirection::Forward) {
-        int location = text().indexOf(QChar(find_state.character.value_or(' ')), cursorPosition() + 2);
-        if (location != -1) {
-            setCursorPosition(location);
+    int location = -1;
+    switch (find_state.direction) {
+        case FindDirection::Forward:
+            location = text().indexOf(QChar(find_state.character.value_or(' ')), cursorPosition() + 2);
+            break;
+        case FindDirection::Backward:
+            if (cursorPosition() == 0) return;
+            location = text().lastIndexOf(QChar(find_state.character.value_or(' ')), cursorPosition() - 1);
+            break;
+        case FindDirection::ForwardTo:
+            location = text().indexOf(QChar(find_state.character.value_or(' ')), cursorPosition() + 2);
+            if (location != -1) {
+                location--;
+            }
+            break;
+        case FindDirection::BackwardTo:
+            if (cursorPosition() == 0) return;
+            location = text().lastIndexOf(QChar(find_state.character.value_or(' ')), cursorPosition() - 1);
+            if (location != -1) {
+                location++;
+            }
+            break;
+    }
+
+    if (location != -1) {
+        setCursorPosition(location);
+    }
+}
+
+void VimLineEdit::move_word_forward(bool with_symbols) {
+    int pos = cursorPosition();
+    const QString& t = text();
+    int len = t.length();
+
+    if (pos >= len - 1) {
+        return;
+    }
+
+    int next_pos = pos;
+
+    if (!t[next_pos].isSpace()){
+        if (with_symbols){
+            while(next_pos < len && !t[next_pos].isSpace()){
+                next_pos++;
+            }
+        } else {
+            bool is_letter = t[next_pos].isLetterOrNumber();
+            while(next_pos < len && !t[next_pos].isSpace() && t[next_pos].isLetterOrNumber() == is_letter){
+                next_pos++;
+            }
         }
     }
-    else{
-        if (cursorPosition() == 0) return;
 
-        int location = text().lastIndexOf(QChar(find_state.character.value_or(' ')), cursorPosition() - 1);
-        if (location != -1) {
-            setCursorPosition(location);
+    while(next_pos < len && t[next_pos].isSpace()){
+        next_pos++;
+    }
+
+
+    if (next_pos < len) {
+        setCursorPosition(next_pos);
+    }
+}
+
+void VimLineEdit::move_to_end_of_word(bool with_symbols) {
+    int pos = cursorPosition();
+    const QString& t = text();
+    int len = t.length();
+
+    if (pos >= len - 1) {
+        return;
+    }
+
+    int next_pos = pos;
+
+    if (t[next_pos].isSpace()){
+        while(next_pos < len && t[next_pos].isSpace()){
+            next_pos++;
         }
+    }
+
+    if (with_symbols){
+        while(next_pos < len -1 && !t[next_pos+1].isSpace()){
+            next_pos++;
+        }
+    } else {
+        bool is_letter = t[next_pos].isLetterOrNumber();
+        while(next_pos < len -1 && !t[next_pos+1].isSpace() && t[next_pos+1].isLetterOrNumber() == is_letter){
+            next_pos++;
+        }
+    }
+
+    if (next_pos < len) {
+        setCursorPosition(next_pos);
+    }
+}
+
+void VimLineEdit::move_word_backward(bool with_symbols) {
+    int pos = cursorPosition();
+    const QString& t = text();
+
+    if (pos <= 0) {
+        return;
+    }
+
+    int prev_pos = pos - 1;
+
+    while (prev_pos > 0 && t[prev_pos].isSpace()) {
+        prev_pos--;
+    }
+
+    if (with_symbols) {
+        while (prev_pos > 0 && !t[prev_pos - 1].isSpace()) {
+            prev_pos--;
+        }
+    } else {
+        bool is_letter = t[prev_pos].isLetterOrNumber();
+        while (prev_pos > 0 && !t[prev_pos - 1].isSpace() && t[prev_pos-1].isLetterOrNumber() == is_letter) {
+            prev_pos--;
+        }
+    }
+
+    setCursorPosition(prev_pos);
+}
+
+void VimLineEdit::delete_char() {
+    int current_pos = cursorPosition();
+    QString current_text = text();
+    if (current_pos < current_text.length()) {
+        current_text.remove(current_pos, 1);
+        setText(current_text);
+        setCursorPosition(current_pos);
     }
 }

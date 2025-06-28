@@ -18,14 +18,21 @@ enum class VimLineEditCommand{
     MoveRight,
     MoveToBeginning,
     MoveToEnd,
-    MoveWordLeft,
-    MoveWordRight,
+    MoveWordForward, // w
+    MoveWordForwardWithSymbols, // W
+    MoveToEndOfWord, // e
+    MoveToEndOfWordWithSymbols, // E
+    MoveWordBackward, // b
+    MoveWordBackwardWithSymbols, // B
+    DeleteChar, // x
     DeleteInsideWord,
     DeleteInsideParentheses,
     DeleteInsideBrackets,
     DeleteInsideBraces,
-    FindForward,
-    FindBackward,
+    FindForward, // f
+    FindBackward, // F
+    FindForwardTo, // t
+    FindBackwardTo, // T
     RepeatFind,
 };
 
@@ -61,6 +68,8 @@ enum class VimMode{
 enum class FindDirection{
     Forward,
     Backward,
+    ForwardTo,
+    BackwardTo,
 };
 
 struct FindState{
@@ -92,6 +101,12 @@ public:
     std::optional<VimLineEditCommand> handle_key_event(int key, Qt::KeyboardModifiers modifiers);
     void handle_command(VimLineEditCommand cmd, std::optional<char> symbol = {});
     void handle_find(FindState find_state);
+
+private:
+    void move_word_forward(bool with_symbols);
+    void move_to_end_of_word(bool with_symbols);
+    void move_word_backward(bool with_symbols);
+    void delete_char();
 };
 
 #endif // VIMLINEEDIT_H
