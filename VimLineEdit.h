@@ -18,22 +18,23 @@ enum class VimLineEditCommand{
     MoveRight,
     MoveToBeginning,
     MoveToEnd,
-    MoveWordForward, // w
-    MoveWordForwardWithSymbols, // W
-    MoveToEndOfWord, // e
-    MoveToEndOfWordWithSymbols, // E
-    MoveWordBackward, // b
-    MoveWordBackwardWithSymbols, // B
-    DeleteChar, // x
+    MoveWordForward,
+    MoveWordForwardWithSymbols,
+    MoveToEndOfWord,
+    MoveToEndOfWordWithSymbols,
+    MoveWordBackward,
+    MoveWordBackwardWithSymbols,
+    DeleteChar,
     DeleteInsideWord,
     DeleteInsideParentheses,
     DeleteInsideBrackets,
     DeleteInsideBraces,
-    FindForward, // f
-    FindBackward, // F
-    FindForwardTo, // t
-    FindBackwardTo, // T
+    FindForward,
+    FindBackward,
+    FindForwardTo,
+    FindBackwardTo,
     RepeatFind,
+    RepeatFindReverse,
     Delete,
     PasteForward,
 };
@@ -112,7 +113,7 @@ public:
     void add_vim_keybindings();
     std::optional<VimLineEditCommand> handle_key_event(int key, Qt::KeyboardModifiers modifiers);
     void handle_command(VimLineEditCommand cmd, std::optional<char> symbol = {});
-    int calculate_find(FindState find_state) const;
+    int calculate_find(FindState find_state, bool reverse=false) const;
 
 private:
     int calculate_move_word_forward(bool with_symbols) const;

@@ -139,6 +139,7 @@ void VimLineEdit::add_vim_keybindings(){
         KeyBinding{{KeyChord{Qt::Key_F, Qt::NoModifier}}, VimLineEditCommand::FindForward},
         KeyBinding{{KeyChord{Qt::Key_F, Qt::ShiftModifier}}, VimLineEditCommand::FindBackward},
         KeyBinding{{KeyChord{Qt::Key_Semicolon, Qt::NoModifier}}, VimLineEditCommand::RepeatFind},
+        KeyBinding{{KeyChord{Qt::Key_Comma, Qt::NoModifier}}, VimLineEditCommand::RepeatFindReverse},
         KeyBinding{{KeyChord{Qt::Key_W, Qt::NoModifier}}, VimLineEditCommand::MoveWordForward},
         KeyBinding{{KeyChord{Qt::Key_W, Qt::ShiftModifier}}, VimLineEditCommand::MoveWordForwardWithSymbols},
         KeyBinding{{KeyChord{Qt::Key_E, Qt::NoModifier}}, VimLineEditCommand::MoveToEndOfWord},
@@ -208,6 +209,7 @@ std::string to_string(VimLineEditCommand cmd) {
         case VimLineEditCommand::FindForwardTo: return "FindForwardTo";
         case VimLineEditCommand::FindBackwardTo: return "FindBackwardTo";
         case VimLineEditCommand::RepeatFind: return "RepeatFind";
+        case VimLineEditCommand::RepeatFindReverse: return "RepeatFindReverse";
         case VimLineEditCommand::PasteForward: return "PasteForward";
         default: return "Unknown";
     }
@@ -315,6 +317,12 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
             }
             break;
         }
+        case VimLineEditCommand::RepeatFindReverse: {
+            if (last_find_state.has_value()){
+                new_pos = calculate_find(last_find_state.value(), true);
+            }
+            break;
+        }
         case VimLineEditCommand::PasteForward: {
             if (last_deleted_text.size() > 0){
                 // Paste the last deleted text after the cursor position
@@ -361,10 +369,13 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
 
 }
 
-int VimLineEdit::calculate_find(FindState find_state) const{
+int VimLineEdit::calculate_find(FindState find_state, bool reverse) const{
 
     int location = -1;
-    switch (find_state.direction) {
+    FindDirection direction = reverse ? 
+        (find_state.direction == FindDirection::Forward ? FindDirection::Backward : FindDirection::Forward) : 
+        find_state.direction;
+    switch (direction) {
         case FindDirection::Forward:
             location = text().indexOf(QChar(find_state.character.value_or(' ')), cursorPosition() + 2);
             break;
