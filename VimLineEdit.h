@@ -6,6 +6,7 @@
 #include <QKeyEvent>
 #include <vector>
 #include <string>
+#include <deque>
 
 enum class VimLineEditCommand{
     EnterInsertMode,
@@ -37,6 +38,8 @@ enum class VimLineEditCommand{
     RepeatFindReverse,
     Delete,
     PasteForward,
+    Undo,
+    Redo
 };
 
 enum class ActionWaitingForMotion{
@@ -49,11 +52,22 @@ enum class ActionWaitingForMotion{
 std::string to_string(VimLineEditCommand cmd);
 bool requires_symbol(VimLineEditCommand cmd);
 
+struct KeyboardModifierState{
+    bool shift = false;
+    bool control = false;
+    bool command = false;
+    bool alt = false;
+
+    static KeyboardModifierState from_qt_modifiers(Qt::KeyboardModifiers modifiers);
+};
 
 struct KeyChord{
     int key;
-    Qt::KeyboardModifiers modifiers;
+    KeyboardModifierState modifiers;
 };
+
+
+bool operator==(const KeyboardModifierState& lhs, const KeyboardModifierState& rhs);
 
 struct KeyBinding{
     std::vector<KeyChord> key_chords;
@@ -87,6 +101,17 @@ struct FindState{
     std::optional<char> character;
 };
 
+struct HistoryState{
+    QString text;
+    int cursor_position;
+};
+
+struct History{
+    std::deque<HistoryState> states;
+    int current_index = -1;
+
+};
+
 class VimLineEdit : public QLineEdit
 {
     Q_OBJECT
@@ -102,6 +127,7 @@ private:
     QString last_deleted_text = "";
 
     std::optional<FindState> last_find_state = {};
+    History history;
 
     void set_style_for_mode(VimMode mode);
 
@@ -120,6 +146,10 @@ private:
     int calculate_move_to_end_of_word(bool with_symbols) const;
     int calculate_move_word_backward(bool with_symbols) const;
     void delete_char();
+
+    void push_history(const QString& text, int cursor_position);
+    void undo();
+    void redo();
 };
 
 #endif // VIMLINEEDIT_H

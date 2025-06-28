@@ -35,17 +35,7 @@ VimLineEdit::VimLineEdit(QWidget *parent)
 
 void VimLineEdit::keyPressEvent(QKeyEvent *event){
     if (event->key() == Qt::Key_Escape) {
-        if (current_mode == VimMode::Visual){
-            current_mode = VimMode::Normal;
-            setSelection(0, 0);
-            set_style_for_mode(current_mode);
-            update(); // Trigger repaint for cursor change
-        } else {
-            current_mode = VimMode::Normal;
-            cursorBackward(false);
-            set_style_for_mode(current_mode);
-            update(); // Trigger repaint for cursor change
-        }
+        handle_command(VimLineEditCommand::EnterNormalMode, {});
         return;
     }
 
@@ -97,7 +87,7 @@ void VimLineEdit::set_style_for_mode(VimMode mode){
         setStyle(new LineEditStyle(1));
     }
     else if (mode == VimMode::Visual) {
-        setStyleSheet("background-color: lightblue;");
+        setStyleSheet("background-color: pink;");
         int font_width = fontMetrics().horizontalAdvance(" ");
         setStyle(new LineEditStyle(font_width));
     }
@@ -124,33 +114,38 @@ void InputTreeNode::add_keybinding(const std::vector<KeyChord>& key_chords, int 
 }
 
 void VimLineEdit::add_vim_keybindings(){
+    KeyboardModifierState CONTROL = KeyboardModifierState{false, true, false, false};
+    KeyboardModifierState SHIFT = KeyboardModifierState{true, false, false, false};
+    // KeyboardModifierState NOMOD = KeyboardModifierState{false, false, false, false};
+     
     std::vector<KeyBinding> key_bindings = {
-        KeyBinding{{KeyChord{Qt::Key_Escape, Qt::NoModifier}}, VimLineEditCommand::EnterNormalMode},
-        KeyBinding{{KeyChord{Qt::Key_I, Qt::NoModifier}}, VimLineEditCommand::EnterInsertMode},
-        KeyBinding{{KeyChord{Qt::Key_A, Qt::NoModifier}}, VimLineEditCommand::EnterInsertModeAfter},
-        KeyBinding{{KeyChord{Qt::Key_I, Qt::ShiftModifier}}, VimLineEditCommand::EnterInsertModeBegin},
-        KeyBinding{{KeyChord{Qt::Key_A, Qt::ShiftModifier}}, VimLineEditCommand::EnterInsertModeEnd},
-        KeyBinding{{KeyChord{Qt::Key_V, Qt::NoModifier}}, VimLineEditCommand::EnterVisualMode},
-        KeyBinding{{KeyChord{Qt::Key_H, Qt::NoModifier}}, VimLineEditCommand::MoveLeft},
-        KeyBinding{{KeyChord{Qt::Key_L, Qt::NoModifier}}, VimLineEditCommand::MoveRight},
-        KeyBinding{{KeyChord{Qt::Key_Left, Qt::KeypadModifier}}, VimLineEditCommand::MoveLeft},
-        KeyBinding{{KeyChord{Qt::Key_Right, Qt::KeypadModifier}}, VimLineEditCommand::MoveRight},
-        // KeyBinding{{KeyChord{Qt::Key_D, Qt::NoModifier}, KeyChord{Qt::Key_I, Qt::NoModifier}, KeyChord{Qt::Key_W, Qt::NoModifier}}, VimLineEditCommand::DeleteInsideWord},
-        KeyBinding{{KeyChord{Qt::Key_F, Qt::NoModifier}}, VimLineEditCommand::FindForward},
-        KeyBinding{{KeyChord{Qt::Key_F, Qt::ShiftModifier}}, VimLineEditCommand::FindBackward},
-        KeyBinding{{KeyChord{Qt::Key_Semicolon, Qt::NoModifier}}, VimLineEditCommand::RepeatFind},
-        KeyBinding{{KeyChord{Qt::Key_Comma, Qt::NoModifier}}, VimLineEditCommand::RepeatFindReverse},
-        KeyBinding{{KeyChord{Qt::Key_W, Qt::NoModifier}}, VimLineEditCommand::MoveWordForward},
-        KeyBinding{{KeyChord{Qt::Key_W, Qt::ShiftModifier}}, VimLineEditCommand::MoveWordForwardWithSymbols},
-        KeyBinding{{KeyChord{Qt::Key_E, Qt::NoModifier}}, VimLineEditCommand::MoveToEndOfWord},
-        KeyBinding{{KeyChord{Qt::Key_E, Qt::ShiftModifier}}, VimLineEditCommand::MoveToEndOfWordWithSymbols},
-        KeyBinding{{KeyChord{Qt::Key_B, Qt::NoModifier}}, VimLineEditCommand::MoveWordBackward},
-        KeyBinding{{KeyChord{Qt::Key_B, Qt::ShiftModifier}}, VimLineEditCommand::MoveWordBackwardWithSymbols},
-        KeyBinding{{KeyChord{Qt::Key_T, Qt::NoModifier}}, VimLineEditCommand::FindForwardTo},
-        KeyBinding{{KeyChord{Qt::Key_T, Qt::ShiftModifier}}, VimLineEditCommand::FindBackwardTo},
-        KeyBinding{{KeyChord{Qt::Key_X, Qt::NoModifier}}, VimLineEditCommand::DeleteChar},
-        KeyBinding{{KeyChord{Qt::Key_D, Qt::NoModifier}}, VimLineEditCommand::Delete},
-        KeyBinding{{KeyChord{Qt::Key_P, Qt::NoModifier}}, VimLineEditCommand::PasteForward},
+        KeyBinding{{KeyChord{Qt::Key_Escape, {}}}, VimLineEditCommand::EnterNormalMode},
+        KeyBinding{{KeyChord{Qt::Key_I, {}}}, VimLineEditCommand::EnterInsertMode},
+        KeyBinding{{KeyChord{Qt::Key_A, {}}}, VimLineEditCommand::EnterInsertModeAfter},
+        KeyBinding{{KeyChord{Qt::Key_I, SHIFT}}, VimLineEditCommand::EnterInsertModeBegin},
+        KeyBinding{{KeyChord{Qt::Key_A, SHIFT}}, VimLineEditCommand::EnterInsertModeEnd},
+        KeyBinding{{KeyChord{Qt::Key_V, {}}}, VimLineEditCommand::EnterVisualMode},
+        KeyBinding{{KeyChord{Qt::Key_H, {}}}, VimLineEditCommand::MoveLeft},
+        KeyBinding{{KeyChord{Qt::Key_L, {}}}, VimLineEditCommand::MoveRight},
+        KeyBinding{{KeyChord{Qt::Key_Left, {}}}, VimLineEditCommand::MoveLeft},
+        KeyBinding{{KeyChord{Qt::Key_Right, {}}}, VimLineEditCommand::MoveRight},
+        KeyBinding{{KeyChord{Qt::Key_F, {}}}, VimLineEditCommand::FindForward},
+        KeyBinding{{KeyChord{Qt::Key_F, SHIFT}}, VimLineEditCommand::FindBackward},
+        KeyBinding{{KeyChord{Qt::Key_Semicolon, {}}}, VimLineEditCommand::RepeatFind},
+        KeyBinding{{KeyChord{Qt::Key_Comma, {}}}, VimLineEditCommand::RepeatFindReverse},
+        KeyBinding{{KeyChord{Qt::Key_W, {}}}, VimLineEditCommand::MoveWordForward},
+        KeyBinding{{KeyChord{Qt::Key_W, SHIFT}}, VimLineEditCommand::MoveWordForwardWithSymbols},
+        KeyBinding{{KeyChord{Qt::Key_E, {}}}, VimLineEditCommand::MoveToEndOfWord},
+        KeyBinding{{KeyChord{Qt::Key_E, SHIFT}}, VimLineEditCommand::MoveToEndOfWordWithSymbols},
+        KeyBinding{{KeyChord{Qt::Key_B, {}}}, VimLineEditCommand::MoveWordBackward},
+        KeyBinding{{KeyChord{Qt::Key_B, SHIFT}}, VimLineEditCommand::MoveWordBackwardWithSymbols},
+        KeyBinding{{KeyChord{Qt::Key_T, {}}}, VimLineEditCommand::FindForwardTo},
+        KeyBinding{{KeyChord{Qt::Key_T, SHIFT}}, VimLineEditCommand::FindBackwardTo},
+        KeyBinding{{KeyChord{Qt::Key_X, {}}}, VimLineEditCommand::DeleteChar},
+        KeyBinding{{KeyChord{Qt::Key_D, {}}}, VimLineEditCommand::Delete},
+        KeyBinding{{KeyChord{Qt::Key_P, {}}}, VimLineEditCommand::PasteForward},
+        KeyBinding{{KeyChord{Qt::Key_U, {}}}, VimLineEditCommand::Undo},
+        KeyBinding{{KeyChord{Qt::Key_R, CONTROL}}, VimLineEditCommand::Redo},
     };
 
     for (const auto &binding : key_bindings) {
@@ -162,8 +157,9 @@ void VimLineEdit::add_vim_keybindings(){
 std::optional<VimLineEditCommand> VimLineEdit::handle_key_event(int key, Qt::KeyboardModifiers modifiers){
 
     InputTreeNode *node = current_node ? current_node : &input_tree;
+    KeyboardModifierState modifier_state = KeyboardModifierState::from_qt_modifiers(modifiers);
     for (auto &child : node->children) {
-        if (child.key_chord.key == key && child.key_chord.modifiers == modifiers) {
+        if (child.key_chord.key == key && child.key_chord.modifiers == modifier_state) {
             if (child.command.has_value()) {
                 current_node = nullptr;
                 return child.command;
@@ -211,6 +207,8 @@ std::string to_string(VimLineEditCommand cmd) {
         case VimLineEditCommand::RepeatFind: return "RepeatFind";
         case VimLineEditCommand::RepeatFindReverse: return "RepeatFindReverse";
         case VimLineEditCommand::PasteForward: return "PasteForward";
+        case VimLineEditCommand::Undo: return "Undo";
+        case VimLineEditCommand::Redo: return "Redo";
         default: return "Unknown";
     }
 }
@@ -231,8 +229,13 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
     int new_pos = -1;
     int old_pos = cursorPosition();
 
+    HistoryState current_state;
+    current_state.text = text();
+    current_state.cursor_position = old_pos;
+
     switch (cmd) {
         case VimLineEditCommand::EnterInsertMode:
+            push_history(current_state.text, current_state.cursor_position);
             current_mode = VimMode::Insert;
             set_style_for_mode(current_mode);
             break;
@@ -252,6 +255,7 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
             set_style_for_mode(current_mode);
             break;
         case VimLineEditCommand::EnterNormalMode:
+            push_history(current_state.text, current_state.cursor_position);
             current_mode = VimMode::Normal;
             set_style_for_mode(current_mode);
             break;
@@ -279,6 +283,14 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
         case VimLineEditCommand::MoveToEndOfWordWithSymbols:
             new_pos = calculate_move_to_end_of_word(true);
             break;
+        case VimLineEditCommand::Undo:
+            undo();
+            new_pos = cursorPosition();
+            break;
+        case VimLineEditCommand::Redo:
+            redo();
+            new_pos = cursorPosition();
+            break;
         case VimLineEditCommand::MoveWordBackward:
             new_pos = calculate_move_word_backward(false);
             break;
@@ -286,9 +298,11 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
             new_pos = calculate_move_word_backward(true);
             break;
         case VimLineEditCommand::DeleteChar:
+            push_history(current_state.text, current_state.cursor_position);
             delete_char();
             break;
         case VimLineEditCommand::Delete:
+            push_history(current_state.text, current_state.cursor_position);
             action_waiting_for_motion = ActionWaitingForMotion::Delete;
             break;
         case VimLineEditCommand::FindForward:{
@@ -338,6 +352,7 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
         default:
             break;
     }
+
 
     if (new_pos != -1){
         if (action_waiting_for_motion.has_value()){
@@ -510,4 +525,69 @@ void VimLineEdit::delete_char() {
         setText(current_text);
         setCursorPosition(current_pos);
     }
+}
+
+void VimLineEdit::push_history(const QString &text, int cursor_position){
+    if (history.current_index >= 0 && history.current_index < history.states.size() - 1) {
+        // If we are in the middle of the history, remove all states after the current index
+        history.states.erase(history.states.begin() + history.current_index + 1, history.states.end());
+    }
+
+    history.states.push_back({text, cursor_position});
+
+    if (history.states.size() > 100) {
+        history.states.pop_front();
+    }
+
+    history.current_index = history.states.size() - 1;
+}
+
+void VimLineEdit::undo(){
+
+    if (history.current_index < 0) {
+        return; // No more history to undo
+    }
+
+    history.current_index--;
+    const HistoryState& state = history.states[history.current_index + 1];
+    setText(state.text);
+    setCursorPosition(state.cursor_position);
+
+}
+
+void VimLineEdit::redo(){
+    if (history.current_index >= history.states.size() - 1) {
+        return; // No more history to redo
+    }
+
+    history.current_index++;
+    const HistoryState& state = history.states[history.current_index];
+    setText(state.text);
+    setCursorPosition(state.cursor_position);
+}
+
+bool operator==(const KeyboardModifierState& lhs, const KeyboardModifierState& rhs) {
+    return lhs.shift == rhs.shift &&
+           lhs.control == rhs.control &&
+           lhs.command == rhs.command &&
+           lhs.alt == rhs.alt;
+}
+
+KeyboardModifierState KeyboardModifierState::from_qt_modifiers(Qt::KeyboardModifiers modifiers) {
+    #ifdef Q_OS_MACOS
+    // on macos control and command are swapped
+    return {
+        modifiers.testFlag(Qt::ShiftModifier),
+        modifiers.testFlag(Qt::MetaModifier), // Command key on macOS
+        modifiers.testFlag(Qt::ControlModifier), // Control key on macOS
+        modifiers.testFlag(Qt::AltModifier)
+    };
+    #else
+    return {
+        modifiers.testFlag(Qt::ShiftModifier),
+        modifiers.testFlag(Qt::ControlModifier),
+        modifiers.testFlag(Qt::MetaModifier), // Command key on macOS
+        modifiers.testFlag(Qt::AltModifier)
+    };
+    #endif
 }
