@@ -34,6 +34,14 @@ enum class VimLineEditCommand{
     FindForwardTo, // t
     FindBackwardTo, // T
     RepeatFind,
+    Delete,
+};
+
+enum class ActionWaitingForMotion{
+    Delete,
+    Change,
+    Yank,
+    Visual,
 };
 
 std::string to_string(VimLineEditCommand cmd);
@@ -83,10 +91,12 @@ class VimLineEdit : public QLineEdit
 
 private:
     VimMode current_mode;
+    int visual_mode_anchor = -1;
     InputTreeNode input_tree;
     InputTreeNode* current_node = nullptr;
 
     std::optional<VimLineEditCommand> pending_symbol_command = {};
+    std::optional<ActionWaitingForMotion> action_waiting_for_motion = {};
 
     std::optional<FindState> last_find_state = {};
 
@@ -100,12 +110,12 @@ public:
     void add_vim_keybindings();
     std::optional<VimLineEditCommand> handle_key_event(int key, Qt::KeyboardModifiers modifiers);
     void handle_command(VimLineEditCommand cmd, std::optional<char> symbol = {});
-    void handle_find(FindState find_state);
+    int calculate_find(FindState find_state) const;
 
 private:
-    void move_word_forward(bool with_symbols);
-    void move_to_end_of_word(bool with_symbols);
-    void move_word_backward(bool with_symbols);
+    int calculate_move_word_forward(bool with_symbols) const;
+    int calculate_move_to_end_of_word(bool with_symbols) const;
+    int calculate_move_word_backward(bool with_symbols) const;
     void delete_char();
 };
 
