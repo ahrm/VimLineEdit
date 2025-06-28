@@ -46,11 +46,30 @@ void VimLineEdit::keyPressEvent(QKeyEvent *event){
         // we don't want to handle when we only press a modifier (e.g. Shift, Ctrl, etc.) 
         int event_key = event->key();
         bool is_keypress_a_modifier = event_key == Qt::Key_Shift || event_key == Qt::Key_Control || event_key == Qt::Key_Alt || event_key == Qt::Key_Meta;
+
+        if (!is_keypress_a_modifier && pending_symbol_command.has_value()) {
+            // If we have a pending command that requires a symbol, we handle it now
+            VimLineEditCommand command = pending_symbol_command.value();
+            pending_symbol_command = {};
+
+            if (event->text().size() > 0){
+                handle_command(command, static_cast<char>(event->text().at(0).toLatin1()));
+            }
+
+            return;
+        }
+
         if (!is_keypress_a_modifier){
-            auto command = handle_key_event(event_key, event->modifiers());
+            std::optional<VimLineEditCommand> command = handle_key_event(event_key, event->modifiers());
             if (command.has_value()) {
-                // qDebug() << "Command executed:" << to_string(command.value());
-                handle_command(command.value());
+                if (requires_symbol(command.value())) {
+                    // If the command requires a symbol, we need to wait for the next key press
+                    pending_symbol_command = command;
+                    return;
+                }
+                else{
+                    handle_command(command.value());
+                }
             }
         }
 
@@ -108,6 +127,9 @@ void VimLineEdit::add_vim_keybindings(){
         KeyBinding{{KeyChord{Qt::Key_Left, Qt::KeypadModifier}}, VimLineEditCommand::MoveLeft},
         KeyBinding{{KeyChord{Qt::Key_Right, Qt::KeypadModifier}}, VimLineEditCommand::MoveRight},
         KeyBinding{{KeyChord{Qt::Key_D, Qt::NoModifier}, KeyChord{Qt::Key_I, Qt::NoModifier}, KeyChord{Qt::Key_W, Qt::NoModifier}}, VimLineEditCommand::DeleteInsideWord},
+        KeyBinding{{KeyChord{Qt::Key_F, Qt::NoModifier}}, VimLineEditCommand::FindForward},
+        KeyBinding{{KeyChord{Qt::Key_F, Qt::ShiftModifier}}, VimLineEditCommand::FindBackward},
+        KeyBinding{{KeyChord{Qt::Key_Semicolon, Qt::NoModifier}}, VimLineEditCommand::RepeatFind},
     };
 
     for (const auto &binding : key_bindings) {
@@ -155,10 +177,24 @@ std::string to_string(VimLineEditCommand cmd) {
         case VimLineEditCommand::DeleteInsideParentheses: return "DeleteInsideParentheses";
         case VimLineEditCommand::DeleteInsideBrackets: return "DeleteInsideBrackets";
         case VimLineEditCommand::DeleteInsideBraces: return "DeleteInsideBraces";
+        case VimLineEditCommand::FindForward: return "FindForward";
+        case VimLineEditCommand::FindBackward: return "FindBackward";
+        case VimLineEditCommand::RepeatFind: return "RepeatFind";
         default: return "Unknown";
     }
 }
-void VimLineEdit::handle_command(VimLineEditCommand cmd){
+
+bool requires_symbol(VimLineEditCommand cmd){
+    switch (cmd) {
+        case VimLineEditCommand::FindForward:
+        case VimLineEditCommand::FindBackward:
+            return true;
+        default:
+            return false;
+    }
+}
+
+void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> symbol){
 
     switch (cmd) {
         case VimLineEditCommand::EnterInsertMode:
@@ -194,9 +230,43 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd){
         case VimLineEditCommand::MoveRight:
             cursorForward(false);
             break;
+        case VimLineEditCommand::FindForward:{
+            last_find_state = FindState{FindDirection::Forward, symbol};
+            handle_find(last_find_state.value());
+            break;
+        }
+        case VimLineEditCommand::FindBackward:{
+            last_find_state = FindState{FindDirection::Backward, symbol};
+            handle_find(last_find_state.value());
+            break;
+        }
+        case VimLineEditCommand::RepeatFind: {
+            if (last_find_state.has_value()){
+                handle_find(last_find_state.value());
+            }
+            break;
+        }
         // Add more cases for other commands as needed
         default:
             break;
     }
 
+}
+
+void VimLineEdit::handle_find(FindState find_state){
+
+    if (find_state.direction == FindDirection::Forward) {
+        int location = text().indexOf(QChar(find_state.character.value_or(' ')), cursorPosition() + 2);
+        if (location != -1) {
+            setCursorPosition(location);
+        }
+    }
+    else{
+        if (cursorPosition() == 0) return;
+
+        int location = text().lastIndexOf(QChar(find_state.character.value_or(' ')), cursorPosition() - 1);
+        if (location != -1) {
+            setCursorPosition(location);
+        }
+    }
 }

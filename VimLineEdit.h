@@ -24,9 +24,13 @@ enum class VimLineEditCommand{
     DeleteInsideParentheses,
     DeleteInsideBrackets,
     DeleteInsideBraces,
+    FindForward,
+    FindBackward,
+    RepeatFind,
 };
 
 std::string to_string(VimLineEditCommand cmd);
+bool requires_symbol(VimLineEditCommand cmd);
 
 
 struct KeyChord{
@@ -54,6 +58,15 @@ enum class VimMode{
     Insert,
     Visual,
 };
+enum class FindDirection{
+    Forward,
+    Backward,
+};
+
+struct FindState{
+    FindDirection direction;
+    std::optional<char> character;
+};
 
 class VimLineEdit : public QLineEdit
 {
@@ -64,6 +77,10 @@ private:
     InputTreeNode input_tree;
     InputTreeNode* current_node = nullptr;
 
+    std::optional<VimLineEditCommand> pending_symbol_command = {};
+
+    std::optional<FindState> last_find_state = {};
+
     void set_style_for_mode(VimMode mode);
 
 public:
@@ -73,7 +90,8 @@ public:
 
     void add_vim_keybindings();
     std::optional<VimLineEditCommand> handle_key_event(int key, Qt::KeyboardModifiers modifiers);
-    void handle_command(VimLineEditCommand cmd);
+    void handle_command(VimLineEditCommand cmd, std::optional<char> symbol = {});
+    void handle_find(FindState find_state);
 };
 
 #endif // VIMLINEEDIT_H
