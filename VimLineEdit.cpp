@@ -149,6 +149,7 @@ void VimLineEdit::add_vim_keybindings(){
         KeyBinding{{KeyChord{Qt::Key_T, Qt::ShiftModifier}}, VimLineEditCommand::FindBackwardTo},
         KeyBinding{{KeyChord{Qt::Key_X, Qt::NoModifier}}, VimLineEditCommand::DeleteChar},
         KeyBinding{{KeyChord{Qt::Key_D, Qt::NoModifier}}, VimLineEditCommand::Delete},
+        KeyBinding{{KeyChord{Qt::Key_P, Qt::NoModifier}}, VimLineEditCommand::PasteForward},
     };
 
     for (const auto &binding : key_bindings) {
@@ -207,6 +208,7 @@ std::string to_string(VimLineEditCommand cmd) {
         case VimLineEditCommand::FindForwardTo: return "FindForwardTo";
         case VimLineEditCommand::FindBackwardTo: return "FindBackwardTo";
         case VimLineEditCommand::RepeatFind: return "RepeatFind";
+        case VimLineEditCommand::PasteForward: return "PasteForward";
         default: return "Unknown";
     }
 }
@@ -310,6 +312,17 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
         case VimLineEditCommand::RepeatFind: {
             if (last_find_state.has_value()){
                 new_pos = calculate_find(last_find_state.value());
+            }
+            break;
+        }
+        case VimLineEditCommand::PasteForward: {
+            if (last_deleted_text.size() > 0){
+                // Paste the last deleted text after the cursor position
+                QString current_text = text();
+                int cursor_pos = cursorPosition();
+                QString new_text = current_text.left(cursor_pos + 1) + last_deleted_text + current_text.mid(cursor_pos + 1);
+                setText(new_text);
+                new_pos = cursor_pos + last_deleted_text.size();
             }
             break;
         }
@@ -481,6 +494,7 @@ void VimLineEdit::delete_char() {
     int current_pos = cursorPosition();
     QString current_text = text();
     if (current_pos < current_text.length()) {
+        last_deleted_text = current_text.mid(current_pos, 1);
         current_text.remove(current_pos, 1);
         setText(current_text);
         setCursorPosition(current_pos);

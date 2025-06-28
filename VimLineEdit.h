@@ -35,6 +35,7 @@ enum class VimLineEditCommand{
     FindBackwardTo, // T
     RepeatFind,
     Delete,
+    PasteForward,
 };
 
 enum class ActionWaitingForMotion{
@@ -97,6 +98,7 @@ private:
 
     std::optional<VimLineEditCommand> pending_symbol_command = {};
     std::optional<ActionWaitingForMotion> action_waiting_for_motion = {};
+    QString last_deleted_text = "";
 
     std::optional<FindState> last_find_state = {};
 
