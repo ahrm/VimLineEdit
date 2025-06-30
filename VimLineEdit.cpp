@@ -176,8 +176,12 @@ void VimLineEdit::add_vim_keybindings(){
         KeyBinding{{KeyChord{Qt::Key_V, {}}}, VimLineEditCommand::EnterVisualMode},
         KeyBinding{{KeyChord{Qt::Key_H, {}}}, VimLineEditCommand::MoveLeft},
         KeyBinding{{KeyChord{Qt::Key_L, {}}}, VimLineEditCommand::MoveRight},
+        KeyBinding{{KeyChord{Qt::Key_J, {}}}, VimLineEditCommand::MoveDown},
+        KeyBinding{{KeyChord{Qt::Key_K, {}}}, VimLineEditCommand::MoveUp},
         KeyBinding{{KeyChord{Qt::Key_Left, {}}}, VimLineEditCommand::MoveLeft},
         KeyBinding{{KeyChord{Qt::Key_Right, {}}}, VimLineEditCommand::MoveRight},
+        KeyBinding{{KeyChord{Qt::Key_Up, {}}}, VimLineEditCommand::MoveUp},
+        KeyBinding{{KeyChord{Qt::Key_Down, {}}}, VimLineEditCommand::MoveDown},
         KeyBinding{{KeyChord{Qt::Key_F, {}}}, VimLineEditCommand::FindForward},
         KeyBinding{{KeyChord{Qt::Key_F, SHIFT}}, VimLineEditCommand::FindBackward},
         KeyBinding{{KeyChord{Qt::Key_Semicolon, {}}}, VimLineEditCommand::RepeatFind},
@@ -239,6 +243,8 @@ std::string to_string(VimLineEditCommand cmd) {
         case VimLineEditCommand::EnterVisualMode: return "EnterVisualMode";
         case VimLineEditCommand::MoveLeft: return "MoveLeft";
         case VimLineEditCommand::MoveRight: return "MoveRight";
+        case VimLineEditCommand::MoveUp: return "MoveUp";
+        case VimLineEditCommand::MoveDown: return "MoveDown";
         case VimLineEditCommand::MoveToBeginning: return "MoveToBeginning";
         case VimLineEditCommand::MoveToEnd: return "MoveToEnd";
         case VimLineEditCommand::MoveWordForward: return "MoveWordForward";
@@ -343,6 +349,12 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
             break;
         case VimLineEditCommand::MoveRight:
             new_pos = textCursor().position() + 1;
+            break;
+        case VimLineEditCommand::MoveUp:
+            new_pos = calculate_move_up();
+            break;
+        case VimLineEditCommand::MoveDown:
+            new_pos = calculate_move_down();
             break;
         case VimLineEditCommand::MoveWordForward:
             new_pos = calculate_move_word_forward(false);
@@ -764,4 +776,62 @@ int VimLineEdit::get_line_end_position(int cursor_pos){
     }
     
     return pos;
+}
+
+int VimLineEdit::calculate_move_up(){
+    int cursor_pos = textCursor().position();
+    const QString& text = toPlainText();
+    
+    int current_line_start = get_line_start_position(cursor_pos);
+    int column_offset = cursor_pos - current_line_start;
+    
+    // If we're already on the first line, stay at current position
+    if (current_line_start == 0) {
+        return cursor_pos;
+    }
+    
+    // Find the start of the previous line
+    int prev_line_end = current_line_start - 1; // The newline character
+    int prev_line_start = get_line_start_position(prev_line_end);
+    
+    // Calculate the length of the previous line
+    int prev_line_length = prev_line_end - prev_line_start;
+    
+    // Try to maintain the same column position, but clamp to line length
+    int new_column = std::min(column_offset, prev_line_length);
+    
+    return prev_line_start + new_column;
+}
+
+int VimLineEdit::calculate_move_down(){
+    int cursor_pos = textCursor().position();
+    const QString& text = toPlainText();
+    
+    int current_line_start = get_line_start_position(cursor_pos);
+    int column_offset = cursor_pos - current_line_start;
+    
+    // Find the end of the current line
+    int current_line_end = get_line_end_position(cursor_pos);
+    
+    // If we're at the last line, stay at current position
+    if (current_line_end >= text.length()) {
+        return cursor_pos;
+    }
+    
+    // Find the start of the next line (skip the newline character)
+    int next_line_start = current_line_end + 1;
+    
+    // If there's no next line, stay at current position
+    if (next_line_start >= text.length()) {
+        return cursor_pos;
+    }
+    
+    // Find the end of the next line
+    int next_line_end = get_line_end_position(next_line_start);
+    int next_line_length = next_line_end - next_line_start;
+    
+    // Try to maintain the same column position, but clamp to line length
+    int new_column = std::min(column_offset, next_line_length);
+    
+    return next_line_start + new_column;
 }

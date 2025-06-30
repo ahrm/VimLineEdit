@@ -21,6 +21,8 @@ enum class VimLineEditCommand{
     EnterVisualMode,
     MoveLeft,
     MoveRight,
+    MoveUp,
+    MoveDown,
     MoveToBeginning,
     MoveToEnd,
     MoveWordForward,
@@ -174,6 +176,10 @@ private:
     int calculate_move_word_forward(bool with_symbols) const;
     int calculate_move_to_end_of_word(bool with_symbols) const;
     int calculate_move_word_backward(bool with_symbols) const;
+
+    int calculate_move_down();
+    int calculate_move_up();
+
     void delete_char();
     void handle_surrounding_motion_action();
 
