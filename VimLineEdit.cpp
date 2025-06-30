@@ -195,6 +195,8 @@ void VimLineEdit::add_vim_keybindings(){
         KeyBinding{{KeyChord{Qt::Key_P, {}}}, VimLineEditCommand::PasteForward},
         KeyBinding{{KeyChord{Qt::Key_U, {}}}, VimLineEditCommand::Undo},
         KeyBinding{{KeyChord{Qt::Key_R, CONTROL}}, VimLineEditCommand::Redo},
+        KeyBinding{{KeyChord{Qt::Key_O, {}}}, VimLineEditCommand::InsertLineBelow},
+        KeyBinding{{KeyChord{Qt::Key_O, SHIFT}}, VimLineEditCommand::InsertLineAbove},
     };
 
     for (const auto &binding : key_bindings) {
@@ -260,6 +262,8 @@ std::string to_string(VimLineEditCommand cmd) {
         case VimLineEditCommand::PasteForward: return "PasteForward";
         case VimLineEditCommand::Undo: return "Undo";
         case VimLineEditCommand::Redo: return "Redo";
+        case VimLineEditCommand::InsertLineBelow: return "InsertLineBelow";
+        case VimLineEditCommand::InsertLineAbove: return "InsertLineAbove";
         default: return "Unknown";
     }
 }
@@ -415,6 +419,30 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
                 setText(new_text);
                 new_pos = cursor_pos + last_deleted_text.size();
             }
+            break;
+        }
+        case VimLineEditCommand::InsertLineBelow: {
+            push_history(current_state.text, current_state.cursor_position);
+            QString current_text = toPlainText();
+            int cursor_pos = textCursor().position();
+            int line_end = get_line_end_position(cursor_pos);
+            QString new_text = current_text.left(line_end) + "\n" + current_text.mid(line_end);
+            setText(new_text);
+            new_pos = line_end + 1;
+            current_mode = VimMode::Insert;
+            set_style_for_mode(current_mode);
+            break;
+        }
+        case VimLineEditCommand::InsertLineAbove: {
+            push_history(current_state.text, current_state.cursor_position);
+            QString current_text = toPlainText();
+            int cursor_pos = textCursor().position();
+            int line_start = get_line_start_position(cursor_pos);
+            QString new_text = current_text.left(line_start) + "\n" + current_text.mid(line_start);
+            setText(new_text);
+            new_pos = line_start;
+            current_mode = VimMode::Insert;
+            set_style_for_mode(current_mode);
             break;
         }
         // Add more cases for other commands as needed

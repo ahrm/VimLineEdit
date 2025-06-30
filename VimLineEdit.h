@@ -43,7 +43,9 @@ enum class VimLineEditCommand{
     Delete,
     PasteForward,
     Undo,
-    Redo
+    Redo,
+    InsertLineBelow,
+    InsertLineAbove
 };
 
 enum class ActionWaitingForMotionKind{
