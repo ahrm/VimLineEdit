@@ -202,6 +202,7 @@ void VimLineEdit::add_vim_keybindings(){
         KeyBinding{{KeyChord{Qt::Key_T, SHIFT}}, VimLineEditCommand::FindBackwardTo},
         KeyBinding{{KeyChord{Qt::Key_X, {}}}, VimLineEditCommand::DeleteChar},
         KeyBinding{{KeyChord{Qt::Key_D, {}}}, VimLineEditCommand::Delete},
+        KeyBinding{{KeyChord{Qt::Key_C, {}}}, VimLineEditCommand::Change},
         KeyBinding{{KeyChord{Qt::Key_P, {}}}, VimLineEditCommand::PasteForward},
         KeyBinding{{KeyChord{Qt::Key_U, {}}}, VimLineEditCommand::Undo},
         KeyBinding{{KeyChord{Qt::Key_R, CONTROL}}, VimLineEditCommand::Redo},
@@ -267,10 +268,7 @@ std::string to_string(VimLineEditCommand cmd) {
         case VimLineEditCommand::MoveWordBackwardWithSymbols: return "MoveWordBackwardWithSymbols";
         case VimLineEditCommand::DeleteChar: return "DeleteChar";
         case VimLineEditCommand::Delete: return "Delete";
-        case VimLineEditCommand::DeleteInsideWord: return "DeleteInsideWord";
-        case VimLineEditCommand::DeleteInsideParentheses: return "DeleteInsideParentheses";
-        case VimLineEditCommand::DeleteInsideBrackets: return "DeleteInsideBrackets";
-        case VimLineEditCommand::DeleteInsideBraces: return "DeleteInsideBraces";
+        case VimLineEditCommand::Change: return "Change";
         case VimLineEditCommand::FindForward: return "FindForward";
         case VimLineEditCommand::FindBackward: return "FindBackward";
         case VimLineEditCommand::FindForwardTo: return "FindForwardTo";
@@ -425,6 +423,10 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
             push_history(current_state.text, current_state.cursor_position);
             action_waiting_for_motion = {ActionWaitingForMotionKind::Delete, SurroundingScope::None, SurroundingKind::None};
             break;
+        case VimLineEditCommand::Change:
+            push_history(current_state.text, current_state.cursor_position);
+            action_waiting_for_motion = {ActionWaitingForMotionKind::Change, SurroundingScope::None, SurroundingKind::None};
+            break;
         case VimLineEditCommand::FindForward:{
             last_find_state = FindState{FindDirection::Forward, symbol};
             new_pos = calculate_find(last_find_state.value());
@@ -504,16 +506,22 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
 
     if (new_pos != -1){
         if (action_waiting_for_motion.has_value()){
-            if (action_waiting_for_motion.value().kind == ActionWaitingForMotionKind::Delete) {
+            if (action_waiting_for_motion.value().kind == ActionWaitingForMotionKind::Delete || action_waiting_for_motion.value().kind == ActionWaitingForMotionKind::Change) {
                 // delete from old_pos to new_pos
                 if (old_pos < new_pos) {
-                    QString new_text = current_state.text.remove(old_pos, new_pos + 1 - old_pos);
+                    QString new_text = current_state.text.remove(old_pos, new_pos - old_pos);
                     setText(new_text);
                     set_cursor_position(old_pos);
-                } else if (old_pos > new_pos) {
+                }
+                else if (old_pos > new_pos) {
                     QString new_text = current_state.text.remove(new_pos, old_pos - new_pos);
                     setText(new_text);
                     set_cursor_position(new_pos);
+                }
+
+                if (action_waiting_for_motion.value().kind == ActionWaitingForMotionKind::Change) {
+                    current_mode = VimMode::Insert;
+                    set_style_for_mode(current_mode);
                 }
             }
 
@@ -524,7 +532,8 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
             int selection_start = std::min(visual_mode_anchor, new_pos);
             int selection_end = std::max(visual_mode_anchor, new_pos);
             // setSelection(selection_start, selection_end - selection_start);
-        } else {
+        }
+        else {
             set_cursor_position(new_pos);
         }
 
@@ -784,13 +793,18 @@ bool VimLineEdit::handle_surrounding_motion_action(){
             
             // Only proceed if we found a word
             if (start < end) {
-                if (action_waiting_for_motion->kind == ActionWaitingForMotionKind::Delete) {
+                if (action_waiting_for_motion->kind == ActionWaitingForMotionKind::Delete || action_waiting_for_motion->kind == ActionWaitingForMotionKind::Change) {
                     // Store deleted text for paste operation
                     last_deleted_text = current_text.mid(start, end - start);
                     // Delete only the word characters
                     QString new_text = current_text.remove(start, end - start);
                     setText(new_text);
                     set_cursor_position(start);
+
+                    if (action_waiting_for_motion->kind == ActionWaitingForMotionKind::Change) {
+                        current_mode = VimMode::Insert;
+                        set_style_for_mode(current_mode);
+                    }
                 }
             }
             return true;
