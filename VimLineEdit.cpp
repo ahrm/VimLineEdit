@@ -304,6 +304,10 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
             push_history(current_state.text, current_state.cursor_position);
             current_mode = VimMode::Normal;
             set_style_for_mode(current_mode);
+            // if the cursor is after the last character, move it to the end
+            if (cursorPosition() >= text().length()){
+                setCursorPosition(text().length() - 1);
+            }
             break;
         case VimLineEditCommand::EnterVisualMode:
             current_mode = VimMode::Visual;
@@ -397,6 +401,10 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
         // Add more cases for other commands as needed
         default:
             break;
+    }
+
+    if (current_mode == VimMode::Normal && new_pos == text().size()){
+        new_pos = text().size() - 1;
     }
 
 
