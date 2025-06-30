@@ -25,6 +25,8 @@ enum class VimLineEditCommand{
     MoveRight,
     MoveUp,
     MoveDown,
+    MoveUpOnScreen,
+    MoveDownOnScreen,
     MoveToBeginning,
     MoveToEnd,
     MoveWordForward,
@@ -181,6 +183,9 @@ private:
 
     int calculate_move_down();
     int calculate_move_up();
+
+    int calculate_move_down_on_screen();
+    int calculate_move_up_on_screen();
 
     void delete_char();
     void handle_surrounding_motion_action();

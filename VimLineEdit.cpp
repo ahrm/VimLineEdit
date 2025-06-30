@@ -7,6 +7,8 @@
 #include <QCommonStyle>
 #include <vector>
 #include <QRegularExpression>
+#include <QTextLayout>
+#include <QTextBlock>
 
 
 class LineEditStyle : public QCommonStyle
@@ -203,6 +205,8 @@ void VimLineEdit::add_vim_keybindings(){
         KeyBinding{{KeyChord{Qt::Key_R, CONTROL}}, VimLineEditCommand::Redo},
         KeyBinding{{KeyChord{Qt::Key_O, {}}}, VimLineEditCommand::InsertLineBelow},
         KeyBinding{{KeyChord{Qt::Key_O, SHIFT}}, VimLineEditCommand::InsertLineAbove},
+        KeyBinding{{KeyChord{Qt::Key_G, {}}, KeyChord{Qt::Key_K, {}}}, VimLineEditCommand::MoveUpOnScreen},
+        KeyBinding{{KeyChord{Qt::Key_G, {}}, KeyChord{Qt::Key_J, {}}}, VimLineEditCommand::MoveDownOnScreen},
     };
 
     for (const auto &binding : key_bindings) {
@@ -249,6 +253,8 @@ std::string to_string(VimLineEditCommand cmd) {
         case VimLineEditCommand::MoveRight: return "MoveRight";
         case VimLineEditCommand::MoveUp: return "MoveUp";
         case VimLineEditCommand::MoveDown: return "MoveDown";
+        case VimLineEditCommand::MoveUpOnScreen: return "MoveUpOnScreen";
+        case VimLineEditCommand::MoveDownOnScreen: return "MoveDownOnScreen";
         case VimLineEditCommand::MoveToBeginning: return "MoveToBeginning";
         case VimLineEditCommand::MoveToEnd: return "MoveToEnd";
         case VimLineEditCommand::MoveWordForward: return "MoveWordForward";
@@ -369,6 +375,12 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
         case VimLineEditCommand::MoveDown:
             new_pos = calculate_move_down();
             break;
+        case VimLineEditCommand::MoveUpOnScreen:
+            new_pos = calculate_move_up_on_screen();
+            break;
+        case VimLineEditCommand::MoveDownOnScreen:
+            new_pos = calculate_move_down_on_screen();
+            break;
         case VimLineEditCommand::MoveWordForward:
             new_pos = calculate_move_word_forward(false);
             break;
@@ -383,11 +395,9 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
             break;
         case VimLineEditCommand::Undo:
             undo();
-            new_pos = textCursor().position();
             break;
         case VimLineEditCommand::Redo:
             redo();
-            new_pos = textCursor().position();
             break;
         case VimLineEditCommand::MoveWordBackward:
             new_pos = calculate_move_word_backward(false);
@@ -847,4 +857,126 @@ int VimLineEdit::calculate_move_down(){
     int new_column = std::min(column_offset, next_line_length);
     
     return next_line_start + new_column;
+}
+
+int VimLineEdit::calculate_move_up_on_screen(){
+    QTextCursor cursor = textCursor();
+    int current_pos = cursor.position();
+    
+    // Use the document's text layout directly
+    QTextDocument* doc = document();
+    QTextBlock current_block = doc->findBlock(current_pos);
+    
+    if (!current_block.isValid()) {
+        return current_pos;
+    }
+    
+    // Get the layout for the current block
+    QTextLayout* layout = current_block.layout();
+    if (!layout) {
+        return current_pos;
+    }
+    
+    // Find position within the block
+    int pos_in_block = current_pos - current_block.position();
+    
+    // Find which line within the block contains our cursor
+    int current_line_index = -1;
+    for (int i = 0; i < layout->lineCount(); ++i) {
+        QTextLine line = layout->lineAt(i);
+        if (pos_in_block >= line.textStart() && pos_in_block < line.textStart() + line.textLength()) {
+            current_line_index = i;
+            break;
+        }
+    }
+    
+    if (current_line_index == -1) return current_pos;
+    
+    // Calculate character index within the current visual line
+    QTextLine current_line = layout->lineAt(current_line_index);
+    int char_index_in_line = pos_in_block - current_line.textStart();
+    
+    // Try to move to previous line within the same block
+    if (current_line_index > 0) {
+        QTextLine prev_line = layout->lineAt(current_line_index - 1);
+        int target_index = std::min(char_index_in_line, prev_line.textLength() - 1);
+        return current_block.position() + prev_line.textStart() + target_index;
+    }
+    
+    // If we're at the first line of the block, try to move to previous block
+    QTextBlock prev_block = current_block.previous();
+    if (!prev_block.isValid()) {
+        return current_pos; // Already at the top
+    }
+    
+    QTextLayout* prev_layout = prev_block.layout();
+    if (!prev_layout || prev_layout->lineCount() == 0) {
+        return current_pos;
+    }
+    
+    // Move to the last line of the previous block
+    QTextLine last_line = prev_layout->lineAt(prev_layout->lineCount() - 1);
+    int target_index = std::min(char_index_in_line, last_line.textLength() - 1);
+    return prev_block.position() + last_line.textStart() + target_index;
+}
+
+int VimLineEdit::calculate_move_down_on_screen(){
+    QTextCursor cursor = textCursor();
+    int current_pos = cursor.position();
+    
+    // Use the document's text layout directly
+    QTextDocument* doc = document();
+    QTextBlock current_block = doc->findBlock(current_pos);
+    
+    if (!current_block.isValid()) {
+        return current_pos;
+    }
+    
+    // Get the layout for the current block
+    QTextLayout* layout = current_block.layout();
+    if (!layout) {
+        return current_pos;
+    }
+    
+    // Find position within the block
+    int pos_in_block = current_pos - current_block.position();
+    
+    // Find which line within the block contains our cursor
+    int current_line_index = -1;
+    for (int i = 0; i < layout->lineCount(); ++i) {
+        QTextLine line = layout->lineAt(i);
+        if (pos_in_block >= line.textStart() && pos_in_block < line.textStart() + line.textLength()) {
+            current_line_index = i;
+            break;
+        }
+    }
+    
+    if (current_line_index == -1) return current_pos;
+    
+    // Calculate character index within the current visual line
+    QTextLine current_line = layout->lineAt(current_line_index);
+    int char_index_in_line = pos_in_block - current_line.textStart();
+    
+    // Try to move to next line within the same block
+    if (current_line_index < layout->lineCount() - 1) {
+        QTextLine next_line = layout->lineAt(current_line_index + 1);
+        int target_index = std::min(char_index_in_line, next_line.textLength() - 1);
+        return current_block.position() + next_line.textStart() + target_index;
+    }
+    
+    // If we're at the last line of the block, try to move to next block
+    QTextBlock next_block = current_block.next();
+    if (!next_block.isValid()) {
+        return current_pos; // Already at the bottom
+    }
+    
+    QTextLayout* next_layout = next_block.layout();
+    if (!next_layout || next_layout->lineCount() == 0) {
+        return current_pos;
+    }
+    
+    // Move to the first line of the next block
+    QTextLine first_line = next_layout->lineAt(0);
+    int target_index = std::min(char_index_in_line, first_line.textLength() - 1);
+    return next_block.position() + first_line.textStart() + target_index;
 }
