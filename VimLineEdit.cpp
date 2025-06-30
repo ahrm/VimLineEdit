@@ -319,9 +319,13 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
             push_history(current_state.text, current_state.cursor_position);
             current_mode = VimMode::Normal;
             set_style_for_mode(current_mode);
-            // if the cursor is after the last character, move it to the end
-            if (textCursor().position() >= toPlainText().length()){
+            // if the cursor is after the end of a line, we move it to the last character
+            // so if it is the last character or the next character is a newline
+            if (textCursor().position() >= toPlainText().length()) {
                 set_cursor_position(toPlainText().length() - 1);
+            }
+            if (toPlainText()[textCursor().position()] == '\n') {
+                set_cursor_position(textCursor().position() - 1);
             }
             break;
         case VimLineEditCommand::EnterVisualMode:
