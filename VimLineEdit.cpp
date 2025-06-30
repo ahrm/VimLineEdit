@@ -538,27 +538,41 @@ int VimLineEdit::calculate_move_to_end_of_word(bool with_symbols) const {
 
     int next_pos = pos;
 
+    // If we're at a space, move to the next non-space character
     if (t[next_pos].isSpace()){
         while(next_pos < len && t[next_pos].isSpace()){
             next_pos++;
         }
     }
+    // If we're at the end of a word (next character is space or end), move to next word
+    else if (next_pos + 1 < len && t[next_pos + 1].isSpace()) {
+        next_pos++;
+        while(next_pos < len && t[next_pos].isSpace()){
+            next_pos++;
+        }
+    }
+    // If we're in the middle of a word, move to the end of current word
+    else {
+        next_pos++;
+    }
 
+    if (next_pos >= len) {
+        return len - 1;
+    }
+
+    // Now move to the end of the current word
     if (with_symbols){
-        while(next_pos < len -1 && !t[next_pos+1].isSpace()){
+        while(next_pos < len - 1 && !t[next_pos + 1].isSpace()){
             next_pos++;
         }
     } else {
         bool is_letter = t[next_pos].isLetterOrNumber();
-        while(next_pos < len -1 && !t[next_pos+1].isSpace() && t[next_pos+1].isLetterOrNumber() == is_letter){
+        while(next_pos < len - 1 && !t[next_pos + 1].isSpace() && t[next_pos + 1].isLetterOrNumber() == is_letter){
             next_pos++;
         }
     }
 
-    if (next_pos < len) {
-        return next_pos;
-    }
-    return pos;
+    return next_pos;
 }
 
 int VimLineEdit::calculate_move_word_backward(bool with_symbols) const {
