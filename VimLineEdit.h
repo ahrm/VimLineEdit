@@ -189,7 +189,7 @@ private:
     int calculate_move_on_screen(int direction);
 
     void delete_char();
-    void handle_surrounding_motion_action();
+    bool handle_surrounding_motion_action();
 
     void push_history(const QString& text, int cursor_position);
     void undo();

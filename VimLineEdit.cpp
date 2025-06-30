@@ -101,7 +101,9 @@ void VimLineEdit::keyPressEvent(QKeyEvent *event){
                 }
 
             }
-            handle_surrounding_motion_action();
+            if (handle_surrounding_motion_action()){
+                return;
+            }
         }
 
         if (!is_keypress_a_modifier){
@@ -360,7 +362,8 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
             if (textCursor().position() > 0) {
                 if (!is_at_beginning_of_line) {
                     new_pos = textCursor().position() - 1;
-                } else {
+                }
+                else {
                     new_pos = textCursor().position();
                 }
             }
@@ -751,34 +754,50 @@ KeyboardModifierState KeyboardModifierState::from_qt_modifiers(Qt::KeyboardModif
     #endif
 }
 
-void VimLineEdit::handle_surrounding_motion_action(){
+bool VimLineEdit::handle_surrounding_motion_action(){
   if (action_waiting_for_motion.has_value()){
     if (action_waiting_for_motion->surrounding_scope == SurroundingScope::Inside) {
         if (action_waiting_for_motion->surrounding_kind == SurroundingKind::Word) {
             // Handle surrounding word action
             int cursor_pos = textCursor().position();
             QString current_text = toPlainText();
-            int start = current_text.lastIndexOf(QRegularExpression("\\W"), cursor_pos);
-            int end = current_text.indexOf(QRegularExpression("\\W"), cursor_pos);
-            if (start == -1) start = 0;
-            else{
-                start++;
+            
+            // If cursor is not on a word character, don't do anything
+            if (cursor_pos >= current_text.length() || 
+                !(current_text[cursor_pos].isLetterOrNumber() || current_text[cursor_pos] == '_')) {
+                return true;
             }
-
-            if (end == -1) end = current_text.length();
-            else{
-                end--;
+            
+            // Find word boundaries - only include word characters (letters, numbers, underscore)
+            int start = cursor_pos;
+            int end = cursor_pos;
+            
+            // Move start backward to beginning of word
+            while (start > 0 && (current_text[start - 1].isLetterOrNumber() || current_text[start - 1] == '_')) {
+                start--;
             }
-            // setSelection(start, end - start);
-            if (action_waiting_for_motion->kind == ActionWaitingForMotionKind::Delete) {
-                // delete the selected text
-                QString new_text = current_text.remove(start, end - start);
-                setText(new_text);
-                set_cursor_position(start);
+            
+            // Move end forward to end of word (start from cursor, move until non-word char)
+            while (end < current_text.length() && (current_text[end].isLetterOrNumber() || current_text[end] == '_')) {
+                end++;
             }
+            
+            // Only proceed if we found a word
+            if (start < end) {
+                if (action_waiting_for_motion->kind == ActionWaitingForMotionKind::Delete) {
+                    // Store deleted text for paste operation
+                    last_deleted_text = current_text.mid(start, end - start);
+                    // Delete only the word characters
+                    QString new_text = current_text.remove(start, end - start);
+                    setText(new_text);
+                    set_cursor_position(start);
+                }
+            }
+            return true;
         }
     }
   }
+  return false;
 }
 
 void VimLineEdit::set_cursor_position(int pos){
