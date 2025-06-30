@@ -860,67 +860,14 @@ int VimLineEdit::calculate_move_down(){
 }
 
 int VimLineEdit::calculate_move_up_on_screen(){
-    QTextCursor cursor = textCursor();
-    int current_pos = cursor.position();
-    
-    // Use the document's text layout directly
-    QTextDocument* doc = document();
-    QTextBlock current_block = doc->findBlock(current_pos);
-    
-    if (!current_block.isValid()) {
-        return current_pos;
-    }
-    
-    // Get the layout for the current block
-    QTextLayout* layout = current_block.layout();
-    if (!layout) {
-        return current_pos;
-    }
-    
-    // Find position within the block
-    int pos_in_block = current_pos - current_block.position();
-    
-    // Find which line within the block contains our cursor
-    int current_line_index = -1;
-    for (int i = 0; i < layout->lineCount(); ++i) {
-        QTextLine line = layout->lineAt(i);
-        if (pos_in_block >= line.textStart() && pos_in_block < line.textStart() + line.textLength()) {
-            current_line_index = i;
-            break;
-        }
-    }
-    
-    if (current_line_index == -1) return current_pos;
-    
-    // Calculate character index within the current visual line
-    QTextLine current_line = layout->lineAt(current_line_index);
-    int char_index_in_line = pos_in_block - current_line.textStart();
-    
-    // Try to move to previous line within the same block
-    if (current_line_index > 0) {
-        QTextLine prev_line = layout->lineAt(current_line_index - 1);
-        int target_index = std::min(char_index_in_line, prev_line.textLength() - 1);
-        return current_block.position() + prev_line.textStart() + target_index;
-    }
-    
-    // If we're at the first line of the block, try to move to previous block
-    QTextBlock prev_block = current_block.previous();
-    if (!prev_block.isValid()) {
-        return current_pos; // Already at the top
-    }
-    
-    QTextLayout* prev_layout = prev_block.layout();
-    if (!prev_layout || prev_layout->lineCount() == 0) {
-        return current_pos;
-    }
-    
-    // Move to the last line of the previous block
-    QTextLine last_line = prev_layout->lineAt(prev_layout->lineCount() - 1);
-    int target_index = std::min(char_index_in_line, last_line.textLength() - 1);
-    return prev_block.position() + last_line.textStart() + target_index;
+    return calculate_move_on_screen(-1);
 }
 
 int VimLineEdit::calculate_move_down_on_screen(){
+    return calculate_move_on_screen(1);
+}
+
+int VimLineEdit::calculate_move_on_screen(int direction){
     QTextCursor cursor = textCursor();
     int current_pos = cursor.position();
     
@@ -957,26 +904,28 @@ int VimLineEdit::calculate_move_down_on_screen(){
     QTextLine current_line = layout->lineAt(current_line_index);
     int char_index_in_line = pos_in_block - current_line.textStart();
     
-    // Try to move to next line within the same block
-    if (current_line_index < layout->lineCount() - 1) {
-        QTextLine next_line = layout->lineAt(current_line_index + 1);
-        int target_index = std::min(char_index_in_line, next_line.textLength() - 1);
-        return current_block.position() + next_line.textStart() + target_index;
+    // Try to move within the same block first
+    int target_line_index = current_line_index + direction;
+    if (target_line_index >= 0 && target_line_index < layout->lineCount()) {
+        QTextLine target_line = layout->lineAt(target_line_index);
+        int target_index = std::min(char_index_in_line, target_line.textLength() - 1);
+        return current_block.position() + target_line.textStart() + target_index;
     }
     
-    // If we're at the last line of the block, try to move to next block
-    QTextBlock next_block = current_block.next();
-    if (!next_block.isValid()) {
-        return current_pos; // Already at the bottom
+    // Move to adjacent block
+    QTextBlock target_block = (direction > 0) ? current_block.next() : current_block.previous();
+    if (!target_block.isValid()) {
+        return current_pos; // Already at boundary
     }
     
-    QTextLayout* next_layout = next_block.layout();
-    if (!next_layout || next_layout->lineCount() == 0) {
+    QTextLayout* target_layout = target_block.layout();
+    if (!target_layout || target_layout->lineCount() == 0) {
         return current_pos;
     }
     
-    // Move to the first line of the next block
-    QTextLine first_line = next_layout->lineAt(0);
-    int target_index = std::min(char_index_in_line, first_line.textLength() - 1);
-    return next_block.position() + first_line.textStart() + target_index;
+    // Choose first or last line of the target block
+    int target_block_line_index = (direction > 0) ? 0 : target_layout->lineCount() - 1;
+    QTextLine target_line = target_layout->lineAt(target_block_line_index);
+    int target_index = std::min(char_index_in_line, target_line.textLength() - 1);
+    return target_block.position() + target_line.textStart() + target_index;
 }

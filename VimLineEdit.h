@@ -186,6 +186,7 @@ private:
 
     int calculate_move_down_on_screen();
     int calculate_move_up_on_screen();
+    int calculate_move_on_screen(int direction);
 
     void delete_char();
     void handle_surrounding_motion_action();
