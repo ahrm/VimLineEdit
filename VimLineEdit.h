@@ -11,6 +11,8 @@
 
 
 enum class VimLineEditCommand{
+    GotoBegin,
+    GotoEnd,
     EnterInsertMode,
     EnterInsertModeAfter,
     EnterInsertModeBegin,

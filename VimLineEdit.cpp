@@ -168,6 +168,8 @@ void VimLineEdit::add_vim_keybindings(){
     // KeyboardModifierState NOMOD = KeyboardModifierState{false, false, false, false};
      
     std::vector<KeyBinding> key_bindings = {
+        KeyBinding{{KeyChord{Qt::Key_G, {}}, KeyChord{Qt::Key_G, {}}}, VimLineEditCommand::GotoBegin},
+        KeyBinding{{KeyChord{Qt::Key_G, SHIFT}}, VimLineEditCommand::GotoEnd},
         KeyBinding{{KeyChord{Qt::Key_Escape, {}}}, VimLineEditCommand::EnterNormalMode},
         KeyBinding{{KeyChord{Qt::Key_I, {}}}, VimLineEditCommand::EnterInsertMode},
         KeyBinding{{KeyChord{Qt::Key_A, {}}}, VimLineEditCommand::EnterInsertModeAfter},
@@ -233,6 +235,8 @@ std::optional<VimLineEditCommand> VimLineEdit::handle_key_event(int key, Qt::Key
 
 std::string to_string(VimLineEditCommand cmd) {
     switch (cmd) {
+        case VimLineEditCommand::GotoBegin: return "GotoBegin";
+        case VimLineEditCommand::GotoEnd: return "GotoEnd";
         case VimLineEditCommand::EnterInsertMode: return "EnterInsertMode";
         case VimLineEditCommand::EnterInsertModeAfter: return "EnterInsertModeAfter";
         case VimLineEditCommand::EnterInsertModeBeginLine: return "EnterInsertModeBeginLine";
@@ -324,6 +328,12 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
             current_mode = VimMode::Insert;
             new_pos = get_line_end_position(textCursor().position());
             set_style_for_mode(current_mode);
+            break;
+        case VimLineEditCommand::GotoBegin:
+            new_pos = get_line_start_position(0);
+            break;
+        case VimLineEditCommand::GotoEnd:
+            new_pos = get_line_end_position(toPlainText().length());
             break;
         case VimLineEditCommand::EnterNormalMode:
             push_history(current_state.text, current_state.cursor_position);
