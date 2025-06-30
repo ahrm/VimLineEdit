@@ -322,7 +322,7 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
             break;
         case VimLineEditCommand::EnterInsertModeEnd:
             current_mode = VimMode::Insert;
-            new_pos = toPlainText().length();
+            new_pos = current_state.text.length();
             set_style_for_mode(current_mode);
             break;
         case VimLineEditCommand::EnterInsertModeBeginLine:
@@ -339,7 +339,7 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
             new_pos = get_line_start_position(0);
             break;
         case VimLineEditCommand::GotoEnd:
-            new_pos = get_line_end_position(toPlainText().length());
+            new_pos = get_line_end_position(current_state.text.length());
             break;
         case VimLineEditCommand::EnterNormalMode:
             push_history(current_state.text, current_state.cursor_position);
@@ -352,8 +352,7 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
             } else {
                 new_pos = 0;
             }
-            // Additional check: if we're now on a newline, move back one more
-            if (new_pos > 0 && new_pos < toPlainText().length() && toPlainText()[new_pos] == '\n') {
+            if (new_pos > 0 && new_pos < current_state.text.length() && current_state.text[new_pos] == '\n') {
                 new_pos = new_pos - 1;
             }
             break;
@@ -448,7 +447,7 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
         case VimLineEditCommand::PasteForward: {
             if (last_deleted_text.size() > 0){
                 // Paste the last deleted text after the cursor position
-                QString current_text = toPlainText();
+                QString current_text = current_state.text;
                 int cursor_pos = textCursor().position();
                 QString new_text = current_text.left(cursor_pos + 1) + last_deleted_text + current_text.mid(cursor_pos + 1);
                 setText(new_text);
@@ -458,7 +457,7 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
         }
         case VimLineEditCommand::InsertLineBelow: {
             push_history(current_state.text, current_state.cursor_position);
-            QString current_text = toPlainText();
+            QString current_text = current_state.text;
             int cursor_pos = textCursor().position();
             int line_end = get_line_end_position(cursor_pos);
             QString new_text = current_text.left(line_end) + "\n" + current_text.mid(line_end);
@@ -470,7 +469,7 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
         }
         case VimLineEditCommand::InsertLineAbove: {
             push_history(current_state.text, current_state.cursor_position);
-            QString current_text = toPlainText();
+            QString current_text = current_state.text;
             int cursor_pos = textCursor().position();
             int line_start = get_line_start_position(cursor_pos);
             QString new_text = current_text.left(line_start) + "\n" + current_text.mid(line_start);
@@ -485,8 +484,8 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
             break;
     }
 
-    if (current_mode == VimMode::Normal && new_pos == toPlainText().size()){
-        new_pos = toPlainText().size() - 1;
+    if (current_mode == VimMode::Normal && new_pos == current_state.text.size()){
+        new_pos = current_state.text.size() - 1;
     }
 
 
@@ -495,11 +494,11 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
             if (action_waiting_for_motion.value().kind == ActionWaitingForMotionKind::Delete) {
                 // delete from old_pos to new_pos
                 if (old_pos < new_pos) {
-                    QString new_text = toPlainText().remove(old_pos, new_pos + 1 - old_pos);
+                    QString new_text = current_state.text.remove(old_pos, new_pos + 1 - old_pos);
                     setText(new_text);
                     set_cursor_position(old_pos);
                 } else if (old_pos > new_pos) {
-                    QString new_text = toPlainText().remove(new_pos, old_pos - new_pos);
+                    QString new_text = current_state.text.remove(new_pos, old_pos - new_pos);
                     setText(new_text);
                     set_cursor_position(new_pos);
                 }
