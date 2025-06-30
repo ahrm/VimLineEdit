@@ -126,18 +126,18 @@ void VimLineEdit::keyPressEvent(QKeyEvent *event){
 
 void VimLineEdit::set_style_for_mode(VimMode mode){
     if (mode == VimMode::Normal){
-        setStyleSheet("background-color: lightgray;");
+        // setStyleSheet("background-color: lightgray;");
         int font_width = fontMetrics().horizontalAdvance(" ");
         setCursorWidth(font_width);
         // setStyle(new LineEditStyle(font_width));
     }
     else if (mode == VimMode::Insert) {
-        setStyleSheet("background-color: white;");
+        // setStyleSheet("background-color: white;");
         setCursorWidth(1);
         // setStyle(new LineEditStyle(1));
     }
     else if (mode == VimMode::Visual) {
-        setStyleSheet("background-color: pink;");
+        // setStyleSheet("background-color: pink;");
         int font_width = fontMetrics().horizontalAdvance(" ");
         setCursorWidth(font_width);
         // setStyle(new LineEditStyle(font_width));
@@ -341,21 +341,31 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
         case VimLineEditCommand::GotoEnd:
             new_pos = get_line_end_position(current_state.text.length());
             break;
-        case VimLineEditCommand::EnterNormalMode:
+        case VimLineEditCommand::EnterNormalMode: {
             push_history(current_state.text, current_state.cursor_position);
             current_mode = VimMode::Normal;
             set_style_for_mode(current_mode);
-            // In normal mode, cursor should be on a character, not between characters
-            // Move cursor back by one position unless we're already at the beginning
-            if (textCursor().position() > 0) {
-                new_pos = textCursor().position() - 1;
-            } else {
+
+            if (textCursor().position() <= 0) {
                 new_pos = 0;
+            } else {
+                new_pos = textCursor().position();
             }
-            if (new_pos > 0 && new_pos < current_state.text.length() && current_state.text[new_pos] == '\n') {
-                new_pos = new_pos - 1;
+
+            // In normal mode, cursor should be on a character, not between
+            // characters Move cursor back by one position unless we're already at
+            // the beginning of a line
+            bool is_at_beginning_of_line =
+                (new_pos > 0 && current_state.text[new_pos - 1] == '\n');
+            if (textCursor().position() > 0) {
+                if (!is_at_beginning_of_line) {
+                    new_pos = textCursor().position() - 1;
+                } else {
+                    new_pos = textCursor().position();
+                }
             }
             break;
+        }
         case VimLineEditCommand::EnterVisualMode:
             current_mode = VimMode::Visual;
             visual_mode_anchor = textCursor().position();
