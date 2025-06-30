@@ -7,12 +7,16 @@
 #include <vector>
 #include <string>
 #include <deque>
+#include <QTextEdit>
+
 
 enum class VimLineEditCommand{
     EnterInsertMode,
     EnterInsertModeAfter,
     EnterInsertModeBegin,
     EnterInsertModeEnd,
+    EnterInsertModeBeginLine,
+    EnterInsertModeEndLine,
     EnterNormalMode,
     EnterVisualMode,
     MoveLeft,
@@ -135,7 +139,7 @@ struct History{
 
 };
 
-class VimLineEdit : public QLineEdit
+class VimLineEdit : public QTextEdit
 {
     Q_OBJECT
 
@@ -174,6 +178,11 @@ private:
     void push_history(const QString& text, int cursor_position);
     void undo();
     void redo();
+
+    void set_cursor_position(int pos);
+
+    int get_line_start_position(int cursor_pos);
+    int get_line_end_position(int cursor_pos);
 };
 
 #endif // VIMLINEEDIT_H
