@@ -1120,3 +1120,14 @@ int VimLineEdit::calculate_move_on_screen(int direction) {
     int target_index = std::min(char_index_in_line, target_line.textLength() - 1);
     return target_block.position() + target_line.textStart() + target_index;
 }
+
+InputTreeNode* InputTreeNode::clone() const {
+    // create a deep clone
+    InputTreeNode* new_node = new InputTreeNode();
+    new_node->key_chord = this->key_chord;
+    new_node->command = this->command;
+    for (const auto& child : this->children) {
+        new_node->children.push_back(*child.clone());
+    }
+    return new_node;
+}

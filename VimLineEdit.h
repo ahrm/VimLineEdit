@@ -1,4 +1,3 @@
-
 #ifndef VIMLINEEDIT_H
 #define VIMLINEEDIT_H
 
@@ -48,7 +47,7 @@ enum class VimLineEditCommand{
     Undo,
     Redo,
     InsertLineBelow,
-    InsertLineAbove
+    InsertLineAbove,
 };
 
 enum class ActionWaitingForMotionKind{
@@ -112,6 +111,8 @@ struct InputTreeNode{
     std::optional<VimLineEditCommand> command;
 
     void add_keybinding(const std::vector<KeyChord>& key_chords, int index, VimLineEditCommand cmd);
+
+    InputTreeNode* clone() const;
 
 };
 
@@ -193,6 +194,7 @@ private:
     void redo();
 
     void set_cursor_position(int pos);
+    void set_cursor_position_with_selection(int pos);
 
     int get_line_start_position(int cursor_pos);
     int get_line_end_position(int cursor_pos);
