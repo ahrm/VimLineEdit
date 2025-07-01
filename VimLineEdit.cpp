@@ -126,11 +126,13 @@ void VimLineEdit::set_style_for_mode(VimMode mode) {
         int font_width = fontMetrics().horizontalAdvance(" ");
         setCursorWidth(font_width);
         // setStyle(new LineEditStyle(font_width));
-    } else if (mode == VimMode::Insert) {
+    }
+    else if (mode == VimMode::Insert) {
         // setStyleSheet("background-color: white;");
         setCursorWidth(1);
         // setStyle(new LineEditStyle(1));
-    } else if (mode == VimMode::Visual) {
+    }
+    else if (mode == VimMode::Visual) {
         // setStyleSheet("background-color: pink;");
         int font_width = fontMetrics().horizontalAdvance(" ");
         setCursorWidth(font_width);
