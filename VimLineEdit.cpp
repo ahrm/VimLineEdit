@@ -214,14 +214,28 @@ void VimLineEdit::add_vim_keybindings() {
     };
 
     for (const auto &binding : key_bindings) {
-        input_tree.add_keybinding(binding.key_chords, 0, binding.command);
+        normal_mode_input_tree.add_keybinding(binding.key_chords, 0, binding.command);
     }
+
+    visual_mode_input_tree = normal_mode_input_tree.clone();
+    std::vector<KeyBinding> visual_mode_keybindings = {
+        KeyBinding{{KeyChord{Qt::Key_O, {}}}, VimLineEditCommand::ToggleVisualCursor},
+    };
+
+    for (const auto &binding : visual_mode_keybindings) {
+        visual_mode_input_tree.add_keybinding(binding.key_chords, 0, binding.command);
+    }
+
 }
 
 std::optional<VimLineEditCommand> VimLineEdit::handle_key_event(int key,
                                                                 Qt::KeyboardModifiers modifiers) {
 
-    InputTreeNode *node = current_node ? current_node : &input_tree;
+    InputTreeNode* current_mode_root = &normal_mode_input_tree;
+    if (current_mode == VimMode::Visual) {
+        current_mode_root = &visual_mode_input_tree;
+    }
+    InputTreeNode *node = current_node ? current_node : current_mode_root;
     KeyboardModifierState modifier_state = KeyboardModifierState::from_qt_modifiers(modifiers);
     for (auto &child : node->children) {
         if (child.key_chord.key == key && child.key_chord.modifiers == modifier_state) {
@@ -318,6 +332,8 @@ std::string to_string(VimLineEditCommand cmd) {
         return "InsertLineBelow";
     case VimLineEditCommand::InsertLineAbove:
         return "InsertLineAbove";
+    case VimLineEditCommand::ToggleVisualCursor:
+        return "ToggleVisualCursor";
     default:
         return "Unknown";
     }
@@ -541,6 +557,16 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
         new_pos = line_start;
         current_mode = VimMode::Insert;
         set_style_for_mode(current_mode);
+        break;
+    }
+    case VimLineEditCommand::ToggleVisualCursor: {
+        if (current_mode == VimMode::Visual) {
+            // Swap cursor position with visual mode anchor
+            int current_cursor_pos = textCursor().position();
+            int temp = visual_mode_anchor;
+            visual_mode_anchor = current_cursor_pos;
+            new_pos = temp;
+        }
         break;
     }
     // Add more cases for other commands as needed
@@ -1121,13 +1147,13 @@ int VimLineEdit::calculate_move_on_screen(int direction) {
     return target_block.position() + target_line.textStart() + target_index;
 }
 
-InputTreeNode* InputTreeNode::clone() const {
+InputTreeNode InputTreeNode::clone() const {
     // create a deep clone
-    InputTreeNode* new_node = new InputTreeNode();
-    new_node->key_chord = this->key_chord;
-    new_node->command = this->command;
+    InputTreeNode new_node;
+    new_node.key_chord = this->key_chord;
+    new_node.command = this->command;
     for (const auto& child : this->children) {
-        new_node->children.push_back(*child.clone());
+        new_node.children.push_back(child.clone());
     }
     return new_node;
 }

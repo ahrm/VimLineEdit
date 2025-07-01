@@ -48,6 +48,7 @@ enum class VimLineEditCommand{
     Redo,
     InsertLineBelow,
     InsertLineAbove,
+    ToggleVisualCursor,
 };
 
 enum class ActionWaitingForMotionKind{
@@ -112,7 +113,7 @@ struct InputTreeNode{
 
     void add_keybinding(const std::vector<KeyChord>& key_chords, int index, VimLineEditCommand cmd);
 
-    InputTreeNode* clone() const;
+    InputTreeNode clone() const;
 
 };
 
@@ -152,7 +153,9 @@ class VimLineEdit : public QTextEdit
 private:
     VimMode current_mode;
     int visual_mode_anchor = -1;
-    InputTreeNode input_tree;
+    InputTreeNode normal_mode_input_tree;
+    InputTreeNode visual_mode_input_tree;
+
     InputTreeNode* current_node = nullptr;
 
     std::optional<VimLineEditCommand> pending_symbol_command = {};
