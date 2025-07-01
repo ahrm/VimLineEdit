@@ -20,6 +20,7 @@ enum class VimLineEditCommand{
     EnterInsertModeEndLine,
     EnterNormalMode,
     EnterVisualMode,
+    EnterVisualLineMode,
     MoveLeft,
     MoveRight,
     MoveUp,
@@ -122,7 +123,9 @@ enum class VimMode{
     Normal,
     Insert,
     Visual,
+    VisualLine,
 };
+
 enum class FindDirection{
     Forward,
     Backward,
@@ -198,6 +201,7 @@ private:
 
     void set_cursor_position(int pos);
     void set_cursor_position_with_selection(int pos);
+    void set_cursor_position_with_line_selection(int pos);
 
     int get_line_start_position(int cursor_pos);
     int get_line_end_position(int cursor_pos);

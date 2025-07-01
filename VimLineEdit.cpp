@@ -39,7 +39,7 @@ void VimLineEdit::keyPressEvent(QKeyEvent *event) {
         return;
     }
 
-    if (current_mode == VimMode::Normal || current_mode == VimMode::Visual) {
+    if (current_mode == VimMode::Normal || current_mode == VimMode::Visual || current_mode == VimMode::VisualLine) {
         // we don't want to handle when we only press a modifier (e.g. Shift, Ctrl, etc.)
         int event_key = event->key();
         bool is_keypress_a_modifier = event_key == Qt::Key_Shift || event_key == Qt::Key_Control ||
@@ -134,7 +134,7 @@ void VimLineEdit::set_style_for_mode(VimMode mode) {
         setCursorWidth(1);
         // setStyle(new LineEditStyle(1));
     }
-    else if (mode == VimMode::Visual) {
+    else if (mode == VimMode::Visual || mode == VimMode::VisualLine) {
         // setStyleSheet("background-color: pink;");
         int font_width = fontMetrics().horizontalAdvance(" ");
         setCursorWidth(font_width);
@@ -179,6 +179,7 @@ void VimLineEdit::add_vim_keybindings() {
         KeyBinding{{KeyChord{Qt::Key_I, SHIFT}}, VimLineEditCommand::EnterInsertModeBeginLine},
         KeyBinding{{KeyChord{Qt::Key_A, SHIFT}}, VimLineEditCommand::EnterInsertModeEndLine},
         KeyBinding{{KeyChord{Qt::Key_V, {}}}, VimLineEditCommand::EnterVisualMode},
+        KeyBinding{{KeyChord{Qt::Key_V, SHIFT}}, VimLineEditCommand::EnterVisualLineMode},
         KeyBinding{{KeyChord{Qt::Key_H, {}}}, VimLineEditCommand::MoveLeft},
         KeyBinding{{KeyChord{Qt::Key_L, {}}}, VimLineEditCommand::MoveRight},
         KeyBinding{{KeyChord{Qt::Key_J, {}}}, VimLineEditCommand::MoveDown},
@@ -232,7 +233,7 @@ std::optional<VimLineEditCommand> VimLineEdit::handle_key_event(int key,
                                                                 Qt::KeyboardModifiers modifiers) {
 
     InputTreeNode* current_mode_root = &normal_mode_input_tree;
-    if (current_mode == VimMode::Visual) {
+    if (current_mode == VimMode::Visual || current_mode == VimMode::VisualLine) {
         current_mode_root = &visual_mode_input_tree;
     }
     InputTreeNode *node = current_node ? current_node : current_mode_root;
@@ -276,6 +277,8 @@ std::string to_string(VimLineEditCommand cmd) {
         return "EnterNormalMode";
     case VimLineEditCommand::EnterVisualMode:
         return "EnterVisualMode";
+    case VimLineEditCommand::EnterVisualLineMode:
+        return "EnterVisualLineMode";
     case VimLineEditCommand::MoveLeft:
         return "MoveLeft";
     case VimLineEditCommand::MoveRight:
@@ -433,6 +436,13 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
         // setSelection(visual_mode_anchor, 1);
         set_style_for_mode(current_mode);
         break;
+    case VimLineEditCommand::EnterVisualLineMode:
+        current_mode = VimMode::VisualLine;
+        visual_mode_anchor = textCursor().position();
+        set_style_for_mode(current_mode);
+        // Immediately select the current line
+        set_cursor_position_with_line_selection(textCursor().position());
+        break;
     case VimLineEditCommand::MoveLeft:
         new_pos = textCursor().position() - 1;
         break;
@@ -560,7 +570,7 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
         break;
     }
     case VimLineEditCommand::ToggleVisualCursor: {
-        if (current_mode == VimMode::Visual) {
+        if (current_mode == VimMode::Visual || current_mode == VimMode::VisualLine) {
             // Swap cursor position with visual mode anchor
             int current_cursor_pos = textCursor().position();
             int temp = visual_mode_anchor;
@@ -607,6 +617,9 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
         }
         else if (current_mode == VimMode::Visual) {
             set_cursor_position_with_selection(new_pos);
+        }
+        else if (current_mode == VimMode::VisualLine) {
+            set_cursor_position_with_line_selection(new_pos);
         }
         else {
             set_cursor_position(new_pos);
@@ -994,6 +1007,38 @@ void VimLineEdit::set_cursor_position_with_selection(int pos) {
     QTextCursor cursor = textCursor();
     cursor.setPosition(visual_mode_anchor, QTextCursor::MoveAnchor);
     cursor.setPosition(pos, QTextCursor::KeepAnchor);
+    setTextCursor(cursor);
+}
+
+void VimLineEdit::set_cursor_position_with_line_selection(int pos) {
+    QTextCursor cursor = textCursor();
+    
+    // Get line boundaries for both anchor and current position
+    int anchor_line_start = get_line_start_position(visual_mode_anchor);
+    int anchor_line_end = get_line_end_position(visual_mode_anchor);
+    int pos_line_start = get_line_start_position(pos);
+    int pos_line_end = get_line_end_position(pos);
+    
+    // Determine selection direction and boundaries
+    int selection_start, selection_end;
+    if (visual_mode_anchor <= pos) {
+        // Forward selection: from start of anchor line to end of current line
+        selection_start = anchor_line_start;
+        selection_end = pos_line_end;
+    } else {
+        // Backward selection: from start of current line to end of anchor line
+        selection_start = pos_line_start;
+        selection_end = anchor_line_end;
+    }
+    
+    // Include the newline character if it exists (except for the last line)
+    const QString &text = toPlainText();
+    if (selection_end < text.length() && text[selection_end] == '\n') {
+        selection_end++;
+    }
+    
+    cursor.setPosition(selection_start, QTextCursor::MoveAnchor);
+    cursor.setPosition(selection_end, QTextCursor::KeepAnchor);
     setTextCursor(cursor);
 }
 
