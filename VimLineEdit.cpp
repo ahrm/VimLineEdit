@@ -64,12 +64,13 @@ void VimLineEdit::keyPressEvent(QKeyEvent *event) {
                 if (event->key() == Qt::Key_I) {
                     action_waiting_for_motion->surrounding_scope = SurroundingScope::Inside;
                     return;
-                } else if (event->key() == Qt::Key_A) {
+                }
+                else if (event->key() == Qt::Key_A) {
                     action_waiting_for_motion->surrounding_scope = SurroundingScope::Around;
                     return;
                 }
-
-            } else {
+            }
+            else {
                 switch (event->key()) {
                 case Qt::Key_ParenLeft:
                     action_waiting_for_motion->surrounding_kind = SurroundingKind::Parentheses;
@@ -108,7 +109,8 @@ void VimLineEdit::keyPressEvent(QKeyEvent *event) {
                     // If the command requires a symbol, we need to wait for the next key press
                     pending_symbol_command = command;
                     return;
-                } else {
+                }
+                else {
                     handle_command(command.value());
                 }
             }
@@ -226,7 +228,8 @@ std::optional<VimLineEditCommand> VimLineEdit::handle_key_event(int key,
             if (child.command.has_value()) {
                 current_node = nullptr;
                 return child.command;
-            } else {
+            }
+            else {
                 current_node = &child;
                 return {};
             }
@@ -389,7 +392,8 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
 
         if (textCursor().position() <= 0) {
             new_pos = 0;
-        } else {
+        }
+        else {
             new_pos = textCursor().position();
         }
 
@@ -400,7 +404,8 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
         if (textCursor().position() > 0) {
             if (!is_at_beginning_of_line) {
                 new_pos = textCursor().position() - 1;
-            } else {
+            }
+            else {
                 new_pos = textCursor().position();
             }
         }
@@ -557,7 +562,8 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
                         current_state.text.remove(old_pos, new_pos + delete_pos_offset - old_pos);
                     setText(new_text);
                     set_cursor_position(old_pos);
-                } else if (old_pos > new_pos) {
+                }
+                else if (old_pos > new_pos) {
                     QString new_text = current_state.text.remove(new_pos, old_pos - new_pos);
                     setText(new_text);
                     set_cursor_position(new_pos);
@@ -570,12 +576,14 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
             }
 
             action_waiting_for_motion = {};
-        } else if (current_mode == VimMode::Visual) {
+        }
+        else if (current_mode == VimMode::Visual) {
             set_cursor_position(new_pos);
             int selection_start = std::min(visual_mode_anchor, new_pos);
             int selection_end = std::max(visual_mode_anchor, new_pos);
             // setSelection(selection_start, selection_end - selection_start);
-        } else {
+        }
+        else {
             set_cursor_position(new_pos);
         }
     }
@@ -639,7 +647,8 @@ int VimLineEdit::calculate_move_word_forward(bool with_symbols) const {
             while (next_pos < len && !t[next_pos].isSpace()) {
                 next_pos++;
             }
-        } else {
+        }
+        else {
             bool is_letter = t[next_pos].isLetterOrNumber();
             while (next_pos < len && !t[next_pos].isSpace() &&
                    t[next_pos].isLetterOrNumber() == is_letter) {
@@ -696,7 +705,8 @@ int VimLineEdit::calculate_move_to_end_of_word(bool with_symbols) const {
         while (next_pos < len - 1 && !t[next_pos + 1].isSpace()) {
             next_pos++;
         }
-    } else {
+    }
+    else {
         bool is_letter = t[next_pos].isLetterOrNumber();
         while (next_pos < len - 1 && !t[next_pos + 1].isSpace() &&
                t[next_pos + 1].isLetterOrNumber() == is_letter) {
@@ -725,7 +735,8 @@ int VimLineEdit::calculate_move_word_backward(bool with_symbols) const {
         while (prev_pos > 0 && !t[prev_pos - 1].isSpace()) {
             prev_pos--;
         }
-    } else {
+    }
+    else {
         bool is_letter = t[prev_pos].isLetterOrNumber();
         while (prev_pos > 0 && !t[prev_pos - 1].isSpace() &&
                t[prev_pos - 1].isLetterOrNumber() == is_letter) {
@@ -862,7 +873,7 @@ bool VimLineEdit::handle_surrounding_motion_action() {
             action_waiting_for_motion = {};
             return true;
         }
-        else{
+        else {
             char begin_symbol, end_symbol;
             if (action_waiting_for_motion->surrounding_kind == SurroundingKind::Parentheses) {
                 begin_symbol = '(';
@@ -874,7 +885,7 @@ bool VimLineEdit::handle_surrounding_motion_action() {
             }
             else if (action_waiting_for_motion->surrounding_kind == SurroundingKind::Braces) {
                 begin_symbol = '{';
-                end_symbol = '}';  
+                end_symbol = '}';
             }
             else if (action_waiting_for_motion->surrounding_kind == SurroundingKind::DoubleQuotes) {
                 begin_symbol = '"';
