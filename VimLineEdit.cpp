@@ -299,6 +299,11 @@ bool requires_symbol(VimLineEditCommand cmd){
 void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> symbol){
     int new_pos = -1;
     int old_pos = textCursor().position();
+    // some commands' delete differs from the way they move
+    // for example, pressing w moves the cursor to the beginning of the next word,
+    // but does not delete the first character of the next word, but pressing e
+    // moves the cursor to the end of the current word and de deletes that character
+    int delete_pos_offset = 0;
 
     HistoryState current_state;
     current_state.text = toPlainText();
@@ -398,9 +403,11 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
             new_pos = calculate_move_word_forward(true);
             break;
         case VimLineEditCommand::MoveToEndOfWord:
+            delete_pos_offset = 1;
             new_pos = calculate_move_to_end_of_word(false);
             break;
         case VimLineEditCommand::MoveToEndOfWordWithSymbols:
+            delete_pos_offset = 1;
             new_pos = calculate_move_to_end_of_word(true);
             break;
         case VimLineEditCommand::Undo:
@@ -509,7 +516,7 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
             if (action_waiting_for_motion.value().kind == ActionWaitingForMotionKind::Delete || action_waiting_for_motion.value().kind == ActionWaitingForMotionKind::Change) {
                 // delete from old_pos to new_pos
                 if (old_pos < new_pos) {
-                    QString new_text = current_state.text.remove(old_pos, new_pos - old_pos);
+                    QString new_text = current_state.text.remove(old_pos, new_pos + delete_pos_offset - old_pos);
                     setText(new_text);
                     set_cursor_position(old_pos);
                 }
