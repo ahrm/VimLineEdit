@@ -806,54 +806,141 @@ KeyboardModifierState KeyboardModifierState::from_qt_modifiers(Qt::KeyboardModif
 bool VimLineEdit::handle_surrounding_motion_action() {
     if (action_waiting_for_motion.has_value()) {
         if (action_waiting_for_motion->surrounding_kind == SurroundingKind::Word) {
-            if (action_waiting_for_motion->surrounding_scope == SurroundingScope::Inside) {
-                // Handle surrounding word action
-                int cursor_pos = textCursor().position();
-                QString current_text = toPlainText();
+            // Handle surrounding word action
+            int cursor_pos = textCursor().position();
+            QString current_text = toPlainText();
 
-                // If cursor is not on a word character, don't do anything
-                if (cursor_pos >= current_text.length() ||
-                    !(current_text[cursor_pos].isLetterOrNumber() ||
-                      current_text[cursor_pos] == '_')) {
-                    return true;
-                }
-
-                // Find word boundaries - only include word characters (letters, numbers,
-                // underscore)
-                int start = cursor_pos;
-                int end = cursor_pos;
-
-                // Move start backward to beginning of word
-                while (start > 0 && (current_text[start - 1].isLetterOrNumber() ||
-                                     current_text[start - 1] == '_')) {
-                    start--;
-                }
-
-                // Move end forward to end of word (start from cursor, move until non-word char)
-                while (end < current_text.length() &&
-                       (current_text[end].isLetterOrNumber() || current_text[end] == '_')) {
-                    end++;
-                }
-
-                // Only proceed if we found a word
-                if (start < end) {
-                    if (action_waiting_for_motion->kind == ActionWaitingForMotionKind::Delete ||
-                        action_waiting_for_motion->kind == ActionWaitingForMotionKind::Change) {
-                        // Store deleted text for paste operation
-                        last_deleted_text = current_text.mid(start, end - start);
-                        // Delete only the word characters
-                        QString new_text = current_text.remove(start, end - start);
-                        setText(new_text);
-                        set_cursor_position(start);
-
-                        if (action_waiting_for_motion->kind == ActionWaitingForMotionKind::Change) {
-                            current_mode = VimMode::Insert;
-                            set_style_for_mode(current_mode);
-                        }
-                    }
-                }
+            // If cursor is not on a word character, don't do anything
+            if (cursor_pos >= current_text.length() ||
+                !(current_text[cursor_pos].isLetterOrNumber() || current_text[cursor_pos] == '_')) {
                 return true;
             }
+
+            // Find word boundaries - only include word characters (letters, numbers,
+            // underscore)
+            int start = cursor_pos;
+            int end = cursor_pos;
+
+            // Move start backward to beginning of word
+            while (start > 0 &&
+                   (current_text[start - 1].isLetterOrNumber() || current_text[start - 1] == '_')) {
+                start--;
+            }
+
+            // Move end forward to end of word (start from cursor, move until non-word char)
+            while (end < current_text.length() &&
+                   (current_text[end].isLetterOrNumber() || current_text[end] == '_')) {
+                end++;
+            }
+
+            // include the following spaces
+            if (action_waiting_for_motion->surrounding_scope == SurroundingScope::Around) {
+                while (end < current_text.length() && current_text[end].isSpace()) {
+                    end++;
+                }
+            }
+
+            // Only proceed if we found a word
+            if (start < end) {
+                if (action_waiting_for_motion->kind == ActionWaitingForMotionKind::Delete ||
+                    action_waiting_for_motion->kind == ActionWaitingForMotionKind::Change) {
+                    // Store deleted text for paste operation
+                    last_deleted_text = current_text.mid(start, end - start);
+                    // Delete only the word characters
+                    QString new_text = current_text.remove(start, end - start);
+                    setText(new_text);
+                    set_cursor_position(start);
+
+                    if (action_waiting_for_motion->kind == ActionWaitingForMotionKind::Change) {
+                        current_mode = VimMode::Insert;
+                        set_style_for_mode(current_mode);
+                    }
+                }
+            }
+            action_waiting_for_motion = {};
+            return true;
+        }
+        else{
+            char begin_symbol, end_symbol;
+            if (action_waiting_for_motion->surrounding_kind == SurroundingKind::Parentheses) {
+                begin_symbol = '(';
+                end_symbol = ')';
+            }
+            else if (action_waiting_for_motion->surrounding_kind == SurroundingKind::Brackets) {
+                begin_symbol = '[';
+                end_symbol = ']';
+            }
+            else if (action_waiting_for_motion->surrounding_kind == SurroundingKind::Braces) {
+                begin_symbol = '{';
+                end_symbol = '}';  
+            }
+            else if (action_waiting_for_motion->surrounding_kind == SurroundingKind::DoubleQuotes) {
+                begin_symbol = '"';
+                end_symbol = '"';
+            }
+            else if (action_waiting_for_motion->surrounding_kind == SurroundingKind::SingleQuotes) {
+                begin_symbol = '\'';
+                end_symbol = '\'';
+            }
+            else if (action_waiting_for_motion->surrounding_kind == SurroundingKind::Backticks) {
+                begin_symbol = '`';
+                end_symbol = '`';
+            }
+            else {
+                return false; // Unsupported surrounding kind
+            }
+
+            int cursor_pos = textCursor().position();
+            QString current_text = toPlainText();
+            int start = cursor_pos;
+            int end = cursor_pos;
+            bool found_begin = false;
+            bool found_end = false;
+            // Find the beginning of the surrounding
+            while (start > 0) {
+                if (current_text[start - 1] == begin_symbol) {
+                    found_begin = true;
+                    start--;
+                    break;
+                }
+                start--;
+            }
+            // Find the end of the surrounding
+            while (end < current_text.length()) {
+                if (current_text[end] == end_symbol) {
+                    found_end = true;
+                    end++;
+                    break;
+                }
+                end++;
+            }
+
+            if (action_waiting_for_motion->surrounding_scope == SurroundingScope::Inside) {
+                // exclude the surrounding symbols
+                if (found_begin && found_end) {
+                    start++;
+                    end--;
+                }
+            }
+
+            // If we found both begin and end symbols, perform the action
+            if (found_begin && found_end) {
+                if (action_waiting_for_motion->kind == ActionWaitingForMotionKind::Delete ||
+                    action_waiting_for_motion->kind == ActionWaitingForMotionKind::Change) {
+                    // Store deleted text for paste operation
+                    last_deleted_text = current_text.mid(start, end - start);
+                    // Delete the surrounding symbols
+                    QString new_text = current_text.remove(start, end - start);
+                    setText(new_text);
+                    set_cursor_position(start);
+                    if (action_waiting_for_motion->kind == ActionWaitingForMotionKind::Change) {
+                        current_mode = VimMode::Insert;
+                        set_style_for_mode(current_mode);
+                    }
+                }
+            }
+            action_waiting_for_motion = {};
+            return true;
         }
     }
     return false;
