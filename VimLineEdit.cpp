@@ -558,12 +558,14 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
                 action_waiting_for_motion.value().kind == ActionWaitingForMotionKind::Change) {
                 // delete from old_pos to new_pos
                 if (old_pos < new_pos) {
+                    last_deleted_text = current_state.text.mid(old_pos, new_pos + delete_pos_offset - old_pos);
                     QString new_text =
                         current_state.text.remove(old_pos, new_pos + delete_pos_offset - old_pos);
                     setText(new_text);
                     set_cursor_position(old_pos);
                 }
                 else if (old_pos > new_pos) {
+                    last_deleted_text = current_state.text.mid(new_pos, old_pos - new_pos);
                     QString new_text = current_state.text.remove(new_pos, old_pos - new_pos);
                     setText(new_text);
                     set_cursor_position(new_pos);
@@ -578,10 +580,7 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
             action_waiting_for_motion = {};
         }
         else if (current_mode == VimMode::Visual) {
-            set_cursor_position(new_pos);
-            int selection_start = std::min(visual_mode_anchor, new_pos);
-            int selection_end = std::max(visual_mode_anchor, new_pos);
-            // setSelection(selection_start, selection_end - selection_start);
+            set_cursor_position_with_selection(new_pos);
         }
         else {
             set_cursor_position(new_pos);
@@ -962,6 +961,13 @@ bool VimLineEdit::handle_surrounding_motion_action() {
 void VimLineEdit::set_cursor_position(int pos) {
     QTextCursor cursor = textCursor();
     cursor.setPosition(pos);
+    setTextCursor(cursor);
+}
+
+void VimLineEdit::set_cursor_position_with_selection(int pos) {
+    QTextCursor cursor = textCursor();
+    cursor.setPosition(visual_mode_anchor, QTextCursor::MoveAnchor);
+    cursor.setPosition(pos, QTextCursor::KeepAnchor);
     setTextCursor(cursor);
 }
 
