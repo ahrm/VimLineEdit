@@ -1,6 +1,7 @@
 #include "VimLineEdit.h"
 #include <QPainter>
 #include <QtCore/qnamespace.h>
+#include <QtGui/qtextcursor.h>
 #include <QtWidgets/qlineedit.h>
 // #include <QFontMetrics>
 #include <QCommonStyle>
@@ -657,6 +658,29 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
     // Add more cases for other commands as needed
     default:
         break;
+    }
+
+    // we we have a text selected in visual mode and then perform change or delete
+    // we should use the selected text as the target of the change/delete
+    if (action_waiting_for_motion.has_value() && (current_mode == VimMode::Visual || current_mode == VimMode::VisualLine)){
+        QTextCursor cursor = textCursor();
+        if (current_mode == VimMode::Visual){
+            last_deleted_text = cursor.selectedText();
+            cursor.removeSelectedText();
+        }
+
+        if (action_waiting_for_motion->kind == ActionWaitingForMotionKind::Change){
+            current_mode = VimMode::Insert;
+            set_style_for_mode(current_mode);
+        }
+
+        if (action_waiting_for_motion->kind == ActionWaitingForMotionKind::Delete){
+            current_mode = VimMode::Normal;
+            set_style_for_mode(current_mode);
+        }
+
+        action_waiting_for_motion = {};
+
     }
 
     if (current_mode == VimMode::Normal && new_pos == current_state.text.size()) {
