@@ -248,7 +248,7 @@ void VimLineEdit::add_vim_keybindings() {
         KeyBinding{{KeyChord{"c", {}}}, VimLineEditCommand::Change},
         KeyBinding{{KeyChord{"p", {}}}, VimLineEditCommand::PasteForward},
         KeyBinding{{KeyChord{"u", {}}}, VimLineEditCommand::Undo},
-        KeyBinding{{KeyChord{"r", CONTROL}}, VimLineEditCommand::Redo},
+        KeyBinding{{KeyChord{Qt::Key_R, CONTROL}}, VimLineEditCommand::Redo},
         KeyBinding{{KeyChord{"o", {}}}, VimLineEditCommand::InsertLineBelow},
         KeyBinding{{KeyChord{"O", {}}}, VimLineEditCommand::InsertLineAbove},
         KeyBinding{{KeyChord{"g", {}}, KeyChord{"k", {}}}, VimLineEditCommand::MoveUpOnScreen},
