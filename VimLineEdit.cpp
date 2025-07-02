@@ -255,6 +255,7 @@ void VimLineEdit::add_vim_keybindings() {
         KeyBinding{{KeyChord{Qt::Key_S, {}}}, VimLineEditCommand::DeleteCharAndEnterInsertMode},
         KeyBinding{{KeyChord{Qt::Key_Colon, SHIFT}}, VimLineEditCommand::CommandCommand},
         KeyBinding{{KeyChord{Qt::Key_Slash, {}}}, VimLineEditCommand::SearchCommand},
+        KeyBinding{{KeyChord{Qt::Key_Question, SHIFT}}, VimLineEditCommand::ReverseSearchCommand},
     };
 
     for (const auto &binding : key_bindings) {
@@ -402,6 +403,8 @@ std::string to_string(VimLineEditCommand cmd) {
         return "CommandCommand";
     case VimLineEditCommand::SearchCommand:
         return "SearchCommand";
+    case VimLineEditCommand::ReverseSearchCommand:
+        return "ReverseSearchCommand";
     default:
         return "Unknown";
     }
@@ -700,6 +703,7 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
         break;
     }
     case VimLineEditCommand::SearchCommand:
+    case VimLineEditCommand::ReverseSearchCommand:
     case VimLineEditCommand::CommandCommand: {
         pending_text_command = cmd;
         show_command_line_edit();
@@ -1408,9 +1412,10 @@ void VimLineEdit::perform_pending_text_command_with_text(QString text){
         case VimLineEditCommand::CommandCommand: {
             qDebug() << "performing command: " << text;
         }
+        case VimLineEditCommand::ReverseSearchCommand:
         case VimLineEditCommand::SearchCommand: {
             SearchState search_state;
-            search_state.direction = FindDirection::Forward;
+            search_state.direction = (pending_text_command.value() == VimLineEditCommand::ReverseSearchCommand) ? FindDirection::Backward : FindDirection::Forward;
             search_state.query = text;
             last_search_state = search_state;
             handle_search();
@@ -1457,8 +1462,8 @@ void VimLineEdit::handle_search(bool reverse){
         return;
     }
 
-    QString document_text = toPlainText();
-    QString text = last_search_state->query.value();
+    QString document_text = toPlainText().toLower();
+    QString text = last_search_state->query.value().toLower();
 
     int from = 0;
     std::vector<int> found_indices;
@@ -1477,8 +1482,11 @@ void VimLineEdit::handle_search(bool reverse){
     
     int current_pos = textCursor().position();
     int target_index = -1;
+    bool is_reversed = last_search_state->direction == FindDirection::Forward 
+                       ? reverse
+                       : !reverse;
     
-    if (reverse) {
+    if (is_reversed) {
         // Search backward: find the last occurrence before current position
         for (int i = found_indices.size() - 1; i >= 0; i--) {
             if (found_indices[i] < current_pos) {

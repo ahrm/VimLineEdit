@@ -62,6 +62,7 @@ enum class VimLineEditCommand{
     ChangeCurrentLine,
     CommandCommand,
     SearchCommand,
+    ReverseSearchCommand,
 };
 
 enum class ActionWaitingForMotionKind{
@@ -185,7 +186,7 @@ class VimLineEdit : public QTextEdit
     Q_OBJECT
 
 private:
-    VimMode current_mode;
+    VimMode current_mode = VimMode::Insert;
     int visual_mode_anchor = -1;
     InputTreeNode normal_mode_input_tree;
     InputTreeNode visual_mode_input_tree;
