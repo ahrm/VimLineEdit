@@ -55,6 +55,8 @@ enum class VimLineEditCommand{
     MoveToBeginningOfLine,
     MoveToEndOfLine,
     DeleteCharAndEnterInsertMode,
+    DeleteCurrentLine,
+    ChangeCurrentLine,
 };
 
 enum class ActionWaitingForMotionKind{

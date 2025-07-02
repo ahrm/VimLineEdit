@@ -71,6 +71,20 @@ void VimLineEdit::keyPressEvent(QKeyEvent *event) {
                     action_waiting_for_motion->surrounding_scope = SurroundingScope::Around;
                     return;
                 }
+                else{
+                    // pressing dd should delete the current line
+                    if (action_waiting_for_motion->kind == ActionWaitingForMotionKind::Delete && event->key() == Qt::Key_D){
+                        action_waiting_for_motion = {};
+                        handle_command(VimLineEditCommand::DeleteCurrentLine);
+                        return;
+                    }
+                    // pressing cc should change the current line
+                    if (action_waiting_for_motion->kind == ActionWaitingForMotionKind::Change && event->key() == Qt::Key_C){
+                        action_waiting_for_motion = {};
+                        handle_command(VimLineEditCommand::ChangeCurrentLine);
+                        return;
+                    }
+                }
             }
             else {
                 switch (event->key()) {
@@ -354,6 +368,10 @@ std::string to_string(VimLineEditCommand cmd) {
         return "MoveToEndOfLine";
     case VimLineEditCommand::DeleteCharAndEnterInsertMode:
         return "DeleteCharAndEnterInsertMode";
+    case VimLineEditCommand::DeleteCurrentLine:
+        return "DeleteCurrentLine";
+    case VimLineEditCommand::ChangeCurrentLine:
+        return "ChangeCurrentLine";
     default:
         return "Unknown";
     }
@@ -587,6 +605,24 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
         if (last_find_state.has_value()) {
             new_pos = calculate_find(last_find_state.value(), true);
         }
+        break;
+    }
+    case VimLineEditCommand::ChangeCurrentLine:
+    case VimLineEditCommand::DeleteCurrentLine: {
+        int cursor_pos = textCursor().position();
+        int line_start = get_line_start_position(cursor_pos);
+        int line_end = get_line_end_position(cursor_pos);
+        push_history(current_state.text, current_state.cursor_position);
+        last_deleted_text = current_state.text.mid(line_start, line_end - line_start);
+        QString new_text = current_state.text.remove(line_start, line_end - line_start);
+        setText(new_text);
+        set_cursor_position(line_start);
+
+        if (cmd == VimLineEditCommand::ChangeCurrentLine){
+            current_mode = VimMode::Insert;
+            set_style_for_mode(current_mode);
+        }
+
         break;
     }
     case VimLineEditCommand::PasteForward: {
