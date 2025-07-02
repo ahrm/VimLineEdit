@@ -1499,8 +1499,13 @@ void VimLineEdit::handle_search(bool reverse){
             target_index = found_indices[0];
         }
     }
+
     
     if (target_index != -1) {
         set_cursor_position(target_index);
+    }
+
+    if (action_waiting_for_motion.has_value()){
+        handle_action_waiting_for_motion(current_pos, target_index, 0);
     }
 }
