@@ -51,6 +51,8 @@ VimLineEdit::VimLineEdit(QWidget *parent) : QTextEdit(parent) {
     QObject::connect(command_line_edit, &EscapeLineEdit::escapePressed, [&](){
         hide_command_line_edit();
     });
+
+    set_style_for_mode(current_mode);
 }
 
 void VimLineEdit::keyPressEvent(QKeyEvent *event) {

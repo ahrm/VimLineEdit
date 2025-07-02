@@ -23,3 +23,11 @@ add_executable(vim_lineedit
 )
 
 target_link_libraries(vim_lineedit Qt6::Widgets)
+
+# build the subproject in ./tests/CMakeLists.txt
+add_subdirectory(tests)
+
+# Enable testing
+enable_testing()
+
+add_test(NAME vim_lineedit_tests COMMAND vim_lineedit_tests)

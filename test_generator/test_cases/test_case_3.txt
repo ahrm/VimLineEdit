@@ -1,0 +1,3 @@
+i will add a line below this line using o
+hi there
+and this is the line added using o, i will add a line above this one usnig capital O

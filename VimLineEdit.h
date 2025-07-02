@@ -186,7 +186,7 @@ class VimLineEdit : public QTextEdit
     Q_OBJECT
 
 private:
-    VimMode current_mode = VimMode::Insert;
+    VimMode current_mode = VimMode::Normal;
     int visual_mode_anchor = -1;
     InputTreeNode normal_mode_input_tree;
     InputTreeNode visual_mode_input_tree;
