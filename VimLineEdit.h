@@ -44,6 +44,8 @@ enum class VimLineEditCommand{
     RepeatFindReverse,
     Delete,
     Change,
+    DeleteToEndOfLine,
+    ChangeToEndOfLine,
     PasteForward,
     Undo,
     Redo,

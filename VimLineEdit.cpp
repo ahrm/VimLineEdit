@@ -202,6 +202,8 @@ void VimLineEdit::add_vim_keybindings() {
         KeyBinding{{KeyChord{Qt::Key_T, {}}}, VimLineEditCommand::FindForwardTo},
         KeyBinding{{KeyChord{Qt::Key_T, SHIFT}}, VimLineEditCommand::FindBackwardTo},
         KeyBinding{{KeyChord{Qt::Key_X, {}}}, VimLineEditCommand::DeleteChar},
+        KeyBinding{{KeyChord{Qt::Key_D, SHIFT}}, VimLineEditCommand::DeleteToEndOfLine},
+        KeyBinding{{KeyChord{Qt::Key_C, SHIFT}}, VimLineEditCommand::ChangeToEndOfLine},
         KeyBinding{{KeyChord{Qt::Key_D, {}}}, VimLineEditCommand::Delete},
         KeyBinding{{KeyChord{Qt::Key_C, {}}}, VimLineEditCommand::Change},
         KeyBinding{{KeyChord{Qt::Key_P, {}}}, VimLineEditCommand::PasteForward},
@@ -313,6 +315,10 @@ std::string to_string(VimLineEditCommand cmd) {
     case VimLineEditCommand::Delete:
         return "Delete";
     case VimLineEditCommand::Change:
+        return "Change";
+    case VimLineEditCommand::DeleteToEndOfLine:
+        return "Delete";
+    case VimLineEditCommand::ChangeToEndOfLine:
         return "Change";
     case VimLineEditCommand::FindForward:
         return "FindForward";
@@ -508,6 +514,25 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
         action_waiting_for_motion = {ActionWaitingForMotionKind::Change, SurroundingScope::None,
                                      SurroundingKind::None};
         break;
+    case VimLineEditCommand::DeleteToEndOfLine: 
+    case VimLineEditCommand::ChangeToEndOfLine:
+    {
+        push_history(current_state.text, current_state.cursor_position);
+        int cursor_pos = textCursor().position();
+        int line_end = get_line_end_position(cursor_pos);
+        
+        if (cursor_pos < line_end) {
+            last_deleted_text = current_state.text.mid(cursor_pos, line_end - cursor_pos);
+            QString new_text = current_state.text.remove(cursor_pos, line_end - cursor_pos);
+            setText(new_text);
+            set_cursor_position(cursor_pos);
+        }
+        if (cmd == VimLineEditCommand::ChangeToEndOfLine){
+            current_mode = VimMode::Insert;
+            set_style_for_mode(current_mode);
+        }
+        break;
+    }
     case VimLineEditCommand::FindForward: {
         last_find_state = FindState{FindDirection::Forward, symbol};
         new_pos = calculate_find(last_find_state.value());
