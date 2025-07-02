@@ -548,7 +548,7 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
             last_deleted_text = current_state.text.mid(cursor_pos, line_end - cursor_pos);
             QString new_text = current_state.text.remove(cursor_pos, line_end - cursor_pos);
             setText(new_text);
-            set_cursor_position(cursor_pos);
+            set_cursor_position(cursor_pos-1);
         }
         if (cmd == VimLineEditCommand::ChangeToEndOfLine){
             current_mode = VimMode::Insert;
