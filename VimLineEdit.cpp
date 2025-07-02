@@ -214,7 +214,9 @@ void VimLineEdit::add_vim_keybindings() {
         KeyBinding{{KeyChord{Qt::Key_G, {}}, KeyChord{Qt::Key_K, {}}}, VimLineEditCommand::MoveUpOnScreen},
         KeyBinding{{KeyChord{Qt::Key_G, {}}, KeyChord{Qt::Key_J, {}}}, VimLineEditCommand::MoveDownOnScreen},
         KeyBinding{{KeyChord{Qt::Key_0, {}}}, VimLineEditCommand::MoveToBeginningOfLine},
+        KeyBinding{{KeyChord{Qt::Key_Underscore, SHIFT}}, VimLineEditCommand::MoveToBeginningOfLine},
         KeyBinding{{KeyChord{Qt::Key_Dollar, SHIFT}}, VimLineEditCommand::MoveToEndOfLine},
+        KeyBinding{{KeyChord{Qt::Key_S, {}}}, VimLineEditCommand::DeleteCharAndEnterInsertMode},
     };
 
     for (const auto &binding : key_bindings) {
@@ -348,6 +350,8 @@ std::string to_string(VimLineEditCommand cmd) {
         return "MoveToBeginningOfLine";
     case VimLineEditCommand::MoveToEndOfLine:
         return "MoveToEndOfLine";
+    case VimLineEditCommand::DeleteCharAndEnterInsertMode:
+        return "DeleteCharAndEnterInsertMode";
     default:
         return "Unknown";
     }
@@ -513,9 +517,14 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
     case VimLineEditCommand::MoveWordBackwardWithSymbols:
         new_pos = calculate_move_word_backward(true);
         break;
+    case VimLineEditCommand::DeleteCharAndEnterInsertMode:
     case VimLineEditCommand::DeleteChar:
         push_history(current_state.text, current_state.cursor_position);
         delete_char();
+        if (cmd == VimLineEditCommand::DeleteCharAndEnterInsertMode) {
+            current_mode = VimMode::Insert;
+            set_style_for_mode(current_mode);
+        }
         break;
     case VimLineEditCommand::Delete:
         push_history(current_state.text, current_state.cursor_position);
