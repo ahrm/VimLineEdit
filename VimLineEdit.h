@@ -3,6 +3,7 @@
 
 #include <QLineEdit>
 #include <QKeyEvent>
+#include <QtGui/qevent.h>
 #include <vector>
 #include <string>
 #include <deque>
@@ -57,6 +58,8 @@ enum class VimLineEditCommand{
     DeleteCharAndEnterInsertMode,
     DeleteCurrentLine,
     ChangeCurrentLine,
+    CommandCommand,
+    SearchCommand,
 };
 
 enum class ActionWaitingForMotionKind{
@@ -165,10 +168,13 @@ private:
     int visual_mode_anchor = -1;
     InputTreeNode normal_mode_input_tree;
     InputTreeNode visual_mode_input_tree;
+    QLineEdit* command_line_edit;
 
     InputTreeNode* current_node = nullptr;
 
     std::optional<VimLineEditCommand> pending_symbol_command = {};
+    std::optional<VimLineEditCommand> pending_text_command = {};
+
     std::optional<ActionWaitingForMotion> action_waiting_for_motion = {};
     QString last_deleted_text = "";
 
@@ -188,6 +194,8 @@ public:
     std::optional<VimLineEditCommand> handle_key_event(int key, Qt::KeyboardModifiers modifiers);
     void handle_command(VimLineEditCommand cmd, std::optional<char> symbol = {});
     int calculate_find(FindState find_state, bool reverse=false) const;
+
+    void resizeEvent(QResizeEvent* event) override;
 
 private:
     int calculate_move_word_forward(bool with_symbols) const;
@@ -214,6 +222,9 @@ private:
 
     int get_line_start_position(int cursor_pos);
     int get_line_end_position(int cursor_pos);
+    void show_command_line_edit();
+    void hide_command_line_edit();
+    void perform_pending_text_command_with_text(QString text);
 };
 
 #endif // VIMLINEEDIT_H

@@ -9,6 +9,7 @@
 #include <QStyle>
 #include <QTextBlock>
 #include <QTextLayout>
+#include <QtWidgets/qtextedit.h>
 #include <utility>
 #include <vector>
 
@@ -33,6 +34,17 @@ VimLineEdit::VimLineEdit(QWidget *parent) : QTextEdit(parent) {
     font.setStyleHint(QFont::TypeWriter);
     this->setFont(font);
     add_vim_keybindings();
+
+    command_line_edit = new QLineEdit(this);
+    command_line_edit->setFont(font);
+    command_line_edit->hide();
+
+    QObject::connect(command_line_edit, &QLineEdit::returnPressed, [&](){
+        QString text = command_line_edit->text();
+        perform_pending_text_command_with_text(text);
+        hide_command_line_edit();
+
+    });
 }
 
 void VimLineEdit::keyPressEvent(QKeyEvent *event) {
@@ -233,6 +245,8 @@ void VimLineEdit::add_vim_keybindings() {
         KeyBinding{{KeyChord{Qt::Key_AsciiCircum, SHIFT}}, VimLineEditCommand::MoveToBeginningOfLine},
         KeyBinding{{KeyChord{Qt::Key_Dollar, SHIFT}}, VimLineEditCommand::MoveToEndOfLine},
         KeyBinding{{KeyChord{Qt::Key_S, {}}}, VimLineEditCommand::DeleteCharAndEnterInsertMode},
+        KeyBinding{{KeyChord{Qt::Key_Colon, SHIFT}}, VimLineEditCommand::CommandCommand},
+        KeyBinding{{KeyChord{Qt::Key_Slash, {}}}, VimLineEditCommand::SearchCommand},
     };
 
     for (const auto &binding : key_bindings) {
@@ -372,6 +386,10 @@ std::string to_string(VimLineEditCommand cmd) {
         return "DeleteCurrentLine";
     case VimLineEditCommand::ChangeCurrentLine:
         return "ChangeCurrentLine";
+    case VimLineEditCommand::CommandCommand:
+        return "CommandCommand";
+    case VimLineEditCommand::SearchCommand:
+        return "SearchCommand";
     default:
         return "Unknown";
     }
@@ -659,6 +677,12 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
         new_pos = line_start;
         current_mode = VimMode::Insert;
         set_style_for_mode(current_mode);
+        break;
+    }
+    case VimLineEditCommand::SearchCommand:
+    case VimLineEditCommand::CommandCommand: {
+        pending_text_command = cmd;
+        show_command_line_edit();
         break;
     }
     case VimLineEditCommand::ToggleVisualCursor: {
@@ -1360,4 +1384,38 @@ InputTreeNode InputTreeNode::clone() const {
         new_node.children.push_back(child.clone());
     }
     return new_node;
+}
+
+void VimLineEdit::resizeEvent(QResizeEvent *event) {
+    // move the command line edit to the bottom
+    command_line_edit->resize(event->size().width(), command_line_edit->height());
+    command_line_edit->move(0, height() - command_line_edit->height());
+    QTextEdit::resizeEvent(event);
+}
+
+void VimLineEdit::show_command_line_edit(){
+    command_line_edit->setText("");
+    command_line_edit->show();
+    command_line_edit->setFocus();
+}
+
+void VimLineEdit::hide_command_line_edit(){
+    command_line_edit->setText("");
+    command_line_edit->hide();
+    setFocus();
+}
+
+void VimLineEdit::perform_pending_text_command_with_text(QString text){
+    if (pending_text_command.has_value()){
+        switch (pending_text_command.value()) {
+        case VimLineEditCommand::CommandCommand: {
+            qDebug() << "performing command: " << text;
+        }
+        case VimLineEditCommand::SearchCommand: {
+            qDebug() << "performing search: " << text;
+        }
+        default:
+        }
+    }
+
 }
