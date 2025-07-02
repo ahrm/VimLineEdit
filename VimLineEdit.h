@@ -166,6 +166,20 @@ struct History{
 
 };
 
+// same as QLineEdit but fires a signal when the escape key is pressed
+class EscapeLineEdit : public QLineEdit
+{
+    Q_OBJECT
+    public:
+        EscapeLineEdit(QWidget *parent = nullptr);
+
+protected:
+    void keyPressEvent(QKeyEvent *event) override;
+
+signals:
+    void escapePressed();
+};
+
 class VimLineEdit : public QTextEdit
 {
     Q_OBJECT
@@ -175,7 +189,7 @@ private:
     int visual_mode_anchor = -1;
     InputTreeNode normal_mode_input_tree;
     InputTreeNode visual_mode_input_tree;
-    QLineEdit* command_line_edit;
+    EscapeLineEdit* command_line_edit;
 
     InputTreeNode* current_node = nullptr;
 

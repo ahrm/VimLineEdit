@@ -35,17 +35,21 @@ VimLineEdit::VimLineEdit(QWidget *parent) : QTextEdit(parent) {
     this->setFont(font);
     add_vim_keybindings();
 
-    command_line_edit = new QLineEdit(this);
+    command_line_edit = new EscapeLineEdit(this);
     command_line_edit->setFont(font);
     command_line_edit->hide();
 
     command_line_edit->setStyleSheet("background-color: lightgray;");
 
-    QObject::connect(command_line_edit, &QLineEdit::returnPressed, [&](){
+    QObject::connect(command_line_edit, &EscapeLineEdit::returnPressed, [&](){
         QString text = command_line_edit->text();
         perform_pending_text_command_with_text(text);
         hide_command_line_edit();
 
+    });
+
+    QObject::connect(command_line_edit, &EscapeLineEdit::escapePressed, [&](){
+        hide_command_line_edit();
     });
 }
 
@@ -1508,4 +1512,15 @@ void VimLineEdit::handle_search(bool reverse){
     if (action_waiting_for_motion.has_value()){
         handle_action_waiting_for_motion(current_pos, target_index, 0);
     }
+}
+
+EscapeLineEdit::EscapeLineEdit(QWidget *parent) : QLineEdit(parent) {
+
+}
+
+void EscapeLineEdit::keyPressEvent(QKeyEvent *event) {
+    if (event->key() == Qt::Key_Escape) {
+        emit escapePressed();
+    }
+    QLineEdit::keyPressEvent(event);
 }
