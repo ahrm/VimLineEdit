@@ -215,6 +215,7 @@ void VimLineEdit::add_vim_keybindings() {
         KeyBinding{{KeyChord{Qt::Key_G, {}}, KeyChord{Qt::Key_J, {}}}, VimLineEditCommand::MoveDownOnScreen},
         KeyBinding{{KeyChord{Qt::Key_0, {}}}, VimLineEditCommand::MoveToBeginningOfLine},
         KeyBinding{{KeyChord{Qt::Key_Underscore, SHIFT}}, VimLineEditCommand::MoveToBeginningOfLine},
+        KeyBinding{{KeyChord{Qt::Key_AsciiCircum, SHIFT}}, VimLineEditCommand::MoveToBeginningOfLine},
         KeyBinding{{KeyChord{Qt::Key_Dollar, SHIFT}}, VimLineEditCommand::MoveToEndOfLine},
         KeyBinding{{KeyChord{Qt::Key_S, {}}}, VimLineEditCommand::DeleteCharAndEnterInsertMode},
     };
