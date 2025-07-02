@@ -128,6 +128,7 @@ int main(int argc, char *argv[]) {
 
         if (actualOutput == expectedOutput) {
             std::cout << "PASS: " << testName.toStdString() << std::endl;
+            std::cout << "  Value: '" << actualOutput.toStdString() << "'" << std::endl;
             passedTests++;
         } else {
             std::cout << "FAIL: " << testName.toStdString() << std::endl;

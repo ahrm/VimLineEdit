@@ -10,7 +10,9 @@
 #include <QTextBlock>
 #include <QTextLayout>
 #include <QtWidgets/qtextedit.h>
+#include <functional>
 #include <utility>
+#include <variant>
 #include <vector>
 
 class LineEditStyle : public QCommonStyle {
@@ -56,6 +58,7 @@ VimLineEdit::VimLineEdit(QWidget *parent) : QTextEdit(parent) {
 }
 
 void VimLineEdit::keyPressEvent(QKeyEvent *event) {
+
     if (event->key() == Qt::Key_Escape) {
         handle_command(VimLineEditCommand::EnterNormalMode, {});
         return;
@@ -139,7 +142,7 @@ void VimLineEdit::keyPressEvent(QKeyEvent *event) {
 
         if (!is_keypress_a_modifier) {
             std::optional<VimLineEditCommand> command =
-                handle_key_event(event_key, event->modifiers());
+                handle_key_event(event->text(), event_key, event->modifiers());
             if (command.has_value()) {
                 if (requires_symbol(command.value())) {
                     // If the command requires a symbol, we need to wait for the next key press
@@ -188,7 +191,7 @@ void InputTreeNode::add_keybinding(const std::vector<KeyChord> &key_chords, int 
     KeyChord current_chord = key_chords[index];
     for (auto &child : children) {
         if (child.key_chord.key == current_chord.key &&
-            child.key_chord.modifiers == current_chord.modifiers) {
+            equal_with_shift(child.key_chord.modifiers, current_chord.modifiers)) {
             child.add_keybinding(key_chords, index + 1, cmd);
             return;
         }
@@ -202,62 +205,62 @@ void InputTreeNode::add_keybinding(const std::vector<KeyChord> &key_chords, int 
 
 void VimLineEdit::add_vim_keybindings() {
     KeyboardModifierState CONTROL = KeyboardModifierState{false, true, false, false};
-    KeyboardModifierState SHIFT = KeyboardModifierState{true, false, false, false};
+    // KeyboardModifierState SHIFT = KeyboardModifierState{true, false, false, false};
     // KeyboardModifierState NOMOD = KeyboardModifierState{false, false, false, false};
 
     std::vector<KeyBinding> key_bindings = {
-        KeyBinding{{KeyChord{Qt::Key_G, {}}, KeyChord{Qt::Key_G, {}}},
+        KeyBinding{{KeyChord{"g", {}}, KeyChord{"g", {}}},
                    VimLineEditCommand::GotoBegin},
-        KeyBinding{{KeyChord{Qt::Key_G, SHIFT}}, VimLineEditCommand::GotoEnd},
+        KeyBinding{{KeyChord{"G", {}}}, VimLineEditCommand::GotoEnd},
         KeyBinding{{KeyChord{Qt::Key_Escape, {}}}, VimLineEditCommand::EnterNormalMode},
-        KeyBinding{{KeyChord{Qt::Key_I, {}}}, VimLineEditCommand::EnterInsertMode},
-        KeyBinding{{KeyChord{Qt::Key_A, {}}}, VimLineEditCommand::EnterInsertModeAfter},
-        KeyBinding{{KeyChord{Qt::Key_I, SHIFT}}, VimLineEditCommand::EnterInsertModeBeginLine},
-        KeyBinding{{KeyChord{Qt::Key_A, SHIFT}}, VimLineEditCommand::EnterInsertModeEndLine},
-        KeyBinding{{KeyChord{Qt::Key_V, {}}}, VimLineEditCommand::EnterVisualMode},
-        KeyBinding{{KeyChord{Qt::Key_V, SHIFT}}, VimLineEditCommand::EnterVisualLineMode},
-        KeyBinding{{KeyChord{Qt::Key_H, {}}}, VimLineEditCommand::MoveLeft},
-        KeyBinding{{KeyChord{Qt::Key_L, {}}}, VimLineEditCommand::MoveRight},
-        KeyBinding{{KeyChord{Qt::Key_J, {}}}, VimLineEditCommand::MoveDown},
-        KeyBinding{{KeyChord{Qt::Key_K, {}}}, VimLineEditCommand::MoveUp},
+        KeyBinding{{KeyChord{"i", {}}}, VimLineEditCommand::EnterInsertMode},
+        KeyBinding{{KeyChord{"a", {}}}, VimLineEditCommand::EnterInsertModeAfter},
+        KeyBinding{{KeyChord{"I", {}}}, VimLineEditCommand::EnterInsertModeBeginLine},
+        KeyBinding{{KeyChord{"A", {}}}, VimLineEditCommand::EnterInsertModeEndLine},
+        KeyBinding{{KeyChord{"v", {}}}, VimLineEditCommand::EnterVisualMode},
+        KeyBinding{{KeyChord{"V", {}}}, VimLineEditCommand::EnterVisualLineMode},
+        KeyBinding{{KeyChord{"h", {}}}, VimLineEditCommand::MoveLeft},
+        KeyBinding{{KeyChord{"l", {}}}, VimLineEditCommand::MoveRight},
+        KeyBinding{{KeyChord{"j", {}}}, VimLineEditCommand::MoveDown},
+        KeyBinding{{KeyChord{"k", {}}}, VimLineEditCommand::MoveUp},
         KeyBinding{{KeyChord{Qt::Key_Left, {}}}, VimLineEditCommand::MoveLeft},
         KeyBinding{{KeyChord{Qt::Key_Right, {}}}, VimLineEditCommand::MoveRight},
         KeyBinding{{KeyChord{Qt::Key_Up, {}}}, VimLineEditCommand::MoveUp},
         KeyBinding{{KeyChord{Qt::Key_Down, {}}}, VimLineEditCommand::MoveDown},
-        KeyBinding{{KeyChord{Qt::Key_F, {}}}, VimLineEditCommand::FindForward},
-        KeyBinding{{KeyChord{Qt::Key_F, SHIFT}}, VimLineEditCommand::FindBackward},
-        KeyBinding{{KeyChord{Qt::Key_Semicolon, {}}}, VimLineEditCommand::RepeatFind},
-        KeyBinding{{KeyChord{Qt::Key_Comma, {}}}, VimLineEditCommand::RepeatFindReverse},
-        KeyBinding{{KeyChord{Qt::Key_N, {}}}, VimLineEditCommand::RepeatSearch},
-        KeyBinding{{KeyChord{Qt::Key_N, SHIFT}}, VimLineEditCommand::RepeatSearchReverse},
-        KeyBinding{{KeyChord{Qt::Key_W, {}}}, VimLineEditCommand::MoveWordForward},
-        KeyBinding{{KeyChord{Qt::Key_W, SHIFT}}, VimLineEditCommand::MoveWordForwardWithSymbols},
-        KeyBinding{{KeyChord{Qt::Key_E, {}}}, VimLineEditCommand::MoveToEndOfWord},
-        KeyBinding{{KeyChord{Qt::Key_E, SHIFT}}, VimLineEditCommand::MoveToEndOfWordWithSymbols},
-        KeyBinding{{KeyChord{Qt::Key_B, {}}}, VimLineEditCommand::MoveWordBackward},
-        KeyBinding{{KeyChord{Qt::Key_B, SHIFT}}, VimLineEditCommand::MoveWordBackwardWithSymbols},
-        KeyBinding{{KeyChord{Qt::Key_T, {}}}, VimLineEditCommand::FindForwardTo},
-        KeyBinding{{KeyChord{Qt::Key_T, SHIFT}}, VimLineEditCommand::FindBackwardTo},
-        KeyBinding{{KeyChord{Qt::Key_X, {}}}, VimLineEditCommand::DeleteChar},
-        KeyBinding{{KeyChord{Qt::Key_D, SHIFT}}, VimLineEditCommand::DeleteToEndOfLine},
-        KeyBinding{{KeyChord{Qt::Key_C, SHIFT}}, VimLineEditCommand::ChangeToEndOfLine},
-        KeyBinding{{KeyChord{Qt::Key_D, {}}}, VimLineEditCommand::Delete},
-        KeyBinding{{KeyChord{Qt::Key_C, {}}}, VimLineEditCommand::Change},
-        KeyBinding{{KeyChord{Qt::Key_P, {}}}, VimLineEditCommand::PasteForward},
-        KeyBinding{{KeyChord{Qt::Key_U, {}}}, VimLineEditCommand::Undo},
-        KeyBinding{{KeyChord{Qt::Key_R, CONTROL}}, VimLineEditCommand::Redo},
-        KeyBinding{{KeyChord{Qt::Key_O, {}}}, VimLineEditCommand::InsertLineBelow},
-        KeyBinding{{KeyChord{Qt::Key_O, SHIFT}}, VimLineEditCommand::InsertLineAbove},
-        KeyBinding{{KeyChord{Qt::Key_G, {}}, KeyChord{Qt::Key_K, {}}}, VimLineEditCommand::MoveUpOnScreen},
-        KeyBinding{{KeyChord{Qt::Key_G, {}}, KeyChord{Qt::Key_J, {}}}, VimLineEditCommand::MoveDownOnScreen},
-        KeyBinding{{KeyChord{Qt::Key_0, {}}}, VimLineEditCommand::MoveToBeginningOfLine},
-        KeyBinding{{KeyChord{Qt::Key_Underscore, SHIFT}}, VimLineEditCommand::MoveToBeginningOfLine},
-        KeyBinding{{KeyChord{Qt::Key_AsciiCircum, SHIFT}}, VimLineEditCommand::MoveToBeginningOfLine},
-        KeyBinding{{KeyChord{Qt::Key_Dollar, SHIFT}}, VimLineEditCommand::MoveToEndOfLine},
-        KeyBinding{{KeyChord{Qt::Key_S, {}}}, VimLineEditCommand::DeleteCharAndEnterInsertMode},
-        KeyBinding{{KeyChord{Qt::Key_Colon, SHIFT}}, VimLineEditCommand::CommandCommand},
-        KeyBinding{{KeyChord{Qt::Key_Slash, {}}}, VimLineEditCommand::SearchCommand},
-        KeyBinding{{KeyChord{Qt::Key_Question, SHIFT}}, VimLineEditCommand::ReverseSearchCommand},
+        KeyBinding{{KeyChord{"f", {}}}, VimLineEditCommand::FindForward},
+        KeyBinding{{KeyChord{"F", {}}}, VimLineEditCommand::FindBackward},
+        KeyBinding{{KeyChord{";", {}}}, VimLineEditCommand::RepeatFind},
+        KeyBinding{{KeyChord{",", {}}}, VimLineEditCommand::RepeatFindReverse},
+        KeyBinding{{KeyChord{"n", {}}}, VimLineEditCommand::RepeatSearch},
+        KeyBinding{{KeyChord{"N", {}}}, VimLineEditCommand::RepeatSearchReverse},
+        KeyBinding{{KeyChord{"w", {}}}, VimLineEditCommand::MoveWordForward},
+        KeyBinding{{KeyChord{"W", {}}}, VimLineEditCommand::MoveWordForwardWithSymbols},
+        KeyBinding{{KeyChord{"e", {}}}, VimLineEditCommand::MoveToEndOfWord},
+        KeyBinding{{KeyChord{"E", {}}}, VimLineEditCommand::MoveToEndOfWordWithSymbols},
+        KeyBinding{{KeyChord{"b", {}}}, VimLineEditCommand::MoveWordBackward},
+        KeyBinding{{KeyChord{"B", {}}}, VimLineEditCommand::MoveWordBackwardWithSymbols},
+        KeyBinding{{KeyChord{"t", {}}}, VimLineEditCommand::FindForwardTo},
+        KeyBinding{{KeyChord{"T", {}}}, VimLineEditCommand::FindBackwardTo},
+        KeyBinding{{KeyChord{"x", {}}}, VimLineEditCommand::DeleteChar},
+        KeyBinding{{KeyChord{"D", {}}}, VimLineEditCommand::DeleteToEndOfLine},
+        KeyBinding{{KeyChord{"C", {}}}, VimLineEditCommand::ChangeToEndOfLine},
+        KeyBinding{{KeyChord{"d", {}}}, VimLineEditCommand::Delete},
+        KeyBinding{{KeyChord{"c", {}}}, VimLineEditCommand::Change},
+        KeyBinding{{KeyChord{"p", {}}}, VimLineEditCommand::PasteForward},
+        KeyBinding{{KeyChord{"u", {}}}, VimLineEditCommand::Undo},
+        KeyBinding{{KeyChord{"r", CONTROL}}, VimLineEditCommand::Redo},
+        KeyBinding{{KeyChord{"o", {}}}, VimLineEditCommand::InsertLineBelow},
+        KeyBinding{{KeyChord{"O", {}}}, VimLineEditCommand::InsertLineAbove},
+        KeyBinding{{KeyChord{"g", {}}, KeyChord{"k", {}}}, VimLineEditCommand::MoveUpOnScreen},
+        KeyBinding{{KeyChord{"g", {}}, KeyChord{"j", {}}}, VimLineEditCommand::MoveDownOnScreen},
+        KeyBinding{{KeyChord{"0", {}}}, VimLineEditCommand::MoveToBeginningOfLine},
+        KeyBinding{{KeyChord{"_", {}}}, VimLineEditCommand::MoveToBeginningOfLine},
+        KeyBinding{{KeyChord{"^", {}}}, VimLineEditCommand::MoveToBeginningOfLine},
+        KeyBinding{{KeyChord{"$", {}}}, VimLineEditCommand::MoveToEndOfLine},
+        KeyBinding{{KeyChord{"s", {}}}, VimLineEditCommand::DeleteCharAndEnterInsertMode},
+        KeyBinding{{KeyChord{":", {}}}, VimLineEditCommand::CommandCommand},
+        KeyBinding{{KeyChord{"/", {}}}, VimLineEditCommand::SearchCommand},
+        KeyBinding{{KeyChord{"?", {}}}, VimLineEditCommand::ReverseSearchCommand},
     };
 
     for (const auto &binding : key_bindings) {
@@ -266,7 +269,7 @@ void VimLineEdit::add_vim_keybindings() {
 
     visual_mode_input_tree = normal_mode_input_tree.clone();
     std::vector<KeyBinding> visual_mode_keybindings = {
-        KeyBinding{{KeyChord{Qt::Key_O, {}}}, VimLineEditCommand::ToggleVisualCursor},
+        KeyBinding{{KeyChord{"o", {}}}, VimLineEditCommand::ToggleVisualCursor},
     };
 
     for (const auto &binding : visual_mode_keybindings) {
@@ -275,7 +278,7 @@ void VimLineEdit::add_vim_keybindings() {
 
 }
 
-std::optional<VimLineEditCommand> VimLineEdit::handle_key_event(int key,
+std::optional<VimLineEditCommand> VimLineEdit::handle_key_event(QString event_text, int key,
                                                                 Qt::KeyboardModifiers modifiers) {
 
     InputTreeNode* current_mode_root = &normal_mode_input_tree;
@@ -285,7 +288,18 @@ std::optional<VimLineEditCommand> VimLineEdit::handle_key_event(int key,
     InputTreeNode *node = current_node ? current_node : current_mode_root;
     KeyboardModifierState modifier_state = KeyboardModifierState::from_qt_modifiers(modifiers);
     for (auto &child : node->children) {
-        if (child.key_chord.key == key && child.key_chord.modifiers == modifier_state) {
+        bool keys_are_equal = false;
+
+        std::function<bool(const KeyboardModifierState&, const KeyboardModifierState&)> comparator = equal_with_shift;
+
+        if (std::holds_alternative<QString>(child.key_chord.key)){
+            keys_are_equal = (std::get<QString>(child.key_chord.key) == event_text);
+            comparator = equal_withotu_shift;
+        }
+        else{
+            keys_are_equal = (std::get<int>(child.key_chord.key) == key);
+        }
+        if (keys_are_equal && comparator(child.key_chord.modifiers, modifier_state)) {
             if (child.command.has_value()) {
                 current_node = nullptr;
                 return child.command;
@@ -1008,8 +1022,13 @@ void VimLineEdit::redo() {
     set_cursor_position(state.cursor_position);
 }
 
-bool operator==(const KeyboardModifierState &lhs, const KeyboardModifierState &rhs) {
+bool equal_with_shift(const KeyboardModifierState &lhs, const KeyboardModifierState &rhs) {
     return lhs.shift == rhs.shift && lhs.control == rhs.control && lhs.command == rhs.command &&
+           lhs.alt == rhs.alt;
+}
+
+bool equal_withotu_shift(const KeyboardModifierState &lhs, const KeyboardModifierState &rhs) {
+    return lhs.control == rhs.control && lhs.command == rhs.command &&
            lhs.alt == rhs.alt;
 }
 

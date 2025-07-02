@@ -108,12 +108,13 @@ struct KeyboardModifierState{
 };
 
 struct KeyChord{
-    int key;
+    std::variant<int, QString> key = -1;
     KeyboardModifierState modifiers;
 };
 
 
-bool operator==(const KeyboardModifierState& lhs, const KeyboardModifierState& rhs);
+bool equal_with_shift(const KeyboardModifierState& lhs, const KeyboardModifierState& rhs);
+bool equal_withotu_shift(const KeyboardModifierState &lhs, const KeyboardModifierState &rhs);
 
 struct KeyBinding{
     std::vector<KeyChord> key_chords;
@@ -214,7 +215,7 @@ public:
     void keyPressEvent(QKeyEvent *event) override;
 
     void add_vim_keybindings();
-    std::optional<VimLineEditCommand> handle_key_event(int key, Qt::KeyboardModifiers modifiers);
+    std::optional<VimLineEditCommand> handle_key_event(QString event_text, int key, Qt::KeyboardModifiers modifiers);
     void handle_command(VimLineEditCommand cmd, std::optional<char> symbol = {});
     int calculate_find(FindState find_state, bool reverse=false) const;
 
