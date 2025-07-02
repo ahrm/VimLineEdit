@@ -405,6 +405,12 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
         new_pos = get_line_end_position(current_state.text.length());
         break;
     case VimLineEditCommand::EnterNormalMode: {
+        if (visual_line_selection_begin != -1){
+            setExtraSelections(QList<QTextEdit::ExtraSelection>());
+            visual_line_selection_begin = -1;
+            visual_line_selection_end = -1;
+        }
+
         push_history(current_state.text, current_state.cursor_position);
         current_mode = VimMode::Normal;
         set_style_for_mode(current_mode);
@@ -1039,7 +1045,20 @@ void VimLineEdit::set_cursor_position_with_line_selection(int pos) {
     
     cursor.setPosition(selection_start, QTextCursor::MoveAnchor);
     cursor.setPosition(selection_end, QTextCursor::KeepAnchor);
-    setTextCursor(cursor);
+    visual_line_selection_begin = selection_start;
+    visual_line_selection_end = selection_end;
+
+
+    QTextEdit::ExtraSelection selection;
+    selection.cursor = cursor;
+
+    QColor selection_foreground_color = palette().color(QPalette::Text);
+    QColor selection_background_color = palette().color(QPalette::Highlight);
+    selection.format.setBackground(selection_background_color);
+    selection.format.setForeground(selection_foreground_color);
+
+    setExtraSelections({selection});
+    set_cursor_position(pos);
 }
 
 int VimLineEdit::get_line_start_position(int cursor_pos) {

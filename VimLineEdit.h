@@ -167,6 +167,8 @@ private:
 
     std::optional<FindState> last_find_state = {};
     History history;
+    int visual_line_selection_begin = -1;
+    int visual_line_selection_end = -1;
 
     void set_style_for_mode(VimMode mode);
 
