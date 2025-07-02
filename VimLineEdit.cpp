@@ -8,6 +8,7 @@
 #include <QStyle>
 #include <QTextBlock>
 #include <QTextLayout>
+#include <utility>
 #include <vector>
 
 class LineEditStyle : public QCommonStyle {
@@ -576,12 +577,32 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
         break;
     }
     case VimLineEditCommand::ToggleVisualCursor: {
-        if (current_mode == VimMode::Visual || current_mode == VimMode::VisualLine) {
-            // Swap cursor position with visual mode anchor
+        if (current_mode == VimMode::Visual) {
             int current_cursor_pos = textCursor().position();
             int temp = visual_mode_anchor;
             visual_mode_anchor = current_cursor_pos;
             new_pos = temp;
+        }
+        if (current_mode == VimMode::VisualLine){
+            // swap between the first and last line of the selection, but keep the cursor position in the line (if possible)
+            int current_cursor_pos = textCursor().position();
+            int start_line = get_line_start_position(visual_line_selection_begin);
+            int end_line = get_line_start_position(visual_line_selection_end-1);
+            int current_line = get_line_start_position(current_cursor_pos);
+
+            if (current_line == start_line){
+                visual_mode_anchor = current_cursor_pos;
+                int offset = current_cursor_pos - start_line;
+                int target_offset = end_line + offset;
+                set_cursor_position(target_offset);
+            }
+            else{
+                visual_mode_anchor = current_cursor_pos;
+                int offset = current_cursor_pos - end_line;
+                int target_offset = start_line + offset;
+                set_cursor_position(target_offset);
+            }
+
         }
         break;
     }
