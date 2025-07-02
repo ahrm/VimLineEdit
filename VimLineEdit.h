@@ -43,6 +43,8 @@ enum class VimLineEditCommand{
     FindBackwardTo,
     RepeatFind,
     RepeatFindReverse,
+    RepeatSearch,
+    RepeatSearchReverse,
     Delete,
     Change,
     DeleteToEndOfLine,
@@ -148,6 +150,11 @@ struct FindState{
     std::optional<char> character;
 };
 
+struct SearchState{
+    FindDirection direction;
+    std::optional<QString> query;
+};
+
 struct HistoryState{
     QString text;
     int cursor_position;
@@ -179,6 +186,7 @@ private:
     QString last_deleted_text = "";
 
     std::optional<FindState> last_find_state = {};
+    std::optional<SearchState> last_search_state = {};
     History history;
     int visual_line_selection_begin = -1;
     int visual_line_selection_end = -1;
@@ -225,6 +233,8 @@ private:
     void show_command_line_edit();
     void hide_command_line_edit();
     void perform_pending_text_command_with_text(QString text);
+    void handle_action_waiting_for_motion(int old_pos, int new_pos, int delete_pos_offset);
+    void handle_search(bool reverse=false);
 };
 
 #endif // VIMLINEEDIT_H

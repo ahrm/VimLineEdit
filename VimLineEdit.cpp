@@ -39,6 +39,8 @@ VimLineEdit::VimLineEdit(QWidget *parent) : QTextEdit(parent) {
     command_line_edit->setFont(font);
     command_line_edit->hide();
 
+    command_line_edit->setStyleSheet("background-color: lightgray;");
+
     QObject::connect(command_line_edit, &QLineEdit::returnPressed, [&](){
         QString text = command_line_edit->text();
         perform_pending_text_command_with_text(text);
@@ -220,6 +222,8 @@ void VimLineEdit::add_vim_keybindings() {
         KeyBinding{{KeyChord{Qt::Key_F, SHIFT}}, VimLineEditCommand::FindBackward},
         KeyBinding{{KeyChord{Qt::Key_Semicolon, {}}}, VimLineEditCommand::RepeatFind},
         KeyBinding{{KeyChord{Qt::Key_Comma, {}}}, VimLineEditCommand::RepeatFindReverse},
+        KeyBinding{{KeyChord{Qt::Key_N, {}}}, VimLineEditCommand::RepeatSearch},
+        KeyBinding{{KeyChord{Qt::Key_N, SHIFT}}, VimLineEditCommand::RepeatSearchReverse},
         KeyBinding{{KeyChord{Qt::Key_W, {}}}, VimLineEditCommand::MoveWordForward},
         KeyBinding{{KeyChord{Qt::Key_W, SHIFT}}, VimLineEditCommand::MoveWordForwardWithSymbols},
         KeyBinding{{KeyChord{Qt::Key_E, {}}}, VimLineEditCommand::MoveToEndOfWord},
@@ -364,6 +368,10 @@ std::string to_string(VimLineEditCommand cmd) {
         return "RepeatFind";
     case VimLineEditCommand::RepeatFindReverse:
         return "RepeatFindReverse";
+    case VimLineEditCommand::RepeatSearch:
+        return "RepeatSearch";
+    case VimLineEditCommand::RepeatSearchReverse:
+        return "RepeatSearchReverse";
     case VimLineEditCommand::PasteForward:
         return "PasteForward";
     case VimLineEditCommand::Undo:
@@ -625,6 +633,14 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
         }
         break;
     }
+    case VimLineEditCommand::RepeatSearch: {
+        handle_search();
+        break;
+    }
+    case VimLineEditCommand::RepeatSearchReverse: {
+        handle_search(true);
+        break;
+    }
     case VimLineEditCommand::ChangeCurrentLine:
     case VimLineEditCommand::DeleteCurrentLine: {
         int cursor_pos = textCursor().position();
@@ -760,30 +776,7 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
 
     if (new_pos != -1) {
         if (action_waiting_for_motion.has_value()) {
-            if (action_waiting_for_motion.value().kind == ActionWaitingForMotionKind::Delete ||
-                action_waiting_for_motion.value().kind == ActionWaitingForMotionKind::Change) {
-                // delete from old_pos to new_pos
-                if (old_pos < new_pos) {
-                    last_deleted_text = current_state.text.mid(old_pos, new_pos + delete_pos_offset - old_pos);
-                    QString new_text =
-                        current_state.text.remove(old_pos, new_pos + delete_pos_offset - old_pos);
-                    setText(new_text);
-                    set_cursor_position(old_pos);
-                }
-                else if (old_pos > new_pos) {
-                    last_deleted_text = current_state.text.mid(new_pos, old_pos - new_pos);
-                    QString new_text = current_state.text.remove(new_pos, old_pos - new_pos);
-                    setText(new_text);
-                    set_cursor_position(new_pos);
-                }
-
-                if (action_waiting_for_motion.value().kind == ActionWaitingForMotionKind::Change) {
-                    current_mode = VimMode::Insert;
-                    set_style_for_mode(current_mode);
-                }
-            }
-
-            action_waiting_for_motion = {};
+            handle_action_waiting_for_motion(old_pos, new_pos, delete_pos_offset);
         }
         else if (current_mode == VimMode::Visual) {
             set_cursor_position_with_selection(new_pos + delete_pos_offset);
@@ -1412,10 +1405,102 @@ void VimLineEdit::perform_pending_text_command_with_text(QString text){
             qDebug() << "performing command: " << text;
         }
         case VimLineEditCommand::SearchCommand: {
-            qDebug() << "performing search: " << text;
+            SearchState search_state;
+            search_state.direction = FindDirection::Forward;
+            search_state.query = text;
+            last_search_state = search_state;
+            handle_search();
         }
         default:
         }
     }
 
+}
+
+void VimLineEdit::handle_action_waiting_for_motion(int old_pos, int new_pos, int delete_pos_offset){
+    if (action_waiting_for_motion.has_value()) {
+        QString current_text = toPlainText();
+        if (action_waiting_for_motion.value().kind == ActionWaitingForMotionKind::Delete ||
+            action_waiting_for_motion.value().kind == ActionWaitingForMotionKind::Change) {
+            // delete from old_pos to new_pos
+            if (old_pos < new_pos) {
+                last_deleted_text =
+                    current_text.mid(old_pos, new_pos + delete_pos_offset - old_pos);
+                QString new_text =
+                    current_text.remove(old_pos, new_pos + delete_pos_offset - old_pos);
+                setText(new_text);
+                set_cursor_position(old_pos);
+            }
+            else if (old_pos > new_pos) {
+                last_deleted_text = current_text.mid(new_pos, old_pos - new_pos);
+                QString new_text = current_text.remove(new_pos, old_pos - new_pos);
+                setText(new_text);
+                set_cursor_position(new_pos);
+            }
+
+            if (action_waiting_for_motion.value().kind == ActionWaitingForMotionKind::Change) {
+                current_mode = VimMode::Insert;
+                set_style_for_mode(current_mode);
+            }
+        }
+
+        action_waiting_for_motion = {};
+    }
+}
+
+void VimLineEdit::handle_search(bool reverse){
+    if (!last_search_state.has_value()) {
+        return;
+    }
+
+    QString document_text = toPlainText();
+    QString text = last_search_state->query.value();
+
+    int from = 0;
+    std::vector<int> found_indices;
+    while (from < document_text.length()) {
+        int index = document_text.indexOf(text, from);
+        if (index == -1) {
+            break; // No more occurrences found
+        }
+        found_indices.push_back(index);
+        from = index + text.length(); // Move past the found occurrence
+    }
+    
+    if (found_indices.empty()) {
+        return; // No matches found
+    }
+    
+    int current_pos = textCursor().position();
+    int target_index = -1;
+    
+    if (reverse) {
+        // Search backward: find the last occurrence before current position
+        for (int i = found_indices.size() - 1; i >= 0; i--) {
+            if (found_indices[i] < current_pos) {
+                target_index = found_indices[i];
+                break;
+            }
+        }
+        // If no occurrence before current position, wrap to the last occurrence
+        if (target_index == -1) {
+            target_index = found_indices.back();
+        }
+    } else {
+        // Search forward: find the first occurrence after current position
+        for (int index : found_indices) {
+            if (index > current_pos) {
+                target_index = index;
+                break;
+            }
+        }
+        // If no occurrence after current position, wrap to the first occurrence
+        if (target_index == -1) {
+            target_index = found_indices[0];
+        }
+    }
+    
+    if (target_index != -1) {
+        set_cursor_position(target_index);
+    }
 }
