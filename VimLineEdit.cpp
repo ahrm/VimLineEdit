@@ -664,9 +664,20 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
     // we should use the selected text as the target of the change/delete
     if (action_waiting_for_motion.has_value() && (current_mode == VimMode::Visual || current_mode == VimMode::VisualLine)){
         QTextCursor cursor = textCursor();
+
         if (current_mode == VimMode::Visual){
             last_deleted_text = cursor.selectedText();
             cursor.removeSelectedText();
+        }
+        if (current_mode == VimMode::VisualLine){
+            int start = visual_line_selection_begin;
+            int end = visual_line_selection_end;
+
+            last_deleted_text = current_state.text.mid(start, end - start);
+            QString new_text = current_state.text.remove(start, end - start);
+
+            setText(new_text);
+            set_cursor_position(start);
         }
 
         if (action_waiting_for_motion->kind == ActionWaitingForMotionKind::Change){
