@@ -52,6 +52,8 @@ enum class VimLineEditCommand{
     InsertLineBelow,
     InsertLineAbove,
     ToggleVisualCursor,
+    MoveToBeginningOfLine,
+    MoveToEndOfLine,
 };
 
 enum class ActionWaitingForMotionKind{

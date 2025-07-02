@@ -211,10 +211,10 @@ void VimLineEdit::add_vim_keybindings() {
         KeyBinding{{KeyChord{Qt::Key_R, CONTROL}}, VimLineEditCommand::Redo},
         KeyBinding{{KeyChord{Qt::Key_O, {}}}, VimLineEditCommand::InsertLineBelow},
         KeyBinding{{KeyChord{Qt::Key_O, SHIFT}}, VimLineEditCommand::InsertLineAbove},
-        KeyBinding{{KeyChord{Qt::Key_G, {}}, KeyChord{Qt::Key_K, {}}},
-                   VimLineEditCommand::MoveUpOnScreen},
-        KeyBinding{{KeyChord{Qt::Key_G, {}}, KeyChord{Qt::Key_J, {}}},
-                   VimLineEditCommand::MoveDownOnScreen},
+        KeyBinding{{KeyChord{Qt::Key_G, {}}, KeyChord{Qt::Key_K, {}}}, VimLineEditCommand::MoveUpOnScreen},
+        KeyBinding{{KeyChord{Qt::Key_G, {}}, KeyChord{Qt::Key_J, {}}}, VimLineEditCommand::MoveDownOnScreen},
+        KeyBinding{{KeyChord{Qt::Key_0, {}}}, VimLineEditCommand::MoveToBeginningOfLine},
+        KeyBinding{{KeyChord{Qt::Key_Dollar, SHIFT}}, VimLineEditCommand::MoveToEndOfLine},
     };
 
     for (const auto &binding : key_bindings) {
@@ -344,6 +344,10 @@ std::string to_string(VimLineEditCommand cmd) {
         return "InsertLineAbove";
     case VimLineEditCommand::ToggleVisualCursor:
         return "ToggleVisualCursor";
+    case VimLineEditCommand::MoveToBeginningOfLine:
+        return "MoveToBeginningOfLine";
+    case VimLineEditCommand::MoveToEndOfLine:
+        return "MoveToEndOfLine";
     default:
         return "Unknown";
     }
@@ -411,6 +415,15 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
     case VimLineEditCommand::GotoEnd:
         new_pos = get_line_end_position(current_state.text.length());
         break;
+    case VimLineEditCommand::MoveToBeginningOfLine:{
+        new_pos = get_line_start_position(textCursor().position());
+        break;
+    }
+    case VimLineEditCommand::MoveToEndOfLine:{
+        new_pos = get_line_end_position(textCursor().position()) - 1;
+        delete_pos_offset = 1;
+        break;
+    }
     case VimLineEditCommand::EnterNormalMode: {
         if (visual_line_selection_begin != -1){
             setExtraSelections(QList<QTextEdit::ExtraSelection>());
@@ -668,7 +681,7 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
             action_waiting_for_motion = {};
         }
         else if (current_mode == VimMode::Visual) {
-            set_cursor_position_with_selection(new_pos);
+            set_cursor_position_with_selection(new_pos + delete_pos_offset);
         }
         else if (current_mode == VimMode::VisualLine) {
             set_cursor_position_with_line_selection(new_pos);
