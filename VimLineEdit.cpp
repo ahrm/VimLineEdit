@@ -836,7 +836,7 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
             int start = visual_line_selection_begin;
             int end = visual_line_selection_end;
 
-            set_last_deleted_text(current_state.text.mid(start, end - start));
+            set_last_deleted_text(current_state.text.mid(start, end - start - 1), true);
             QString new_text = current_state.text.remove(start, end - start);
 
             setText(new_text);
