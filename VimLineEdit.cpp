@@ -568,12 +568,18 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
         }
         break;
     }
-    case VimLineEditCommand::EnterVisualMode:
+    case VimLineEditCommand::EnterVisualMode: {
         current_mode = VimMode::Visual;
         visual_mode_anchor = textCursor().position();
-        // setSelection(visual_mode_anchor, 1);
+        // select the current character
+        QTextCursor cursor = textCursor();
+        cursor.setPosition(visual_mode_anchor);
+        cursor.movePosition(QTextCursor::Right, QTextCursor::KeepAnchor, 1);
+        setTextCursor(cursor);
+
         set_style_for_mode(current_mode);
         break;
+    }
     case VimLineEditCommand::EnterVisualLineMode:
         current_mode = VimMode::VisualLine;
         visual_mode_anchor = textCursor().position();

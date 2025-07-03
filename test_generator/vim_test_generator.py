@@ -1,5 +1,6 @@
 import pathlib
 import os
+import sys
 
 # vim_output_file = pathlib.Path(__file__).parent / 'vim_output.txt'
 # vim_keystrokes_file = pathlib.Path(__file__).parent / 'vim_keystrokes.txt'
@@ -18,13 +19,26 @@ def get_current_test_case_index():
     return index + 1
 
 if __name__ == '__main__':
-    while True:
-        inp =  input("Enter to continue, 'q' to quit: ")
-        if inp.lower() == 'q':
-            break
-        current_test_case_index = get_current_test_case_index()
+    if len(sys.argv) >= 3 and sys.argv[1] == '-n':
+        index = int(sys.argv[2])
+        current_test_case_index = index
         vim_output_file = test_cases_folder / f'test_case_{current_test_case_index}.txt'
         vim_keystrokes_file = test_cases_folder / f'test_case_{current_test_case_index}.keystrokes.txt'
-        # launch vim with -W option to write the output to the file
+
+        if vim_output_file.exists():
+            vim_output_file.unlink()
+        if vim_keystrokes_file.exists():
+            vim_keystrokes_file.unlink()
+
         os.system(f'vim {vim_output_file} -W {vim_keystrokes_file}')
+    else:
+        while True:
+            inp =  input("Enter to continue, 'q' to quit: ")
+            if inp.lower() == 'q':
+                break
+            current_test_case_index = get_current_test_case_index()
+            vim_output_file = test_cases_folder / f'test_case_{current_test_case_index}.txt'
+            vim_keystrokes_file = test_cases_folder / f'test_case_{current_test_case_index}.keystrokes.txt'
+            # launch vim with -W option to write the output to the file
+            os.system(f'vim {vim_output_file} -W {vim_keystrokes_file}')
 
