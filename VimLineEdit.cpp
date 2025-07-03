@@ -822,12 +822,13 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
         QString current_text = current_state.text;
         int cursor_pos = textCursor().position();
         int previous_space_index = current_text.lastIndexOf(' ', cursor_pos - 1);
-        if (previous_space_index != -1) {
-            QString word_to_delete = current_text.mid(previous_space_index, cursor_pos - previous_space_index);
-            current_text.remove(previous_space_index, cursor_pos - previous_space_index);
-            setText(current_text);
-            new_pos = previous_space_index;
+        if (previous_space_index == -1){
+            previous_space_index = 0;
         }
+        QString word_to_delete = current_text.mid(previous_space_index, cursor_pos - previous_space_index);
+        current_text.remove(previous_space_index, cursor_pos - previous_space_index);
+        setText(current_text);
+        new_pos = previous_space_index;
 
         break;
     }
