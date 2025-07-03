@@ -9,13 +9,12 @@
 #include "../VimLineEdit.h" // Assuming VimLineEdit.h is in the parent directory
 
 // Function to simulate keystrokes on VimLineEdit
-void simulateKeystrokes(VimLineEdit *lineEdit, const QString &keystrokes) {
+void simulate_keystrokes(VimLineEdit *lineEdit, const QString &keystrokes) {
     int index = 0;
     int BACKSPACE_KEY = 0xfffd;
     while (index < keystrokes.length()) {
         QChar c = keystrokes.at(index);
-        // qDebug() << "Processing keystroke:" << c;
-        // Convert QChar to Qt::Key
+        // qDebug() << "Processing keystroke at index" << index << ":" << c;
         Qt::Key key = Qt::Key_unknown;
         Qt::KeyboardModifiers modifiers = Qt::NoModifier;
         QString text_val = "";
@@ -45,10 +44,19 @@ void simulateKeystrokes(VimLineEdit *lineEdit, const QString &keystrokes) {
             key = Qt::Key_Backspace;
         }
         else if ((int)c.unicode() == 0xfffd) { // Backspace
+        // else if ((int)c.unicode() == 0x0080) { // Backspace
             key = Qt::Key_Backspace;
             // the vim script represents backspace as \ufffd followed by kb
             // so we skip over the kb here
             index+=2; 
+        }
+        else if ((int)c.unicode() == 0x17) {
+            key = Qt::Key_W;
+            #ifdef Q_OS_MACOS
+            modifiers |= Qt::MetaModifier;
+            #else
+            modifiers |= Qt::ControlModifier;
+            #endif
         }
         // Add more key mappings as needed
 
@@ -56,12 +64,12 @@ void simulateKeystrokes(VimLineEdit *lineEdit, const QString &keystrokes) {
             // qDebug() << "Simulating key:" << c << "(Unicode:" << c.unicode() << ")" << "Key:" <<
             // key << "Modifiers:" << modifiers << "Text:" << text_val;
 
-            QKeyEvent pressEvent(QEvent::KeyPress, key, modifiers, text_val);
-            QApplication::sendEvent(lineEdit, &pressEvent);
+            QKeyEvent press_event(QEvent::KeyPress, key, modifiers, text_val);
+            QApplication::sendEvent(lineEdit, &press_event);
             QApplication::processEvents(); // Process events immediately
 
-            QKeyEvent releaseEvent(QEvent::KeyRelease, key, modifiers, text_val);
-            QApplication::sendEvent(lineEdit, &releaseEvent);
+            QKeyEvent release_event(QEvent::KeyRelease, key, modifiers, text_val);
+            QApplication::sendEvent(lineEdit, &release_event);
             QApplication::processEvents(); // Process events immediately
         }
         index++;
@@ -71,78 +79,89 @@ void simulateKeystrokes(VimLineEdit *lineEdit, const QString &keystrokes) {
 int main(int argc, char *argv[]) {
     QApplication a(argc, argv);
 
-    VimLineEdit lineEdit;
+    VimLineEdit line_edit;
 
-    QString testCasesPath = "/Users/ali/projects/vim_lineedit/test_generator/test_cases";
+    QString test_cases_path = "/Users/ali/projects/vim_lineedit/test_generator/test_cases";
 
-    QDir testDir(testCasesPath);
-    if (!testDir.exists()) {
-        std::cerr << "Test cases directory not found: " << testCasesPath.toStdString() << std::endl;
+    QDir test_dir(test_cases_path);
+    if (!test_dir.exists()) {
+        std::cerr << "Test cases directory not found: " << test_cases_path.toStdString() << std::endl;
         return 1;
     }
 
     QStringList filters;
     filters << "test_case_*.keystrokes.txt";
-    QFileInfoList keystrokeFiles = testDir.entryInfoList(filters, QDir::Files, QDir::Name);
+    QFileInfoList keystrokes_file = test_dir.entryInfoList(filters, QDir::Files, QDir::Name);
 
-    int passedTests = 0;
-    int failedTests = 0;
+    int num_passed_tests = 0;
+    int num_failed_tests = 0;
+    int only_index = -1;
+    int current_test_index = 0;
 
-    for (const QFileInfo& keystrokeFile : keystrokeFiles) {
-        QString baseName = keystrokeFile.baseName(); // e.g., "test_case_0.keystrokes"
-        QString indexStr = baseName.split("_").last(); // e.g., "0"
-        QString testName = "test_case_" + indexStr;
 
-        QString keystrokesFilePath = keystrokeFile.absoluteFilePath();
-        QString expectedOutputFilePath = testCasesPath + "/test_case_" + indexStr + ".txt";
+    for (const QFileInfo& keystrokeFile : keystrokes_file) {
 
-        QFile keystrokesFile(keystrokesFilePath);
-        QFile expectedOutputFile(expectedOutputFilePath);
-
-        if (!keystrokesFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
-            std::cerr << "Could not open keystrokes file: " << keystrokesFilePath.toStdString() << std::endl;
-            continue;
-        }
-        if (!expectedOutputFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
-            std::cerr << "Could not open expected output file: " << expectedOutputFilePath.toStdString() << std::endl;
-            keystrokesFile.close();
+        if ((only_index != -1) && (current_test_index != only_index)) {
+            current_test_index++;
             continue;
         }
 
-        QTextStream keystrokesStream(&keystrokesFile);
-        QString keystrokes = keystrokesStream.readAll();
-        keystrokesFile.close();
+        current_test_index++;
+        QString base_name = keystrokeFile.baseName(); // e.g., "test_case_0.keystrokes"
+        QString index_str = base_name.split("_").last(); // e.g., "0"
+        QString test_name = "test_case_" + index_str;
 
-        QTextStream expectedOutputStream(&expectedOutputFile);
-        QString expectedOutput = expectedOutputStream.readAll().trimmed();
-        expectedOutputFile.close();
+        QString keystrokes_file_path = keystrokeFile.absoluteFilePath();
+        QString exptected_output_file_path = test_cases_path + "/test_case_" + index_str + ".txt";
+
+        QFile keystrokes_file(keystrokes_file_path);
+        QFile expected_output_file(exptected_output_file_path);
+
+        if (!keystrokes_file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            std::cerr << "Could not open keystrokes file: " << keystrokes_file_path.toStdString() << std::endl;
+            continue;
+        }
+        if (!expected_output_file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            std::cerr << "Could not open expected output file: " << exptected_output_file_path.toStdString() << std::endl;
+            keystrokes_file.close();
+            continue;
+        }
+
+        // QByteArray keystrokes = keystrokesFile.readAll();
+        QTextStream keystrokes_stream(&keystrokes_file);
+        QString keystrokes = keystrokes_stream.readAll();
+        keystrokes_file.close();
+
+        QTextStream expected_output_stream(&expected_output_file);
+        QString expected_output = expected_output_stream.readAll().trimmed();
+        expected_output_file.close();
 
         // No cleaning of keystrokes; VimLineEdit should handle all of them.
 
-        lineEdit.clear(); // Clear previous test data
-        lineEdit.setFocus(); // Ensure the widget has focus for events
+        line_edit.clear(); // Clear previous test data
+        line_edit.setFocus(); // Ensure the widget has focus for events
 
-        simulateKeystrokes(&lineEdit, keystrokes);
+        simulate_keystrokes(&line_edit, keystrokes);
 
-        QString actualOutput = lineEdit.toPlainText();
+        QString actual_output = line_edit.toPlainText();
 
-        if (actualOutput == expectedOutput) {
-            std::cout << "PASS: " << testName.toStdString() << std::endl;
-            std::cout << "  Value: '" << actualOutput.toStdString() << "'" << std::endl;
-            passedTests++;
+        if (actual_output == expected_output) {
+            std::cout << "PASS: " << test_name.toStdString() << std::endl;
+            std::cout << "  Value: '" << actual_output.toStdString() << "'" << std::endl;
+            num_passed_tests++;
         } else {
-            std::cout << "FAIL: " << testName.toStdString() << std::endl;
-            std::cout << "  Expected: '" << expectedOutput.toStdString() << "'" << std::endl;
-            std::cout << "  Actual: '" << actualOutput.toStdString() << "'" << std::endl;
+            std::cout << "FAIL: " << test_name.toStdString() << std::endl;
+            std::cout << "  Expected: '" << expected_output.toStdString() << "'" << std::endl;
+            std::cout << "  Actual: '" << actual_output.toStdString() << "'" << std::endl;
             std::cout << "  Keystrokes: '" << keystrokes.toStdString() << "'" << std::endl;
-            failedTests++;
+            num_failed_tests++;
         }
     }
 
     std::cout << std::endl;
-    std::cout << "Tests run: " << (passedTests + failedTests) << std::endl;
-    std::cout << "Failures: " << failedTests << std::endl;
-    std::cout << "Passed: " << passedTests << std::endl;
+    std::cout << "Tests run: " << (num_passed_tests + num_failed_tests) << std::endl;
+    std::cout << "Failures: " << num_failed_tests << std::endl;
+    std::cout << "Passed: " << num_passed_tests << std::endl;
 
-    return (failedTests == 0) ? 0 : 1;
+    return (num_failed_tests == 0) ? 0 : 1;
 }

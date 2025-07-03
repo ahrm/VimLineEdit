@@ -1086,8 +1086,9 @@ KeyboardModifierState KeyboardModifierState::from_qt_modifiers(Qt::KeyboardModif
             modifiers.testFlag(Qt::ControlModifier), // Control key on macOS
             modifiers.testFlag(Qt::AltModifier)};
 #else
-    return {modifiers.testFlag(Qt::ShiftModifier), modifiers.testFlag(Qt::ControlModifier),
-            modifiers.testFlag(Qt::MetaModifier), // Command key on macOS
+    return {modifiers.testFlag(Qt::ShiftModifier),
+            modifiers.testFlag(Qt::ControlModifier),
+            modifiers.testFlag(Qt::MetaModifier),
             modifiers.testFlag(Qt::AltModifier)};
 #endif
 }
