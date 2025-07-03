@@ -184,6 +184,10 @@ void VimLineEdit::keyPressEvent(QKeyEvent *event) {
         }
     }
 
+    if (current_mode == VimMode::Insert){
+        current_insert_mode_text += event->text();
+    }
+
     QTextEdit::keyPressEvent(event);
 }
 
@@ -309,6 +313,7 @@ void VimLineEdit::add_vim_keybindings() {
 
     std::vector<KeyBinding> insert_mode_keybindings = {
         KeyBinding{{KeyChord{Qt::Key_W, CONTROL}}, VimLineEditCommand::DeletePreviousWord},
+        KeyBinding{{KeyChord{Qt::Key_A, CONTROL}}, VimLineEditCommand::InsertLastInsertModeText},
     };
 
     for (const auto &binding : insert_mode_keybindings) {
@@ -475,6 +480,8 @@ std::string to_string(VimLineEditCommand cmd) {
         return "IncrementNextNumberOnCurrentLine";
     case VimLineEditCommand::DecrementNextNumberOnCurrentLine:
         return "DecrementNextNumberOnCurrentLine";
+    case VimLineEditCommand::InsertLastInsertModeText:
+        return "InsertLastInsertModeText";
     default:
         return "Unknown";
     }
@@ -543,6 +550,14 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
     case VimLineEditCommand::MoveToEndOfLine:{
         new_pos = get_line_end_position(textCursor().position()) - 1;
         delete_pos_offset = 1;
+        break;
+    }
+    case VimLineEditCommand::InsertLastInsertModeText:{
+        // Insert the last text entered in insert mode in the current position
+        if (last_insert_mode_text.size() > 0) {
+            textCursor().insertText(last_insert_mode_text);
+            current_insert_mode_text += last_insert_mode_text;
+        }
         break;
     }
     case VimLineEditCommand::EnterNormalMode: {
@@ -1752,6 +1767,15 @@ void VimLineEdit::handle_number_increment_decrement(bool increment) {
 }
 
 void VimLineEdit::set_mode(VimMode mode){
+    if (current_mode == VimMode::Insert){
+        last_insert_mode_text = current_insert_mode_text;
+    }
+
     current_mode = mode;
+
+    if (mode == VimMode::Insert){
+        current_insert_mode_text = "";
+    }
+
     set_style_for_mode(current_mode);
 }

@@ -69,6 +69,7 @@ enum class VimLineEditCommand{
     DeletePreviousWord,
     IncrementNextNumberOnCurrentLine,
     DecrementNextNumberOnCurrentLine,
+    InsertLastInsertModeText,
 };
 
 enum class ActionWaitingForMotionKind{
@@ -213,6 +214,8 @@ private:
     std::optional<ActionWaitingForMotion> action_waiting_for_motion = {};
 
     LastDeletedTextState last_deleted_text;
+    QString last_insert_mode_text = "";
+    QString current_insert_mode_text = "";
 
     std::optional<FindState> last_find_state = {};
     std::optional<SearchState> last_search_state = {};
