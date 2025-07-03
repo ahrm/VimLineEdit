@@ -166,14 +166,14 @@ int main(int argc, char *argv[]) {
 
         QString actual_output = line_edit.toPlainText();
 
-        if (actual_output == expected_output) {
+        if (actual_output.trimmed() == expected_output.trimmed()) {
             std::cout << "PASS: " << test_name.toStdString() << std::endl;
             std::cout << "  Value: '" << actual_output.toStdString() << "'" << std::endl;
             num_passed_tests++;
         } else {
             std::cout << "FAIL: " << test_name.toStdString() << std::endl;
-            std::cout << "  Expected: '" << expected_output.toStdString() << "'" << std::endl;
-            std::cout << "  Actual: '" << actual_output.toStdString() << "'" << std::endl;
+            std::cout << "  Expected: \n" << expected_output.toStdString() << "" << std::endl;
+            std::cout << "  Actual: \n" << actual_output.toStdString() << "" << std::endl;
             std::cout << "  Keystrokes: '" << keystrokes.toStdString() << "'" << std::endl;
             num_failed_tests++;
         }

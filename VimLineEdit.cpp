@@ -900,8 +900,13 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
         if (current_mode == VimMode::VisualLine) {
             int start = visual_line_selection_begin;
             int end = visual_line_selection_end;
+            int offset = (end == current_state.text.size()) ? 1 : 0;
+            if (current_state.text[end-1] == '\n') {
+                offset = 0;
+            }
+            // // offset = 0;
 
-            set_last_deleted_text(current_state.text.mid(start, end - start - 1), true);
+            set_last_deleted_text(current_state.text.mid(start, end - start - 1 + offset), true);
             if (cmd !=  VimLineEditCommand::Yank) {
                 QString new_text = current_state.text.remove(start, end - start);
 
