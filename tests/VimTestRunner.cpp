@@ -85,6 +85,51 @@ void simulate_keystrokes(VimLineEdit *lineEdit, const QString &keystrokes) {
     }
 }
 
+QString keystrokes_to_human_readable_string(QString keystrokes) {
+    QString result;
+    int index = 0;
+    int BACKSPACE_KEY = 0xfffd;
+    
+    while (index < keystrokes.length()) {
+        QChar c = keystrokes.at(index);
+        
+        if (c.isPrint() && (c.unicode() != BACKSPACE_KEY)) {
+            result += c;
+        }
+        else if (c == '\e') { // Escape key
+            result += "<Esc>";
+        }
+        else if (c == '\n') {
+            result += "<CR>";
+        }
+        // else if (c == '\b') {
+        //     result += "<BS>";
+        // }
+        else if ((int)c.unicode() == BACKSPACE_KEY) {
+            result += "<BS>";
+            // Skip the 'kb' that follows
+            index += 2;
+        }
+        else if ((int)c.unicode() == 0x17) {
+            result += "<C-w>";
+        }
+        else if ((int)c.unicode() == 0x1) {
+            result += "<C-a>";
+        }
+        else if (c == ' ') {
+            result += "<Space>";
+        }
+        else {
+            // For other special characters, show unicode value
+            result += c.unicode();
+        }
+        
+        index++;
+    }
+    
+    return result;
+}
+
 int main(int argc, char *argv[]) {
     QApplication a(argc, argv);
 
@@ -175,6 +220,7 @@ int main(int argc, char *argv[]) {
             std::cout << "  Expected: \n" << expected_output.toStdString() << "" << std::endl;
             std::cout << "  Actual: \n" << actual_output.toStdString() << "" << std::endl;
             std::cout << "  Keystrokes: '" << keystrokes.toStdString() << "'" << std::endl;
+            std::cout << "  Keystrokes: '" << keystrokes_to_human_readable_string(keystrokes).toStdString() << "'" << std::endl;
             num_failed_tests++;
         }
         if (only_index != -1){

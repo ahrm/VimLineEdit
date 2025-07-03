@@ -935,7 +935,7 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
 
     }
 
-    if (current_mode == VimMode::Normal && new_pos == current_state.text.size()) {
+    if (cmd != VimLineEditCommand::EnterNormalMode && current_mode == VimMode::Normal && new_pos == current_state.text.size()) {
         new_pos = current_state.text.size() - 1;
     }
 
