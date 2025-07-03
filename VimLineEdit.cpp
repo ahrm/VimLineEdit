@@ -281,6 +281,8 @@ void VimLineEdit::add_vim_keybindings() {
         KeyBinding{{KeyChord{":", {}}}, VimLineEditCommand::CommandCommand},
         KeyBinding{{KeyChord{"/", {}}}, VimLineEditCommand::SearchCommand},
         KeyBinding{{KeyChord{"?", {}}}, VimLineEditCommand::ReverseSearchCommand},
+        KeyBinding{{KeyChord{Qt::Key_A, CONTROL}}, VimLineEditCommand::IncrementNextNumberOnCurrentLine},
+        KeyBinding{{KeyChord{Qt::Key_X, CONTROL}}, VimLineEditCommand::DecrementNextNumberOnCurrentLine},
     };
 
     for (const auto &binding : key_bindings) {
@@ -454,6 +456,10 @@ std::string to_string(VimLineEditCommand cmd) {
         return "ReverseSearchCommand";
     case VimLineEditCommand::DeletePreviousWord:
         return "DeletePreviousWord";
+    case VimLineEditCommand::IncrementNextNumberOnCurrentLine:
+        return "IncrementNextNumberOnCurrentLine";
+    case VimLineEditCommand::DecrementNextNumberOnCurrentLine:
+        return "DecrementNextNumberOnCurrentLine";
     default:
         return "Unknown";
     }
@@ -786,6 +792,12 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
     case VimLineEditCommand::CommandCommand: {
         pending_text_command = cmd;
         show_command_line_edit();
+        break;
+    }
+    case VimLineEditCommand::DecrementNextNumberOnCurrentLine:
+    case VimLineEditCommand::IncrementNextNumberOnCurrentLine: {
+        push_history(current_state.text, current_state.cursor_position);
+        handle_number_increment_decrement(cmd == VimLineEditCommand::IncrementNextNumberOnCurrentLine);
         break;
     }
     case VimLineEditCommand::ToggleVisualCursor: {
@@ -1621,4 +1633,71 @@ void EscapeLineEdit::keyPressEvent(QKeyEvent *event) {
 void VimLineEdit::set_last_deleted_text(QString text, bool is_line){
     last_deleted_text.text = text;
     last_deleted_text.is_line = is_line;
+}
+
+void VimLineEdit::handle_number_increment_decrement(bool increment) {
+    QString current_text = toPlainText();
+    int cursor_pos = textCursor().position();
+    
+    // Get current line boundaries
+    int line_start = get_line_start_position(cursor_pos);
+    int line_end = get_line_end_position(cursor_pos);
+    
+    // Extract current line
+    QString line = current_text.mid(line_start, line_end - line_start);
+    
+    // Find the next number on the line starting from cursor position
+    QRegularExpression number_regex("(-?\\d+)");
+    QRegularExpressionMatchIterator matches = number_regex.globalMatch(line);
+    
+    int relative_cursor_pos = cursor_pos - line_start + 1;
+    int number_start = -1;
+    int number_end = -1;
+    QString number_str;
+    
+    // Find the first number at or after the cursor position
+    while (matches.hasNext()) {
+        QRegularExpressionMatch match = matches.next();
+        if (match.capturedEnd() >= relative_cursor_pos) {
+            number_start = match.capturedStart();
+            number_end = match.capturedEnd();
+            number_str = match.captured(1);
+            break;
+        }
+    }
+    
+    // If no number found after cursor, find the first number on the line
+    if (number_start == -1) {
+        matches = number_regex.globalMatch(line);
+        if (matches.hasNext()) {
+            QRegularExpressionMatch match = matches.next();
+            number_start = match.capturedStart();
+            number_end = match.capturedEnd();
+            number_str = match.captured(1);
+        }
+    }
+    
+    // If we found a number, modify it
+    if (number_start != -1) {
+        bool ok;
+        int number = number_str.toInt(&ok);
+        if (ok) {
+            int new_number = increment ? number + 1 : number - 1;
+            QString new_number_str = QString::number(new_number);
+            
+            // Replace the number in the text
+            int absolute_start = line_start + number_start;
+            int absolute_end = line_start + number_end;
+            
+            QString new_text = current_text.left(absolute_start) + 
+                              new_number_str + 
+                              current_text.mid(absolute_end);
+            
+            setText(new_text);
+            
+            // Position cursor at the end of the modified number
+            int new_cursor_pos = absolute_start + new_number_str.length() - 1;
+            set_cursor_position(new_cursor_pos);
+        }
+    }
 }

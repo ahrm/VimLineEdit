@@ -58,6 +58,14 @@ void simulate_keystrokes(VimLineEdit *lineEdit, const QString &keystrokes) {
             modifiers |= Qt::ControlModifier;
             #endif
         }
+        else if ((int)c.unicode() == 0x1) {
+            key = Qt::Key_A;
+            #ifdef Q_OS_MACOS
+            modifiers |= Qt::MetaModifier;
+            #else
+            modifiers |= Qt::ControlModifier;
+            #endif
+        }
 
         // Add more key mappings as needed
 
@@ -96,7 +104,7 @@ int main(int argc, char *argv[]) {
 
     int num_passed_tests = 0;
     int num_failed_tests = 0;
-    int only_index = -1;
+    int only_index = 16;
     int current_test_index = 0;
     if (argc > 1) {
         bool ok;

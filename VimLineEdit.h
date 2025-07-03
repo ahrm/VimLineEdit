@@ -64,6 +64,8 @@ enum class VimLineEditCommand{
     SearchCommand,
     ReverseSearchCommand,
     DeletePreviousWord,
+    IncrementNextNumberOnCurrentLine,
+    DecrementNextNumberOnCurrentLine,
 };
 
 enum class ActionWaitingForMotionKind{
@@ -260,6 +262,7 @@ private:
     void handle_action_waiting_for_motion(int old_pos, int new_pos, int delete_pos_offset);
     void handle_search(bool reverse=false);
     void set_last_deleted_text(QString text, bool is_line=false);
+    void handle_number_increment_decrement(bool increment);
 };
 
 #endif // VIMLINEEDIT_H
