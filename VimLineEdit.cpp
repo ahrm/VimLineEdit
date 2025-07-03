@@ -14,6 +14,7 @@
 #include <utility>
 #include <variant>
 #include <vector>
+#include <QClipboard>
 
 class LineEditStyle : public QCommonStyle {
     int font_width;
@@ -105,6 +106,12 @@ void VimLineEdit::keyPressEvent(QKeyEvent *event) {
                     if (action_waiting_for_motion->kind == ActionWaitingForMotionKind::Change && event->key() == Qt::Key_C){
                         action_waiting_for_motion = {};
                         handle_command(VimLineEditCommand::ChangeCurrentLine);
+                        return;
+                    }
+                    // pressing yy should yank the current line
+                    if (action_waiting_for_motion->kind == ActionWaitingForMotionKind::Yank && event->key() == Qt::Key_Y){
+                        action_waiting_for_motion = {};
+                        handle_command(VimLineEditCommand::YankCurrentLine);
                         return;
                     }
                 }
@@ -266,6 +273,7 @@ void VimLineEdit::add_vim_keybindings() {
         KeyBinding{{KeyChord{"C", {}}}, VimLineEditCommand::ChangeToEndOfLine},
         KeyBinding{{KeyChord{"d", {}}}, VimLineEditCommand::Delete},
         KeyBinding{{KeyChord{"c", {}}}, VimLineEditCommand::Change},
+        KeyBinding{{KeyChord{"y", {}}}, VimLineEditCommand::Yank},
         KeyBinding{{KeyChord{"p", {}}}, VimLineEditCommand::PasteForward},
         KeyBinding{{KeyChord{"P", {}}}, VimLineEditCommand::PasteBackward},
         KeyBinding{{KeyChord{"u", {}}}, VimLineEditCommand::Undo},
@@ -407,10 +415,12 @@ std::string to_string(VimLineEditCommand cmd) {
         return "Delete";
     case VimLineEditCommand::Change:
         return "Change";
+    case VimLineEditCommand::Yank:
+        return "Yank";
     case VimLineEditCommand::DeleteToEndOfLine:
-        return "Delete";
+        return "DeleteToEndOfLine";
     case VimLineEditCommand::ChangeToEndOfLine:
-        return "Change";
+        return "ChangeToEndOfLine";
     case VimLineEditCommand::FindForward:
         return "FindForward";
     case VimLineEditCommand::FindBackward:
@@ -451,6 +461,8 @@ std::string to_string(VimLineEditCommand cmd) {
         return "DeleteCurrentLine";
     case VimLineEditCommand::ChangeCurrentLine:
         return "ChangeCurrentLine";
+    case VimLineEditCommand::YankCurrentLine:
+        return "YankCurrentLine";
     case VimLineEditCommand::CommandCommand:
         return "CommandCommand";
     case VimLineEditCommand::SearchCommand:
@@ -653,6 +665,10 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
         action_waiting_for_motion = {ActionWaitingForMotionKind::Change, SurroundingScope::None,
                                      SurroundingKind::None};
         break;
+    case VimLineEditCommand::Yank:
+        action_waiting_for_motion = {ActionWaitingForMotionKind::Yank, SurroundingScope::None,
+                                     SurroundingKind::None};
+        break;
     case VimLineEditCommand::DeleteToEndOfLine: 
     case VimLineEditCommand::ChangeToEndOfLine:
     {
@@ -713,6 +729,7 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
         handle_search(true);
         break;
     }
+    case VimLineEditCommand::YankCurrentLine:
     case VimLineEditCommand::ChangeCurrentLine:
     case VimLineEditCommand::DeleteCurrentLine: {
         int cursor_pos = textCursor().position();
@@ -721,18 +738,21 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
 
         set_last_deleted_text(current_state.text.mid(line_start, line_end - line_start), true);
 
-        if (cmd == VimLineEditCommand::DeleteCurrentLine){
-            line_end++;
-        }
+        if (cmd != VimLineEditCommand::YankCurrentLine){
 
-        push_history(current_state.text, current_state.cursor_position);
-        QString new_text = current_state.text.remove(line_start, line_end - line_start);
-        setText(new_text);
-        set_cursor_position(line_start);
+            if (cmd == VimLineEditCommand::DeleteCurrentLine) {
+                line_end++;
+            }
 
-        if (cmd == VimLineEditCommand::ChangeCurrentLine){
-            current_mode = VimMode::Insert;
-            set_style_for_mode(current_mode);
+            push_history(current_state.text, current_state.cursor_position);
+            QString new_text = current_state.text.remove(line_start, line_end - line_start);
+            setText(new_text);
+            set_cursor_position(line_start);
+
+            if (cmd == VimLineEditCommand::ChangeCurrentLine) {
+                current_mode = VimMode::Insert;
+                set_style_for_mode(current_mode);
+            }
         }
 
         break;
@@ -871,28 +891,33 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
     if (action_waiting_for_motion.has_value() && (current_mode == VimMode::Visual || current_mode == VimMode::VisualLine)){
         QTextCursor cursor = textCursor();
 
-        if (current_mode == VimMode::Visual){
+        if (current_mode == VimMode::Visual) {
             set_last_deleted_text(cursor.selectedText());
-            cursor.removeSelectedText();
+            if (cmd !=  VimLineEditCommand::Yank) {
+                cursor.removeSelectedText();
+            }
         }
-        if (current_mode == VimMode::VisualLine){
+        if (current_mode == VimMode::VisualLine) {
             int start = visual_line_selection_begin;
             int end = visual_line_selection_end;
 
             set_last_deleted_text(current_state.text.mid(start, end - start - 1), true);
-            QString new_text = current_state.text.remove(start, end - start);
+            if (cmd !=  VimLineEditCommand::Yank) {
+                QString new_text = current_state.text.remove(start, end - start);
 
-            setText(new_text);
-            set_cursor_position(start);
+                setText(new_text);
+                set_cursor_position(start);
+            }
         }
 
-        if (action_waiting_for_motion->kind == ActionWaitingForMotionKind::Change){
+        if (action_waiting_for_motion->kind == ActionWaitingForMotionKind::Change) {
             current_mode = VimMode::Insert;
             set_style_for_mode(current_mode);
         }
 
-        if (action_waiting_for_motion->kind == ActionWaitingForMotionKind::Delete){
+        if (action_waiting_for_motion->kind == ActionWaitingForMotionKind::Delete || action_waiting_for_motion->kind == ActionWaitingForMotionKind::Yank) {
             current_mode = VimMode::Normal;
+            setExtraSelections({});
             set_style_for_mode(current_mode);
         }
 
