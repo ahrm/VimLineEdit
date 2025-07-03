@@ -266,6 +266,7 @@ private:
     void handle_search(bool reverse=false);
     void set_last_deleted_text(QString text, bool is_line=false);
     void handle_number_increment_decrement(bool increment);
+    void set_mode(VimMode mode);
 };
 
 #endif // VIMLINEEDIT_H

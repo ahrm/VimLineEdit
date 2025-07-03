@@ -508,33 +508,27 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
     switch (cmd) {
     case VimLineEditCommand::EnterInsertMode:
         push_history(current_state.text, current_state.cursor_position);
-        current_mode = VimMode::Insert;
-        set_style_for_mode(current_mode);
+        set_mode(VimMode::Insert);
         break;
     case VimLineEditCommand::EnterInsertModeAfter:
-        current_mode = VimMode::Insert;
+        set_mode(VimMode::Insert);
         new_pos = textCursor().position() + 1;
-        set_style_for_mode(current_mode);
         break;
     case VimLineEditCommand::EnterInsertModeBegin:
-        current_mode = VimMode::Insert;
+        set_mode(VimMode::Insert);
         new_pos = 0;
-        set_style_for_mode(current_mode);
         break;
     case VimLineEditCommand::EnterInsertModeEnd:
-        current_mode = VimMode::Insert;
+        set_mode(VimMode::Insert);
         new_pos = current_state.text.length();
-        set_style_for_mode(current_mode);
         break;
     case VimLineEditCommand::EnterInsertModeBeginLine:
-        current_mode = VimMode::Insert;
+        set_mode(VimMode::Insert);
         new_pos = get_line_start_position(textCursor().position());
-        set_style_for_mode(current_mode);
         break;
     case VimLineEditCommand::EnterInsertModeEndLine:
-        current_mode = VimMode::Insert;
+        set_mode(VimMode::Insert);
         new_pos = get_line_end_position(textCursor().position());
-        set_style_for_mode(current_mode);
         break;
     case VimLineEditCommand::GotoBegin:
         new_pos = get_line_start_position(0);
@@ -559,8 +553,7 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
         }
 
         push_history(current_state.text, current_state.cursor_position);
-        current_mode = VimMode::Normal;
-        set_style_for_mode(current_mode);
+        set_mode(VimMode::Normal);
 
         if (textCursor().position() <= 0) {
             new_pos = 0;
@@ -584,7 +577,7 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
         break;
     }
     case VimLineEditCommand::EnterVisualMode: {
-        current_mode = VimMode::Visual;
+        set_mode(VimMode::Visual);
         visual_mode_anchor = textCursor().position();
         // select the current character
         QTextCursor cursor = textCursor();
@@ -592,13 +585,11 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
         cursor.movePosition(QTextCursor::Right, QTextCursor::KeepAnchor, 1);
         setTextCursor(cursor);
 
-        set_style_for_mode(current_mode);
         break;
     }
     case VimLineEditCommand::EnterVisualLineMode:
-        current_mode = VimMode::VisualLine;
+        set_mode(VimMode::VisualLine);
         visual_mode_anchor = textCursor().position();
-        set_style_for_mode(current_mode);
         // Immediately select the current line
         set_cursor_position_with_line_selection(textCursor().position());
         break;
@@ -656,8 +647,7 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
         push_history(current_state.text, current_state.cursor_position);
         delete_char();
         if (cmd == VimLineEditCommand::DeleteCharAndEnterInsertMode) {
-            current_mode = VimMode::Insert;
-            set_style_for_mode(current_mode);
+            set_mode(VimMode::Insert);
         }
         break;
     case VimLineEditCommand::Delete:
@@ -689,8 +679,7 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
             set_cursor_position(cursor_pos + cursor_offset);
         }
         if (cmd == VimLineEditCommand::ChangeToEndOfLine){
-            current_mode = VimMode::Insert;
-            set_style_for_mode(current_mode);
+            set_mode(VimMode::Insert);
         }
         break;
     }
@@ -755,8 +744,7 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
             set_cursor_position(line_start);
 
             if (cmd == VimLineEditCommand::ChangeCurrentLine) {
-                current_mode = VimMode::Insert;
-                set_style_for_mode(current_mode);
+                set_mode(VimMode::Insert);
             }
         }
 
@@ -814,8 +802,7 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
         QString new_text = current_text.left(line_end) + "\n" + current_text.mid(line_end);
         setText(new_text);
         new_pos = line_end + 1;
-        current_mode = VimMode::Insert;
-        set_style_for_mode(current_mode);
+        set_mode(VimMode::Insert);
         break;
     }
     case VimLineEditCommand::DeletePreviousWord: {
@@ -840,8 +827,7 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
         QString new_text = current_text.left(line_start) + "\n" + current_text.mid(line_start);
         setText(new_text);
         new_pos = line_start;
-        current_mode = VimMode::Insert;
-        set_style_for_mode(current_mode);
+        set_mode(VimMode::Insert);
         break;
     }
     case VimLineEditCommand::SearchCommand:
@@ -922,14 +908,12 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
         }
 
         if (action_waiting_for_motion->kind == ActionWaitingForMotionKind::Change) {
-            current_mode = VimMode::Insert;
-            set_style_for_mode(current_mode);
+            set_mode(VimMode::Insert);
         }
 
         if (action_waiting_for_motion->kind == ActionWaitingForMotionKind::Delete || action_waiting_for_motion->kind == ActionWaitingForMotionKind::Yank) {
-            current_mode = VimMode::Normal;
+            set_mode(VimMode::Normal);
             setExtraSelections({});
-            set_style_for_mode(current_mode);
         }
 
         action_waiting_for_motion = {};
@@ -1238,8 +1222,7 @@ bool VimLineEdit::handle_surrounding_motion_action() {
                     set_cursor_position(start);
 
                     if (action_waiting_for_motion->kind == ActionWaitingForMotionKind::Change) {
-                        current_mode = VimMode::Insert;
-                        set_style_for_mode(current_mode);
+                        set_mode(VimMode::Insert);
                     }
                 }
             }
@@ -1320,8 +1303,7 @@ bool VimLineEdit::handle_surrounding_motion_action() {
                     setText(new_text);
                     set_cursor_position(start);
                     if (action_waiting_for_motion->kind == ActionWaitingForMotionKind::Change) {
-                        current_mode = VimMode::Insert;
-                        set_style_for_mode(current_mode);
+                        set_mode(VimMode::Insert);
                     }
                 }
             }
@@ -1613,8 +1595,7 @@ void VimLineEdit::handle_action_waiting_for_motion(int old_pos, int new_pos, int
             }
 
             if (action_waiting_for_motion.value().kind == ActionWaitingForMotionKind::Change) {
-                current_mode = VimMode::Insert;
-                set_style_for_mode(current_mode);
+                set_mode(VimMode::Insert);
             }
         }
 
@@ -1768,4 +1749,9 @@ void VimLineEdit::handle_number_increment_decrement(bool increment) {
             set_cursor_position(new_cursor_pos);
         }
     }
+}
+
+void VimLineEdit::set_mode(VimMode mode){
+    current_mode = mode;
+    set_style_for_mode(current_mode);
 }
