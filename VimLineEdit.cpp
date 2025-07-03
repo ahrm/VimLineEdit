@@ -701,7 +701,12 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
     case VimLineEditCommand::DeleteCurrentLine: {
         int cursor_pos = textCursor().position();
         int line_start = get_line_start_position(cursor_pos);
-        int line_end = get_line_end_position(cursor_pos) + 1;
+        int line_end = get_line_end_position(cursor_pos);
+
+        if (cmd == VimLineEditCommand::DeleteCurrentLine){
+            line_end++;
+        }
+
         push_history(current_state.text, current_state.cursor_position);
         last_deleted_text = current_state.text.mid(line_start, line_end - line_start);
         QString new_text = current_state.text.remove(line_start, line_end - line_start);
