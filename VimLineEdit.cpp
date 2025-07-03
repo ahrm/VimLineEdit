@@ -267,6 +267,7 @@ void VimLineEdit::add_vim_keybindings() {
         KeyBinding{{KeyChord{"d", {}}}, VimLineEditCommand::Delete},
         KeyBinding{{KeyChord{"c", {}}}, VimLineEditCommand::Change},
         KeyBinding{{KeyChord{"p", {}}}, VimLineEditCommand::PasteForward},
+        KeyBinding{{KeyChord{"P", {}}}, VimLineEditCommand::PasteBackward},
         KeyBinding{{KeyChord{"u", {}}}, VimLineEditCommand::Undo},
         KeyBinding{{KeyChord{Qt::Key_R, CONTROL}}, VimLineEditCommand::Redo},
         KeyBinding{{KeyChord{"o", {}}}, VimLineEditCommand::InsertLineBelow},
@@ -428,6 +429,8 @@ std::string to_string(VimLineEditCommand cmd) {
         return "RepeatSearchReverse";
     case VimLineEditCommand::PasteForward:
         return "PasteForward";
+    case VimLineEditCommand::PasteBackward:
+        return "PasteBackward";
     case VimLineEditCommand::Undo:
         return "Undo";
     case VimLineEditCommand::Redo:
@@ -750,6 +753,28 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
                 // Paste the last deleted text after the cursor position
                 QString new_text = current_text.left(cursor_pos + 1) + last_deleted_text.text +
                                    current_text.mid(cursor_pos + 1);
+                setText(new_text);
+                new_pos = cursor_pos + last_deleted_text.text.size();
+            }
+        }
+        break;
+    }
+    case VimLineEditCommand::PasteBackward: {
+        if (last_deleted_text.text.size() > 0) {
+            QString current_text = current_state.text;
+            int cursor_pos = textCursor().position();
+            
+            if (last_deleted_text.is_line) {
+                // Paste the line above the current line
+                int line_start = get_line_start_position(cursor_pos);
+                QString new_text = current_text.left(line_start) + last_deleted_text.text + "\n" +
+                                   current_text.mid(line_start);
+                setText(new_text);
+                new_pos = line_start;
+            } else {
+                // Paste the last deleted text before the cursor position
+                QString new_text = current_text.left(cursor_pos) + last_deleted_text.text +
+                                   current_text.mid(cursor_pos);
                 setText(new_text);
                 new_pos = cursor_pos + last_deleted_text.text.size();
             }

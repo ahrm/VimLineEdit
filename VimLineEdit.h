@@ -50,6 +50,7 @@ enum class VimLineEditCommand{
     DeleteToEndOfLine,
     ChangeToEndOfLine,
     PasteForward,
+    PasteBackward,
     Undo,
     Redo,
     InsertLineBelow,
