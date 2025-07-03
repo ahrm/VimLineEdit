@@ -9,7 +9,7 @@
 #include "../VimLineEdit.h" // Assuming VimLineEdit.h is in the parent directory
 
 // Function to simulate keystrokes on VimLineEdit
-void simulate_keystrokes(VimLineEdit *lineEdit, const QString &keystrokes) {
+void simulate_keystrokes(VimLineEdit *lineEdit, const QByteArray &keystrokes) {
     int index = 0;
     int BACKSPACE_KEY = 0xfffd;
     while (index < keystrokes.length()) {
@@ -43,12 +43,15 @@ void simulate_keystrokes(VimLineEdit *lineEdit, const QString &keystrokes) {
         else if (c == '\b') { // Backspace
             key = Qt::Key_Backspace;
         }
-        else if ((int)c.unicode() == 0xfffd) { // Backspace
-        // else if ((int)c.unicode() == 0x0080) { // Backspace
+        // else if ((int)c.unicode() == 0xfffd) { // Backspace
+        else if ((int)c.unicode() == 0x0080) { // Backspace
+
             key = Qt::Key_Backspace;
-            // the vim script represents backspace as \ufffd followed by kb
-            // so we skip over the kb here
-            index+=2; 
+            index += 2;
+        }
+        else if ((int)c.unicode() == 0xd) { // Return
+
+            key = Qt::Key_Return;
         }
         else if ((int)c.unicode() == 0x17) {
             key = Qt::Key_W;
@@ -70,9 +73,6 @@ void simulate_keystrokes(VimLineEdit *lineEdit, const QString &keystrokes) {
         // Add more key mappings as needed
 
         if (key != Qt::Key_unknown) {
-            // qDebug() << "Simulating key:" << c << "(Unicode:" << c.unicode() << ")" << "Key:" <<
-            // key << "Modifiers:" << modifiers << "Text:" << text_val;
-
             QKeyEvent press_event(QEvent::KeyPress, key, modifiers, text_val);
             QApplication::sendEvent(lineEdit, &press_event);
             QApplication::processEvents(); // Process events immediately
@@ -149,7 +149,7 @@ int main(int argc, char *argv[]) {
 
     int num_passed_tests = 0;
     int num_failed_tests = 0;
-    int only_index = 16;
+    int only_index = 24;
     int current_test_index = 0;
     if (argc > 1) {
         bool ok;
@@ -183,19 +183,19 @@ int main(int argc, char *argv[]) {
         QFile keystrokes_file(keystrokes_file_path);
         QFile expected_output_file(exptected_output_file_path);
 
-        if (!keystrokes_file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        if (!keystrokes_file.open(QIODevice::ReadOnly)) {
             std::cerr << "Could not open keystrokes file: " << keystrokes_file_path.toStdString() << std::endl;
             continue;
         }
-        if (!expected_output_file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        if (!expected_output_file.open(QIODevice::ReadOnly)) {
             std::cerr << "Could not open expected output file: " << exptected_output_file_path.toStdString() << std::endl;
             keystrokes_file.close();
             continue;
         }
 
-        // QByteArray keystrokes = keystrokesFile.readAll();
-        QTextStream keystrokes_stream(&keystrokes_file);
-        QString keystrokes = keystrokes_stream.readAll();
+        QByteArray keystrokes = keystrokes_file.readAll();
+        // QTextStream keystrokes_stream(&keystrokes_file);
+        // QString keystrokes = keystrokes_stream.readAll();
         keystrokes_file.close();
 
         QTextStream expected_output_stream(&expected_output_file);
