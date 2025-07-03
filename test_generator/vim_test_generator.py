@@ -6,14 +6,15 @@ import os
 test_cases_folder = pathlib.Path(__file__).parent / 'test_cases'
 
 def get_current_test_case_index():
-
     if not test_cases_folder.exists():
         return 0
-    test_cases = sorted(test_cases_folder.glob('test_case_*.txt'))
+    test_cases = list(test_cases_folder.glob('test_case_*.txt'))
     if not test_cases:
         return 0
+    # Sort by numerical index instead of alphabetically
+    test_cases.sort(key=lambda x: int(x.name.split('_')[2].split('.')[0]))
     last_test_case = test_cases[-1]
-    index = int(last_test_case.stem.split('_')[-1])
+    index = int(last_test_case.name.split('_')[2].split('.')[0])
     return index + 1
 
 if __name__ == '__main__':

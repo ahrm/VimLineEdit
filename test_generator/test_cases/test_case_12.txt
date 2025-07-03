@@ -1,0 +1,3 @@
+lin
+line 1e 2
+line 3
