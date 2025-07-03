@@ -183,6 +183,11 @@ signals:
     void escapePressed();
 };
 
+struct LastDeletedTextState {
+    QString text;
+    bool is_line = false;
+};
+
 class VimLineEdit : public QTextEdit
 {
     Q_OBJECT
@@ -201,7 +206,8 @@ private:
     std::optional<VimLineEditCommand> pending_text_command = {};
 
     std::optional<ActionWaitingForMotion> action_waiting_for_motion = {};
-    QString last_deleted_text = "";
+
+    LastDeletedTextState last_deleted_text;
 
     std::optional<FindState> last_find_state = {};
     std::optional<SearchState> last_search_state = {};
@@ -253,6 +259,7 @@ private:
     void perform_pending_text_command_with_text(QString text);
     void handle_action_waiting_for_motion(int old_pos, int new_pos, int delete_pos_offset);
     void handle_search(bool reverse=false);
+    void set_last_deleted_text(QString text, bool is_line=false);
 };
 
 #endif // VIMLINEEDIT_H
