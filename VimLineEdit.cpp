@@ -1039,7 +1039,7 @@ int VimLineEdit::calculate_move_to_end_of_word(bool with_symbols) const {
     int len = t.length();
 
     if (pos >= len - 1) {
-        return pos;
+        return len - 1;
     }
 
     int next_pos = pos;
