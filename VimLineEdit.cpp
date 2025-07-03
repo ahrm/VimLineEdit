@@ -606,7 +606,12 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
         new_pos = textCursor().position() - 1;
         break;
     case VimLineEditCommand::MoveRight:
-        new_pos = textCursor().position() + 1;
+        if (textCursor().position() < current_state.text.length()) {
+            new_pos = textCursor().position() + 1;
+        }
+        else {
+            new_pos = current_state.text.length();
+        }
         break;
     case VimLineEditCommand::MoveUp:
         new_pos = calculate_move_up();
@@ -1387,6 +1392,7 @@ void VimLineEdit::set_cursor_position_with_line_selection(int pos) {
 int VimLineEdit::get_line_start_position(int cursor_pos) {
     const QString &text = toPlainText();
     int pos = cursor_pos;
+    pos = std::min<int>(pos, text.size());
 
     while (pos > 0 && text[pos - 1] != '\n') {
         pos--;
