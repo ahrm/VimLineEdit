@@ -63,6 +63,7 @@ enum class VimLineEditCommand{
     CommandCommand,
     SearchCommand,
     ReverseSearchCommand,
+    DeletePreviousWord,
 };
 
 enum class ActionWaitingForMotionKind{
@@ -191,6 +192,7 @@ private:
     int visual_mode_anchor = -1;
     InputTreeNode normal_mode_input_tree;
     InputTreeNode visual_mode_input_tree;
+    InputTreeNode insert_mode_input_tree;
     EscapeLineEdit* command_line_edit;
 
     InputTreeNode* current_node = nullptr;

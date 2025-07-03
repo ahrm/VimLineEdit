@@ -157,6 +157,25 @@ void VimLineEdit::keyPressEvent(QKeyEvent *event) {
 
         return;
     }
+    else{
+        Qt::KeyboardModifier CONTROL = Qt::ControlModifier;
+        #ifdef Q_OS_MACOS
+        CONTROL = Qt::MetaModifier; // On macOS, Control is often used as Command
+        #endif
+        auto event_key = event->key();
+        bool is_keypress_a_modifier = event_key == Qt::Key_Shift || event_key == Qt::Key_Control ||
+                                      event_key == Qt::Key_Alt || event_key == Qt::Key_Meta;
+
+        if ((!is_keypress_a_modifier) && event->modifiers().testFlag(CONTROL)) {
+            std::optional<VimLineEditCommand> command =
+                handle_key_event(event->text(), event->key(), event->modifiers());
+            
+            if (command){
+                handle_command(command.value());
+                return;
+            }
+        }
+    }
 
     QTextEdit::keyPressEvent(event);
 }
@@ -205,6 +224,7 @@ void InputTreeNode::add_keybinding(const std::vector<KeyChord> &key_chords, int 
 
 void VimLineEdit::add_vim_keybindings() {
     KeyboardModifierState CONTROL = KeyboardModifierState{false, true, false, false};
+
     // KeyboardModifierState SHIFT = KeyboardModifierState{true, false, false, false};
     // KeyboardModifierState NOMOD = KeyboardModifierState{false, false, false, false};
 
@@ -276,6 +296,14 @@ void VimLineEdit::add_vim_keybindings() {
         visual_mode_input_tree.add_keybinding(binding.key_chords, 0, binding.command);
     }
 
+    std::vector<KeyBinding> insert_mode_keybindings = {
+        KeyBinding{{KeyChord{Qt::Key_W, CONTROL}}, VimLineEditCommand::DeletePreviousWord},
+    };
+
+    for (const auto &binding : insert_mode_keybindings) {
+        insert_mode_input_tree.add_keybinding(binding.key_chords, 0, binding.command);
+    }
+
 }
 
 std::optional<VimLineEditCommand> VimLineEdit::handle_key_event(QString event_text, int key,
@@ -284,6 +312,9 @@ std::optional<VimLineEditCommand> VimLineEdit::handle_key_event(QString event_te
     InputTreeNode* current_mode_root = &normal_mode_input_tree;
     if (current_mode == VimMode::Visual || current_mode == VimMode::VisualLine) {
         current_mode_root = &visual_mode_input_tree;
+    }
+    if (current_mode == VimMode::Insert) {
+        current_mode_root = &insert_mode_input_tree;
     }
     InputTreeNode *node = current_node ? current_node : current_mode_root;
     KeyboardModifierState modifier_state = KeyboardModifierState::from_qt_modifiers(modifiers);
@@ -421,6 +452,8 @@ std::string to_string(VimLineEditCommand cmd) {
         return "SearchCommand";
     case VimLineEditCommand::ReverseSearchCommand:
         return "ReverseSearchCommand";
+    case VimLineEditCommand::DeletePreviousWord:
+        return "DeletePreviousWord";
     default:
         return "Unknown";
     }
@@ -704,6 +737,19 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
         new_pos = line_end + 1;
         current_mode = VimMode::Insert;
         set_style_for_mode(current_mode);
+        break;
+    }
+    case VimLineEditCommand::DeletePreviousWord: {
+        QString current_text = current_state.text;
+        int cursor_pos = textCursor().position();
+        int previous_space_index = current_text.lastIndexOf(' ', cursor_pos - 1);
+        if (previous_space_index != -1) {
+            QString word_to_delete = current_text.mid(previous_space_index, cursor_pos - previous_space_index);
+            current_text.remove(previous_space_index, cursor_pos - previous_space_index);
+            setText(current_text);
+            new_pos = previous_space_index;
+        }
+
         break;
     }
     case VimLineEditCommand::InsertLineAbove: {
