@@ -1,0 +1,2 @@
+i will now test deleting till 
+the end of the line

@@ -110,18 +110,22 @@ int main(int argc, char *argv[]) {
 
     for (const QFileInfo& keystrokeFile : keystrokes_file) {
 
-        if ((only_index != -1) && (current_test_index != only_index)) {
-            current_test_index++;
-            continue;
-        }
-
         current_test_index++;
         QString base_name = keystrokeFile.baseName(); // e.g., "test_case_0.keystrokes"
         QString index_str = base_name.split("_").last(); // e.g., "0"
         QString test_name = "test_case_" + index_str;
 
+
         QString keystrokes_file_path = keystrokeFile.absoluteFilePath();
         QString exptected_output_file_path = test_cases_path + "/test_case_" + index_str + ".txt";
+
+        if (only_index != -1) {
+            base_name = "test_case_" + QString::number(only_index);
+            index_str = QString::number(only_index);
+            test_name = base_name;
+            keystrokes_file_path = test_cases_path + "/" + base_name + ".keystrokes.txt";
+            exptected_output_file_path = test_cases_path + "/" + base_name + ".txt";
+        }
 
         QFile keystrokes_file(keystrokes_file_path);
         QFile expected_output_file(exptected_output_file_path);
@@ -164,6 +168,9 @@ int main(int argc, char *argv[]) {
             std::cout << "  Actual: '" << actual_output.toStdString() << "'" << std::endl;
             std::cout << "  Keystrokes: '" << keystrokes.toStdString() << "'" << std::endl;
             num_failed_tests++;
+        }
+        if (only_index != -1){
+            break;
         }
     }
 

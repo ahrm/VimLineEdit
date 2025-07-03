@@ -43,13 +43,18 @@ file(GLOB_RECURSE ALL_DATA_FILES
 
 # add_test(NAME vim_lineedit_tests COMMAND vim_lineedit_tests)
 # foreach(idx RANGE 0 8)
-set(test_index 0) # Initialize the index variable
 
 foreach(test_path IN LISTS ALL_DATA_FILES)
+  # Extract filename from full path
+  get_filename_component(filename ${test_path} NAME_WE)
+  
+  # Extract index from filename (test_case_{index})
+  string(REGEX REPLACE "test_case_([0-9]+)" "\\1" test_index ${filename})
+  # message(STATUS "Adding test for index: ${test_index}")
+  
   add_test(
     NAME    my_test_idx_${test_index}
     COMMAND vim_lineedit_tests ${test_index}
   )
-  math(EXPR test_index "${test_index} + 1")
 endforeach()
 
