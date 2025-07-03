@@ -58,6 +58,7 @@ void simulate_keystrokes(VimLineEdit *lineEdit, const QString &keystrokes) {
             modifiers |= Qt::ControlModifier;
             #endif
         }
+
         // Add more key mappings as needed
 
         if (key != Qt::Key_unknown) {
@@ -97,6 +98,14 @@ int main(int argc, char *argv[]) {
     int num_failed_tests = 0;
     int only_index = -1;
     int current_test_index = 0;
+    if (argc > 1) {
+        bool ok;
+        only_index = QString(argv[1]).toInt(&ok);
+        if (!ok || only_index < 0) {
+            std::cerr << "Invalid test index provided. Please provide a valid integer." << std::endl;
+            return 1;
+        }
+    }
 
 
     for (const QFileInfo& keystrokeFile : keystrokes_file) {

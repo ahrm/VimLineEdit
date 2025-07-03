@@ -30,4 +30,26 @@ add_subdirectory(tests)
 # Enable testing
 enable_testing()
 
-add_test(NAME vim_lineedit_tests COMMAND vim_lineedit_tests)
+file(GLOB_RECURSE ALL_DATA_FILES
+     CONFIGURE_DEPENDS
+     "${CMAKE_SOURCE_DIR}/test_generator/test_cases/*.keystrokes.txt"
+)
+
+# foreach (data_file IN LISTS ALL_DATA_FILES)
+# # print the data file path
+#   message(STATUS "Data file: ${data_file}")
+# endforeach()
+
+
+# add_test(NAME vim_lineedit_tests COMMAND vim_lineedit_tests)
+# foreach(idx RANGE 0 8)
+set(test_index 0) # Initialize the index variable
+
+foreach(test_path IN LISTS ALL_DATA_FILES)
+  add_test(
+    NAME    my_test_idx_${test_index}
+    COMMAND vim_lineedit_tests ${test_index}
+  )
+  math(EXPR test_index "${test_index} + 1")
+endforeach()
+
