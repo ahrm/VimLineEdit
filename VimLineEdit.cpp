@@ -824,6 +824,12 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
         QString current_text = current_state.text;
         int cursor_pos = textCursor().position();
         int previous_space_index = current_text.lastIndexOf(' ', cursor_pos - 2);
+        int previous_non_space_index = current_text.lastIndexOf(QRegularExpression("\\S"), previous_space_index - 1);
+
+        if (previous_space_index != -1){
+            previous_space_index = previous_non_space_index != -1 ? previous_non_space_index + 1 : previous_space_index;
+        }
+
         int delete_begin = previous_space_index + 1;
         int delete_length = cursor_pos - delete_begin;
         if (previous_space_index == -1){
