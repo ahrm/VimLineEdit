@@ -75,6 +75,7 @@ enum class VimLineEditCommand{
     GotoMarkCommand,
 };
 
+
 enum class ActionWaitingForMotionKind{
     Delete,
     Change,
@@ -225,6 +226,7 @@ private:
     LastDeletedTextState last_deleted_text;
     QString last_insert_mode_text = "";
     QString current_insert_mode_text = "";
+    QString current_command_repeat_number = "";
 
     std::unordered_map<int, Mark> marks;
 

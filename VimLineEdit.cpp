@@ -72,6 +72,12 @@ void VimLineEdit::keyPressEvent(QKeyEvent *event) {
         bool is_keypress_a_modifier = event_key == Qt::Key_Shift || event_key == Qt::Key_Control ||
                                       event_key == Qt::Key_Alt || event_key == Qt::Key_Meta;
 
+        bool is_key_a_number = (event_key >= Qt::Key_0 && event_key <= Qt::Key_9);
+
+        if (!is_keypress_a_modifier && !action_waiting_for_motion.has_value() && is_key_a_number){
+            current_command_repeat_number.append(event->text());
+        }
+
         if (!is_keypress_a_modifier && pending_symbol_command.has_value()) {
             // If we have a pending command that requires a symbol, we handle it now
             VimLineEditCommand command = pending_symbol_command.value();
@@ -515,6 +521,17 @@ bool requires_symbol(VimLineEditCommand cmd) {
 }
 
 void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> symbol) {
+    int num_repeats = 1;
+    if (current_command_repeat_number.size() > 0){
+        bool ok;
+        num_repeats = current_command_repeat_number.toInt(&ok);
+        if (!ok) {
+            num_repeats = 1;
+        }
+        current_command_repeat_number = "";
+    }
+
+
     int new_pos = -1;
     int old_pos = textCursor().position();
     // some commands' delete differs from the way they move
@@ -1801,6 +1818,10 @@ void VimLineEdit::set_mode(VimMode mode){
 
     if (mode == VimMode::Insert){
         current_insert_mode_text = "";
+    }
+
+    if (mode == VimMode::Normal){
+        current_command_repeat_number = "";
     }
 
     set_style_for_mode(current_mode);
