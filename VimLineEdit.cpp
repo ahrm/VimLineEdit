@@ -329,6 +329,7 @@ void VimLineEdit::add_vim_keybindings() {
     visual_mode_input_tree = normal_mode_input_tree.clone();
     std::vector<KeyBinding> visual_mode_keybindings = {
         KeyBinding{{KeyChord{"o", {}}}, VimLineEditCommand::ToggleVisualCursor},
+        KeyBinding{{KeyChord{"U", {}}}, VimLineEditCommand::Uppercasify},
     };
 
     for (const auto &binding : visual_mode_keybindings) {
@@ -520,6 +521,8 @@ std::string to_string(VimLineEditCommand cmd) {
         return "SearchTextUnderCursorBackward";
     case VimLineEditCommand::GotoMatchingBracket:
         return "GotoMatchingBracket";
+    case VimLineEditCommand::Uppercasify:
+        return "Uppercasify";
     default:
         return "Unknown";
     }
@@ -590,6 +593,17 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
         set_mode(VimMode::Insert);
         new_pos = current_state.text.length();
         break;
+    case VimLineEditCommand::Uppercasify: {
+        int begin, end;
+        QString selection = get_current_selection(begin, end);
+        if (selection.size() > 0){
+            insert_text(selection.toUpper(), begin, end);
+        }
+        set_mode(VimMode::Normal);
+        set_cursor_position(begin);
+        break;
+
+    }
     case VimLineEditCommand::EnterInsertModeBeginLine:
         set_mode(VimMode::Insert);
         new_pos = get_line_start_position(textCursor().position());
@@ -2091,4 +2105,16 @@ void VimLineEdit::set_visual_selection(int begin, int length){
     selection.format.setForeground(selection_foreground_color);
 
     setExtraSelections({selection});
+}
+
+QString VimLineEdit::get_current_selection(int &begin, int &end){
+    if (extraSelections().size() > 0){
+        QTextCursor cursor = extraSelections().at(0).cursor;
+        begin = cursor.selectionStart();
+        end = cursor.selectionEnd();
+        QString text_result = cursor.selectedText();
+        return text_result;
+    }
+
+    return "";
 }

@@ -79,6 +79,7 @@ enum class VimLineEditCommand{
     SearchTextUnderCursor,
     SearchTextUnderCursorBackward,
     GotoMatchingBracket,
+    Uppercasify,
 };
 
 
@@ -303,6 +304,7 @@ private:
     bool requires_symbol(VimLineEditCommand cmd);
     void add_event_to_current_macro(QKeyEvent* event);
     void set_visual_selection(int begin, int length);
+    QString get_current_selection(int& begin, int& end);
 };
 
 #endif // VIMLINEEDIT_H
