@@ -175,6 +175,7 @@ struct SearchState{
 struct HistoryState{
     QString text;
     int cursor_position;
+    std::unordered_map<int, Mark> marks;
 };
 
 struct History{
@@ -262,7 +263,7 @@ private:
     void delete_char();
     bool handle_surrounding_motion_action();
 
-    void push_history(const QString& text, int cursor_position);
+    void push_history(HistoryState state);
     void undo();
     void redo();
 

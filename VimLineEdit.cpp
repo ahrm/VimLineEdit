@@ -526,10 +526,11 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
     HistoryState current_state;
     current_state.text = toPlainText();
     current_state.cursor_position = old_pos;
+    current_state.marks = marks;
 
     switch (cmd) {
     case VimLineEditCommand::EnterInsertMode:
-        push_history(current_state.text, current_state.cursor_position);
+        push_history(current_state);
         set_mode(VimMode::Insert);
         break;
     case VimLineEditCommand::EnterInsertModeAfter:
@@ -582,7 +583,7 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
             visual_line_selection_end = -1;
         }
 
-        push_history(current_state.text, current_state.cursor_position);
+        push_history(current_state);
         set_mode(VimMode::Normal);
 
         if (textCursor().position() <= 0) {
@@ -674,19 +675,19 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
         break;
     case VimLineEditCommand::DeleteCharAndEnterInsertMode:
     case VimLineEditCommand::DeleteChar:
-        push_history(current_state.text, current_state.cursor_position);
+        push_history(current_state);
         delete_char();
         if (cmd == VimLineEditCommand::DeleteCharAndEnterInsertMode) {
             set_mode(VimMode::Insert);
         }
         break;
     case VimLineEditCommand::Delete:
-        push_history(current_state.text, current_state.cursor_position);
+        push_history(current_state);
         action_waiting_for_motion = {ActionWaitingForMotionKind::Delete, SurroundingScope::None,
                                      SurroundingKind::None};
         break;
     case VimLineEditCommand::Change:
-        push_history(current_state.text, current_state.cursor_position);
+        push_history(current_state);
         action_waiting_for_motion = {ActionWaitingForMotionKind::Change, SurroundingScope::None,
                                      SurroundingKind::None};
         break;
@@ -697,7 +698,7 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
     case VimLineEditCommand::DeleteToEndOfLine: 
     case VimLineEditCommand::ChangeToEndOfLine:
     {
-        push_history(current_state.text, current_state.cursor_position);
+        push_history(current_state);
         int cursor_pos = textCursor().position();
         int line_end = get_line_end_position(cursor_pos);
         int cursor_offset = cmd == VimLineEditCommand::DeleteToEndOfLine ? -1 : 0;
@@ -782,7 +783,7 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
                 line_end++;
             }
 
-            push_history(current_state.text, current_state.cursor_position);
+            push_history(current_state);
             remove_text(line_start, line_end - line_start);
             set_cursor_position(line_start);
 
@@ -831,7 +832,7 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
         break;
     }
     case VimLineEditCommand::InsertLineBelow: {
-        push_history(current_state.text, current_state.cursor_position);
+        push_history(current_state);
         QString current_text = current_state.text;
         int cursor_pos = textCursor().position();
         int line_end = get_line_end_position(cursor_pos);
@@ -863,7 +864,7 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
         break;
     }
     case VimLineEditCommand::InsertLineAbove: {
-        push_history(current_state.text, current_state.cursor_position);
+        push_history(current_state);
         QString current_text = current_state.text;
         int cursor_pos = textCursor().position();
         int line_start = get_line_start_position(cursor_pos);
@@ -881,7 +882,7 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
     }
     case VimLineEditCommand::DecrementNextNumberOnCurrentLine:
     case VimLineEditCommand::IncrementNextNumberOnCurrentLine: {
-        push_history(current_state.text, current_state.cursor_position);
+        push_history(current_state);
         handle_number_increment_decrement(cmd == VimLineEditCommand::IncrementNextNumberOnCurrentLine);
         break;
     }
@@ -1150,14 +1151,14 @@ void VimLineEdit::delete_char() {
     }
 }
 
-void VimLineEdit::push_history(const QString &text, int cursor_position) {
+void VimLineEdit::push_history(HistoryState state) {
     if (history.current_index >= 0 && history.current_index < history.states.size() - 1) {
         // If we are in the middle of the history, remove all states after the current index
         history.states.erase(history.states.begin() + history.current_index + 1,
                              history.states.end());
     }
 
-    history.states.push_back({text, cursor_position});
+    history.states.push_back(state);
 
     if (history.states.size() > 100) {
         history.states.pop_front();
@@ -1176,6 +1177,7 @@ void VimLineEdit::undo() {
     const HistoryState &state = history.states[history.current_index + 1];
     setText(state.text);
     set_cursor_position(state.cursor_position);
+    marks = state.marks;
 }
 
 void VimLineEdit::redo() {
@@ -1187,6 +1189,7 @@ void VimLineEdit::redo() {
     const HistoryState &state = history.states[history.current_index];
     setText(state.text);
     set_cursor_position(state.cursor_position);
+    marks = state.marks;
 }
 
 bool equal_with_shift(const KeyboardModifierState &lhs, const KeyboardModifierState &rhs) {
