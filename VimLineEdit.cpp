@@ -1322,8 +1322,7 @@ bool VimLineEdit::handle_surrounding_motion_action() {
                     QTextCursor cursor = textCursor();
                     cursor.setPosition(start, QTextCursor::MoveAnchor);
                     cursor.setPosition(end, QTextCursor::KeepAnchor);
-                    visual_line_selection_begin = start;
-                    visual_line_selection_end = end;
+                    visual_mode_anchor = start;
                     setTextCursor(cursor);
                 }
             }
@@ -1405,6 +1404,16 @@ bool VimLineEdit::handle_surrounding_motion_action() {
                     if (action_waiting_for_motion->kind == ActionWaitingForMotionKind::Change) {
                         set_mode(VimMode::Insert);
                     }
+                }
+                else if (action_waiting_for_motion->kind == ActionWaitingForMotionKind::Yank) {
+                    set_last_deleted_text(current_text.mid(start, end - start));
+                }
+                else if (action_waiting_for_motion->kind == ActionWaitingForMotionKind::Visual) {
+                    QTextCursor cursor = textCursor();
+                    cursor.setPosition(start, QTextCursor::MoveAnchor);
+                    cursor.setPosition(end, QTextCursor::KeepAnchor);
+                    visual_mode_anchor = start;
+                    setTextCursor(cursor);
                 }
             }
             action_waiting_for_motion = {};

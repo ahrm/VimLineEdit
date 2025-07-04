@@ -41,4 +41,9 @@ if __name__ == '__main__':
             vim_keystrokes_file = test_cases_folder / f'test_case_{current_test_case_index}.keystrokes.txt'
             # launch vim with -W option to write the output to the file
             os.system(f'vim {vim_output_file} -W {vim_keystrokes_file}')
+            # if the vim output file does not exist, remove the keystrokes file too
+            if not vim_output_file.exists():
+                if vim_keystrokes_file.exists():
+                    print("Output file does not exist, removing the keystrokes file...")
+                    vim_keystrokes_file.unlink()
 
