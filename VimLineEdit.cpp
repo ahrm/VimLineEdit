@@ -715,7 +715,9 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
     case VimLineEditCommand::DeleteCharAndEnterInsertMode:
     case VimLineEditCommand::DeleteChar:
         push_history(current_state);
-        delete_char();
+        for (int i = 0; i < num_repeats; i++){
+            delete_char();
+        }
         if (cmd == VimLineEditCommand::DeleteCharAndEnterInsertMode) {
             set_mode(VimMode::Insert);
         }
