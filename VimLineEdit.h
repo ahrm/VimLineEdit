@@ -7,8 +7,9 @@
 #include <vector>
 #include <string>
 #include <deque>
+#include <unordered_map>
 #include <QTextEdit>
-
+#include <QTextCursor>
 
 enum class VimLineEditCommand{
     GotoBegin,
@@ -70,6 +71,8 @@ enum class VimLineEditCommand{
     IncrementNextNumberOnCurrentLine,
     DecrementNextNumberOnCurrentLine,
     InsertLastInsertModeText,
+    SetMarkCommand,
+    GotoMarkCommand,
 };
 
 enum class ActionWaitingForMotionKind{
@@ -77,6 +80,11 @@ enum class ActionWaitingForMotionKind{
     Change,
     Yank,
     Visual,
+};
+
+struct Mark{
+    int position;
+    int name;
 };
 
 enum class SurroundingScope{
@@ -217,6 +225,8 @@ private:
     QString last_insert_mode_text = "";
     QString current_insert_mode_text = "";
 
+    std::unordered_map<int, Mark> marks;
+
     std::optional<FindState> last_find_state = {};
     std::optional<SearchState> last_search_state = {};
     History history;
@@ -270,6 +280,8 @@ private:
     void set_last_deleted_text(QString text, bool is_line=false);
     void handle_number_increment_decrement(bool increment);
     void set_mode(VimMode mode);
+    void remove_text(int begin, int num);
+    void insert_text(QString text, int left_index, int right_index = -1);
 };
 
 #endif // VIMLINEEDIT_H
