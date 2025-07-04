@@ -262,7 +262,7 @@ private:
     int calculate_move_up_on_screen();
     int calculate_move_on_screen(int direction);
 
-    void delete_char();
+    void delete_char(bool is_single);
     bool handle_surrounding_motion_action();
 
     void push_history(HistoryState state);

@@ -720,7 +720,7 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
     case VimLineEditCommand::DeleteChar:
         push_history(current_state);
         for (int i = 0; i < num_repeats; i++){
-            delete_char();
+            delete_char(num_repeats == 1);
         }
         if (cmd == VimLineEditCommand::DeleteCharAndEnterInsertMode) {
             set_mode(VimMode::Insert);
@@ -1192,10 +1192,24 @@ int VimLineEdit::calculate_move_word_backward(bool with_symbols) const {
     return prev_pos;
 }
 
-void VimLineEdit::delete_char() {
+void VimLineEdit::delete_char(bool is_single) {
     int current_pos = textCursor().position();
     QString current_text = toPlainText();
-    if (current_pos < current_text.length()) {
+    if (current_pos <= current_text.length()) {
+        if (current_pos == current_text.length() || current_text[current_pos] == '\n') {
+            if (!is_single){
+                // if the character is a newline, we should not delete it when executing a command with num_repeats
+                return;
+            }
+            else{
+                // otherwise, try to delete the previous character
+                if (current_pos > 0 && current_text[current_pos - 1] != '\n') {
+                    current_pos--;
+                }
+
+            }
+        }
+
         set_last_deleted_text(current_text.mid(current_pos, 1));
         remove_text(current_pos, 1);
         set_cursor_position(current_pos);
