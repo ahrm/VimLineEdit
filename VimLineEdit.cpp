@@ -971,16 +971,20 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
             QString current_text = current_state.text;
             int cursor_pos = textCursor().position();
             
-            if (last_deleted_text.is_line) {
-                // Paste the line below the current line
-                int line_end = get_line_end_position(cursor_pos);
-                insert_text("\n" + last_deleted_text.text, line_end);
-                
-                new_pos = line_end + 1;
-            } else {
-                // Paste the last deleted text after the cursor position
-                insert_text(last_deleted_text.text, cursor_pos + 1);
-                new_pos = cursor_pos + last_deleted_text.text.size();
+            for (int i = 0; i < num_repeats; i++){
+                if (last_deleted_text.is_line) {
+                    // Paste the line below the current line
+                    int line_end = get_line_end_position(cursor_pos);
+                    insert_text("\n" + last_deleted_text.text, line_end);
+
+                    new_pos = line_end + 1;
+                }
+                else {
+                    // Paste the last deleted text after the cursor position
+                    insert_text(last_deleted_text.text, cursor_pos + 1);
+                    new_pos = cursor_pos + last_deleted_text.text.size();
+                }
+                cursor_pos = new_pos;
             }
         }
         break;
