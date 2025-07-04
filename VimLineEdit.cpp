@@ -319,6 +319,7 @@ void VimLineEdit::add_vim_keybindings() {
         KeyBinding{{KeyChord{"@", {}}}, VimLineEditCommand::RepeatMacro},
         KeyBinding{{KeyChord{"*", {}}}, VimLineEditCommand::SearchTextUnderCursor},
         KeyBinding{{KeyChord{"#", {}}}, VimLineEditCommand::SearchTextUnderCursorBackward},
+        KeyBinding{{KeyChord{"%", {}}}, VimLineEditCommand::GotoMatchingBracket},
     };
 
     for (const auto &binding : key_bindings) {
@@ -517,6 +518,8 @@ std::string to_string(VimLineEditCommand cmd) {
         return "SearchTextUnderCursor";
     case VimLineEditCommand::SearchTextUnderCursorBackward:
         return "SearchTextUnderCursorBackward";
+    case VimLineEditCommand::GotoMatchingBracket:
+        return "GotoMatchingBracket";
     default:
         return "Unknown";
     }
@@ -998,6 +1001,46 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
     case VimLineEditCommand::IncrementNextNumberOnCurrentLine: {
         push_history(current_state);
         handle_number_increment_decrement(cmd == VimLineEditCommand::IncrementNextNumberOnCurrentLine);
+        break;
+    }
+    case VimLineEditCommand::GotoMatchingBracket: {
+        int cursor_pos = textCursor().position();
+        std::unordered_map<int, int> matching_brackets = {
+            {'(', ')'},
+            {')', '('},
+            {'{', '}'},
+            {'}', '{'},
+            {'[', ']'},
+            {']', '['},
+            {'<', '>'},
+            {'>', '<'}
+        };
+        std::vector<int> opening_brackets = {'(', '{', '[', '<'};
+
+        if (cursor_pos < 0 || cursor_pos >= current_state.text.length()) {
+            break;
+        }
+        QChar current_char = current_state.text[cursor_pos];
+        if (matching_brackets.find(current_char.unicode()) == matching_brackets.end()) {
+            // not a bracket
+            break;
+        }
+        int target_pos = -1;
+        int bracket_count = 0;
+        char target_bracket = matching_brackets[current_char.unicode()];
+        bool is_opening_bracket = std::find(opening_brackets.begin(), opening_brackets.end(), current_char.unicode()) != opening_brackets.end();
+        if (is_opening_bracket){
+            target_pos = current_state.text.indexOf(target_bracket, cursor_pos + 1);
+        }
+        else{
+            target_pos = current_state.text.lastIndexOf(target_bracket, cursor_pos - 1);
+        }
+
+        if (target_pos != -1) {
+            new_pos = target_pos;
+        }
+
+
         break;
     }
     case VimLineEditCommand::ToggleVisualCursor: {

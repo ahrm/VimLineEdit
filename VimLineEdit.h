@@ -78,6 +78,7 @@ enum class VimLineEditCommand{
     RepeatMacro,
     SearchTextUnderCursor,
     SearchTextUnderCursorBackward,
+    GotoMatchingBracket,
 };
 
 
