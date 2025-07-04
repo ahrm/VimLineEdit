@@ -255,8 +255,8 @@ private:
     int calculate_move_to_end_of_word(bool with_symbols) const;
     int calculate_move_word_backward(bool with_symbols) const;
 
-    int calculate_move_down();
-    int calculate_move_up();
+    int calculate_move_down(int old_pos);
+    int calculate_move_up(int old_pos);
 
     int calculate_move_down_on_screen();
     int calculate_move_up_on_screen();
@@ -275,6 +275,7 @@ private:
 
     int get_line_start_position(int cursor_pos);
     int get_line_end_position(int cursor_pos);
+    int get_ith_line_start_position(int i);
     void show_command_line_edit();
     void hide_command_line_edit();
     void perform_pending_text_command_with_text(QString text);

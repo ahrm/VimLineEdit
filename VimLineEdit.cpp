@@ -521,6 +521,12 @@ bool requires_symbol(VimLineEditCommand cmd) {
 }
 
 void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> symbol) {
+
+    // don't handle the 0 key while we are typing a repeat number
+    if (cmd == VimLineEditCommand::MoveToBeginningOfLine && current_command_repeat_number.size() > 1) {
+        return;
+    }
+
     int num_repeats = 1;
     if (current_command_repeat_number.size() > 0){
         bool ok;
@@ -571,10 +577,20 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
         new_pos = get_line_end_position(textCursor().position());
         break;
     case VimLineEditCommand::GotoBegin:
-        new_pos = get_line_start_position(0);
+        if (num_repeats <= 1){
+            new_pos = get_line_start_position(0);
+        }
+        else {
+            new_pos = get_ith_line_start_position(num_repeats - 1);
+        }
         break;
     case VimLineEditCommand::GotoEnd:
-        new_pos = get_line_end_position(current_state.text.length());
+        if (num_repeats <= 1){
+            new_pos = get_line_end_position(current_state.text.length());
+        }
+        else {
+            new_pos = get_ith_line_start_position(num_repeats - 1);
+        }
         break;
     case VimLineEditCommand::MoveToBeginningOfLine:{
         new_pos = get_line_start_position(textCursor().position());
@@ -642,21 +658,27 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
         set_cursor_position_with_line_selection(textCursor().position());
         break;
     case VimLineEditCommand::MoveLeft:
-        new_pos = textCursor().position() - 1;
+        new_pos = textCursor().position() - num_repeats;
         break;
     case VimLineEditCommand::MoveRight:
-        if (textCursor().position() < current_state.text.length()) {
-            new_pos = textCursor().position() + 1;
+        if ((textCursor().position() + num_repeats - 1) < current_state.text.length()) {
+            new_pos = textCursor().position() + num_repeats;
         }
         else {
             new_pos = current_state.text.length();
         }
         break;
     case VimLineEditCommand::MoveUp:
-        new_pos = calculate_move_up();
+        new_pos = textCursor().position();
+        for (int i = 0; i < num_repeats; i++) {
+            new_pos = calculate_move_up(new_pos);
+        }
         break;
     case VimLineEditCommand::MoveDown:
-        new_pos = calculate_move_down();
+        new_pos = textCursor().position();
+        for (int i = 0; i < num_repeats; i++) {
+            new_pos = calculate_move_down(new_pos);
+        }
         break;
     case VimLineEditCommand::MoveUpOnScreen:
         new_pos = calculate_move_up_on_screen();
@@ -1443,6 +1465,20 @@ int VimLineEdit::get_line_start_position(int cursor_pos) {
     return pos;
 }
 
+int VimLineEdit::get_ith_line_start_position(int i) {
+    const QString &text = toPlainText();
+    int line_start = 0;
+    for (int line = 0; line < i && line_start < text.length(); ++line) {
+        line_start = text.indexOf('\n', line_start);
+        if (line_start == -1) {
+            break;
+        }
+        line_start++;
+    }
+    return line_start;
+}
+
+
 int VimLineEdit::get_line_end_position(int cursor_pos) {
     const QString &text = toPlainText();
     int pos = cursor_pos;
@@ -1455,8 +1491,8 @@ int VimLineEdit::get_line_end_position(int cursor_pos) {
     return pos;
 }
 
-int VimLineEdit::calculate_move_up() {
-    int cursor_pos = textCursor().position();
+int VimLineEdit::calculate_move_up(int cursor_pos) {
+    // int cursor_pos = textCursor().position();
     const QString &text = toPlainText();
 
     int current_line_start = get_line_start_position(cursor_pos);
@@ -1480,8 +1516,8 @@ int VimLineEdit::calculate_move_up() {
     return prev_line_start + new_column;
 }
 
-int VimLineEdit::calculate_move_down() {
-    int cursor_pos = textCursor().position();
+int VimLineEdit::calculate_move_down(int cursor_pos) {
+    // int cursor_pos = textCursor().position();
     const QString &text = toPlainText();
 
     int current_line_start = get_line_start_position(cursor_pos);
