@@ -84,6 +84,8 @@ enum class VimLineEditCommand{
     Uppercasify,
     SwapCaseCharacterUnderCursor,
     SwapCaseSelection,
+    MoveToTheNextParagraph,
+    MoveToThePreviousParagraph,
 };
 
 

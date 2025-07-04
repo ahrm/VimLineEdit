@@ -321,6 +321,8 @@ void VimLineEdit::add_vim_keybindings() {
         KeyBinding{{KeyChord{"#", {}}}, VimLineEditCommand::SearchTextUnderCursorBackward},
         KeyBinding{{KeyChord{"%", {}}}, VimLineEditCommand::GotoMatchingBracket},
         KeyBinding{{KeyChord{"~", {}}}, VimLineEditCommand::SwapCaseCharacterUnderCursor},
+        KeyBinding{{KeyChord{"}", {}}}, VimLineEditCommand::MoveToTheNextParagraph},
+        KeyBinding{{KeyChord{"{", {}}}, VimLineEditCommand::MoveToThePreviousParagraph},
     };
 
     for (const auto &binding : key_bindings) {
@@ -528,7 +530,11 @@ QString to_string(VimLineEditCommand cmd) {
     case VimLineEditCommand::SwapCaseCharacterUnderCursor:
         return "SwapcaseCharacterUnderCursor";
     case VimLineEditCommand::SwapCaseSelection:
-        return "SwapCas";
+        return "SwapCaseSelection";
+    case VimLineEditCommand::MoveToTheNextParagraph:
+        return "MoveToTheNextParagraph";
+    case VimLineEditCommand::MoveToThePreviousParagraph:
+        return "MoveToThePreviousParagraph";
     default:
         return "Unknown";
     }
@@ -698,6 +704,26 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
     case VimLineEditCommand::MoveToEndOfLine:{
         new_pos = get_line_end_position(textCursor().position()) - 1;
         delete_pos_offset = 1;
+        break;
+    }
+    case VimLineEditCommand::MoveToTheNextParagraph:{
+        int next_paragraph_start = current_state.text.indexOf("\n\n", textCursor().position());
+        if (next_paragraph_start == -1) {
+            new_pos = current_state.text.length();
+        }
+        else {
+            new_pos = next_paragraph_start + 2;
+        }
+        break;
+    }
+    case VimLineEditCommand::MoveToThePreviousParagraph:{
+        int previous_paragraph_end = current_state.text.mid(0, textCursor().position()-1).lastIndexOf("\n\n");
+        if (previous_paragraph_end == -1 || previous_paragraph_end > textCursor().position()) {
+            new_pos = 0;
+        }
+        else {
+            new_pos = previous_paragraph_end + 2;
+        }
         break;
     }
     case VimLineEditCommand::InsertLastInsertModeText:{
@@ -2177,12 +2203,10 @@ QString swap_case(QString input){
 
 void VimLineEdit::handle_text_command(QString text){
     if (text == "w" || text == "wq" || text == "write"){
-        qDebug() << "emitting write";
         emit writeCommand();
     }
 
     if (text == "q" || text == "quit" || text == "wq"){
-        qDebug() << "emitting quit";
         emit quitCommand();
     }
 
