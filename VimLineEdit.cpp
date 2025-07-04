@@ -318,6 +318,7 @@ void VimLineEdit::add_vim_keybindings() {
         KeyBinding{{KeyChord{"q", {}}}, VimLineEditCommand::RecordMacro},
         KeyBinding{{KeyChord{"@", {}}}, VimLineEditCommand::RepeatMacro},
         KeyBinding{{KeyChord{"*", {}}}, VimLineEditCommand::SearchTextUnderCursor},
+        KeyBinding{{KeyChord{"#", {}}}, VimLineEditCommand::SearchTextUnderCursorBackward},
     };
 
     for (const auto &binding : key_bindings) {
@@ -514,6 +515,8 @@ std::string to_string(VimLineEditCommand cmd) {
         return "RepeatMacro";
     case VimLineEditCommand::SearchTextUnderCursor:
         return "SearchTextUnderCursor";
+    case VimLineEditCommand::SearchTextUnderCursorBackward:
+        return "SearchTextUnderCursorBackward";
     default:
         return "Unknown";
     }
@@ -617,14 +620,14 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
         }
         break;
     }
-    case VimLineEditCommand::SearchTextUnderCursor: {
+    case VimLineEditCommand::SearchTextUnderCursor:
+    case VimLineEditCommand::SearchTextUnderCursorBackward: {
         int begin, end;
         QString word_under_cursor = get_word_under_cursor_bounds(begin, end);
-        qDebug() << "Word under cursor: " << word_under_cursor;
 
         if (word_under_cursor.size() > 0){
             SearchState new_search_state;
-            new_search_state.direction = FindDirection::Forward;
+            new_search_state.direction = cmd == VimLineEditCommand::SearchTextUnderCursor ?  FindDirection::Forward : FindDirection::Backward;
             new_search_state.query = word_under_cursor;
             last_search_state = new_search_state;
             handle_search();
