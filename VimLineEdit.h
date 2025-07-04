@@ -12,6 +12,8 @@
 #include <QTextEdit>
 #include <QTextCursor>
 
+QString swap_case(QString input);
+
 enum class VimLineEditCommand{
     GotoBegin,
     GotoEnd,
@@ -80,7 +82,8 @@ enum class VimLineEditCommand{
     SearchTextUnderCursorBackward,
     GotoMatchingBracket,
     Uppercasify,
-    SwapcaseCharacterUnderCursor,
+    SwapCaseCharacterUnderCursor,
+    SwapCaseSelection,
 };
 
 

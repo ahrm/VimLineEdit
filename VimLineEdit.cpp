@@ -320,7 +320,7 @@ void VimLineEdit::add_vim_keybindings() {
         KeyBinding{{KeyChord{"*", {}}}, VimLineEditCommand::SearchTextUnderCursor},
         KeyBinding{{KeyChord{"#", {}}}, VimLineEditCommand::SearchTextUnderCursorBackward},
         KeyBinding{{KeyChord{"%", {}}}, VimLineEditCommand::GotoMatchingBracket},
-        KeyBinding{{KeyChord{"~", {}}}, VimLineEditCommand::SwapcaseCharacterUnderCursor},
+        KeyBinding{{KeyChord{"~", {}}}, VimLineEditCommand::SwapCaseCharacterUnderCursor},
     };
 
     for (const auto &binding : key_bindings) {
@@ -331,6 +331,7 @@ void VimLineEdit::add_vim_keybindings() {
     std::vector<KeyBinding> visual_mode_keybindings = {
         KeyBinding{{KeyChord{"o", {}}}, VimLineEditCommand::ToggleVisualCursor},
         KeyBinding{{KeyChord{"U", {}}}, VimLineEditCommand::Uppercasify},
+        KeyBinding{{KeyChord{"~", {}}}, VimLineEditCommand::SwapCaseSelection},
     };
 
     for (const auto &binding : visual_mode_keybindings) {
@@ -524,8 +525,10 @@ std::string to_string(VimLineEditCommand cmd) {
         return "GotoMatchingBracket";
     case VimLineEditCommand::Uppercasify:
         return "Uppercasify";
-    case VimLineEditCommand::SwapcaseCharacterUnderCursor:
+    case VimLineEditCommand::SwapCaseCharacterUnderCursor:
         return "SwapcaseCharacterUnderCursor";
+    case VimLineEditCommand::SwapCaseSelection:
+        return "SwapCas";
     default:
         return "Unknown";
     }
@@ -601,6 +604,17 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
         QString selection = get_current_selection(begin, end);
         if (selection.size() > 0){
             insert_text(selection.toUpper(), begin, end);
+        }
+        set_mode(VimMode::Normal);
+        set_cursor_position(begin);
+        break;
+
+    }
+    case VimLineEditCommand::SwapCaseSelection: {
+        int begin, end;
+        QString selection = get_current_selection(begin, end);
+        if (selection.size() > 0){
+            insert_text(swap_case(selection), begin, end);
         }
         set_mode(VimMode::Normal);
         set_cursor_position(begin);
@@ -1022,7 +1036,7 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
         handle_number_increment_decrement(cmd == VimLineEditCommand::IncrementNextNumberOnCurrentLine);
         break;
     }
-    case VimLineEditCommand::SwapcaseCharacterUnderCursor: {
+    case VimLineEditCommand::SwapCaseCharacterUnderCursor: {
         int cursor_pos = textCursor().position();
         if (cursor_pos < 0 || cursor_pos >= current_state.text.length()) {
             break;
@@ -2142,4 +2156,20 @@ QString VimLineEdit::get_current_selection(int &begin, int &end){
     }
 
     return "";
+}
+
+QString swap_case(QString input){
+    QString result;
+    result.reserve(input.size());
+    for (QChar ch : input) {
+        if (ch.isLower()) {
+            result.append(ch.toUpper());
+        } else if (ch.isUpper()) {
+            result.append(ch.toLower());
+        } else {
+            result.append(ch);
+        }
+    }
+    return result;
+
 }
