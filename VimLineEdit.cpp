@@ -1705,6 +1705,12 @@ void VimLineEdit::handle_search(bool reverse){
     if (action_waiting_for_motion.has_value()){
         handle_action_waiting_for_motion(current_pos, target_index, 0);
     }
+    else if (current_mode == VimMode::Visual) {
+        set_cursor_position_with_selection(target_index);
+    }
+    else if (current_mode == VimMode::VisualLine) {
+        set_cursor_position_with_line_selection(target_index);
+    }
 }
 
 EscapeLineEdit::EscapeLineEdit(QWidget *parent) : QLineEdit(parent) {
