@@ -62,8 +62,12 @@ VimLineEdit::VimLineEdit(QWidget *parent) : QTextEdit(parent) {
 void VimLineEdit::keyPressEvent(QKeyEvent *event) {
 
     if (event->key() == Qt::Key_Escape) {
+        add_event_to_current_macro(event);
         handle_command(VimLineEditCommand::EnterNormalMode, {});
         return;
+    }
+    if (current_mode != VimMode::Normal || (event->key() != Qt::Key_Q)){
+        add_event_to_current_macro(event);
     }
 
     if (current_mode == VimMode::Normal || current_mode == VimMode::Visual || current_mode == VimMode::VisualLine) {
@@ -309,8 +313,10 @@ void VimLineEdit::add_vim_keybindings() {
         KeyBinding{{KeyChord{"?", {}}}, VimLineEditCommand::ReverseSearchCommand},
         KeyBinding{{KeyChord{Qt::Key_A, CONTROL}}, VimLineEditCommand::IncrementNextNumberOnCurrentLine},
         KeyBinding{{KeyChord{Qt::Key_X, CONTROL}}, VimLineEditCommand::DecrementNextNumberOnCurrentLine},
-        KeyBinding{{KeyChord{"m", {}}}, VimLineEditCommand::SetMarkCommand},
-        KeyBinding{{KeyChord{"`", {}}}, VimLineEditCommand::GotoMarkCommand},
+        KeyBinding{{KeyChord{"m", {}}}, VimLineEditCommand::SetMark},
+        KeyBinding{{KeyChord{"`", {}}}, VimLineEditCommand::GotoMark},
+        KeyBinding{{KeyChord{"q", {}}}, VimLineEditCommand::RecordMacro},
+        KeyBinding{{KeyChord{"@", {}}}, VimLineEditCommand::RepeatMacro},
     };
 
     for (const auto &binding : key_bindings) {
@@ -497,24 +503,31 @@ std::string to_string(VimLineEditCommand cmd) {
         return "DecrementNextNumberOnCurrentLine";
     case VimLineEditCommand::InsertLastInsertModeText:
         return "InsertLastInsertModeText";
-    case VimLineEditCommand::SetMarkCommand:
-        return "SetMarkCommand";
-    case VimLineEditCommand::GotoMarkCommand:
-        return "GotoMarkCommand";
+    case VimLineEditCommand::SetMark:
+        return "SetMark";
+    case VimLineEditCommand::GotoMark:
+        return "GotoMark";
+    case VimLineEditCommand::RecordMacro:
+        return "RecordMacro";
+    case VimLineEditCommand::RepeatMacro:
+        return "RepeatMacro";
     default:
         return "Unknown";
     }
 }
 
-bool requires_symbol(VimLineEditCommand cmd) {
+bool VimLineEdit::requires_symbol(VimLineEditCommand cmd) {
     switch (cmd) {
     case VimLineEditCommand::FindForward:
     case VimLineEditCommand::FindBackward:
     case VimLineEditCommand::FindForwardTo:
     case VimLineEditCommand::FindBackwardTo:
-    case VimLineEditCommand::SetMarkCommand:
-    case VimLineEditCommand::GotoMarkCommand:
+    case VimLineEditCommand::SetMark:
+    case VimLineEditCommand::GotoMark:
+    case VimLineEditCommand::RepeatMacro:
         return true;
+    case VimLineEditCommand::RecordMacro:
+        return !current_macro.has_value();
     default:
         return false;
     }
@@ -572,6 +585,36 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
         set_mode(VimMode::Insert);
         new_pos = get_line_start_position(textCursor().position());
         break;
+    case VimLineEditCommand::RecordMacro:
+        if (current_macro.has_value()){
+            macros[current_macro->name] = std::move(current_macro.value());
+            current_macro = {};
+        }
+        else{
+            Macro new_macro;
+            new_macro.name = symbol.value();
+            current_macro = std::move(new_macro);
+        }
+        break;
+    case VimLineEditCommand::RepeatMacro: {
+        int macro_symbol = symbol.value();
+
+        if (symbol.value() == '@'){
+            macro_symbol = last_macro_symbol;
+        }
+
+        if (macros.find(macro_symbol) != macros.end()){
+            Macro& macro = macros[macro_symbol];
+            for (int j = 0; j < num_repeats; j++){
+                for (int i = 0; i < macro.events.size(); i++) {
+                    keyPressEvent(macro.events[i].get()->clone());
+                }
+            }
+            last_macro_symbol = macro_symbol;
+        }
+        break;
+    }
+
     case VimLineEditCommand::EnterInsertModeEndLine:
         set_mode(VimMode::Insert);
         new_pos = get_line_end_position(textCursor().position());
@@ -763,14 +806,14 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
         new_pos = calculate_find(last_find_state.value());
         break;
     }
-    case VimLineEditCommand::SetMarkCommand: {
+    case VimLineEditCommand::SetMark: {
         Mark mark;
         mark.name = symbol.value();
         mark.position = textCursor().position();
         marks[symbol.value()] = mark;
         break;
     }
-    case VimLineEditCommand::GotoMarkCommand: {
+    case VimLineEditCommand::GotoMark: {
         if (marks.find(symbol.value()) != marks.end()) {
             Mark mark = marks[symbol.value()];
             // move the cursor to the mark location
@@ -1940,4 +1983,11 @@ void VimLineEdit::insert_text(QString text, int left_index, int right_index){
     QString old_text = toPlainText();
     QString new_text = old_text.mid(0, left_index) + text + old_text.mid(right_index);
     setText(new_text);
+}
+
+void VimLineEdit::add_event_to_current_macro(QKeyEvent *event){
+    if (current_macro.has_value()) {
+        current_macro->events.push_back(std::unique_ptr<QKeyEvent>(event->clone()));
+    }
+
 }

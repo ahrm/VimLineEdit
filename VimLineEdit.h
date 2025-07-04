@@ -7,6 +7,7 @@
 #include <vector>
 #include <string>
 #include <deque>
+#include <memory>
 #include <unordered_map>
 #include <QTextEdit>
 #include <QTextCursor>
@@ -71,8 +72,10 @@ enum class VimLineEditCommand{
     IncrementNextNumberOnCurrentLine,
     DecrementNextNumberOnCurrentLine,
     InsertLastInsertModeText,
-    SetMarkCommand,
-    GotoMarkCommand,
+    SetMark,
+    GotoMark,
+    RecordMacro,
+    RepeatMacro,
 };
 
 
@@ -85,6 +88,11 @@ enum class ActionWaitingForMotionKind{
 
 struct Mark{
     int position;
+    int name;
+};
+
+struct Macro{
+    std::vector<std::unique_ptr<QKeyEvent>> events;
     int name;
 };
 
@@ -112,7 +120,6 @@ struct ActionWaitingForMotion{
 };
 
 std::string to_string(VimLineEditCommand cmd);
-bool requires_symbol(VimLineEditCommand cmd);
 
 struct KeyboardModifierState{
     bool shift = false;
@@ -229,6 +236,9 @@ private:
     QString current_command_repeat_number = "";
 
     std::unordered_map<int, Mark> marks;
+    std::unordered_map<int, Macro> macros;
+    std::optional<Macro> current_macro = {};
+    int last_macro_symbol = -1;
 
     std::optional<FindState> last_find_state = {};
     std::optional<SearchState> last_search_state = {};
@@ -286,6 +296,8 @@ private:
     void set_mode(VimMode mode);
     void remove_text(int begin, int num);
     void insert_text(QString text, int left_index, int right_index = -1);
+    bool requires_symbol(VimLineEditCommand cmd);
+    void add_event_to_current_macro(QKeyEvent* event);
 };
 
 #endif // VIMLINEEDIT_H
