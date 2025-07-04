@@ -683,6 +683,9 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
             visual_line_selection_begin = -1;
             visual_line_selection_end = -1;
         }
+        if (current_mode == VimMode::Visual){
+            setExtraSelections(QList<QTextEdit::ExtraSelection>());
+        }
 
         push_history(current_state);
         VimMode previous_mode = current_mode;
@@ -716,11 +719,8 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
     case VimLineEditCommand::EnterVisualMode: {
         set_mode(VimMode::Visual);
         visual_mode_anchor = textCursor().position();
-        // select the current character
-        QTextCursor cursor = textCursor();
-        cursor.setPosition(visual_mode_anchor);
-        cursor.movePosition(QTextCursor::Right, QTextCursor::KeepAnchor, 1);
-        setTextCursor(cursor);
+        set_visual_selection(visual_mode_anchor, 1);
+
         action_waiting_for_motion = {ActionWaitingForMotionKind::Visual, SurroundingScope::None, SurroundingKind::None};
 
         break;
@@ -1085,9 +1085,11 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
     if (action_waiting_for_motion.has_value() &&
         (action_waiting_for_motion->kind == ActionWaitingForMotionKind::Change || action_waiting_for_motion->kind == ActionWaitingForMotionKind::Delete) &&
         (current_mode == VimMode::Visual || current_mode == VimMode::VisualLine)){
-        QTextCursor cursor = textCursor();
+        // QTextCursor cursor = textCursor();
+        QTextCursor cursor = extraSelections().isEmpty() ? textCursor() : extraSelections().first().cursor;
 
         if (current_mode == VimMode::Visual) {
+            auto selections = extraSelections();
             set_last_deleted_text(cursor.selectedText());
             if (cmd !=  VimLineEditCommand::Yank) {
                 int start_pos = cursor.selectionStart();
@@ -1457,10 +1459,9 @@ bool VimLineEdit::handle_surrounding_motion_action() {
                 }
                 else if (action_waiting_for_motion->kind == ActionWaitingForMotionKind::Visual) {
                     QTextCursor cursor = textCursor();
-                    cursor.setPosition(start, QTextCursor::MoveAnchor);
-                    cursor.setPosition(end, QTextCursor::KeepAnchor);
                     visual_mode_anchor = start;
-                    setTextCursor(cursor);
+                    set_cursor_position(end - 1);
+                    set_visual_selection(start, end - start);
                 }
             }
             action_waiting_for_motion = {};
@@ -1568,8 +1569,10 @@ void VimLineEdit::set_cursor_position(int pos) {
 
 void VimLineEdit::set_cursor_position_with_selection(int pos) {
     QTextCursor cursor = textCursor();
-    cursor.setPosition(visual_mode_anchor, QTextCursor::MoveAnchor);
+    set_visual_selection(visual_mode_anchor, pos - visual_mode_anchor + 1);
+    // cursor.setPosition(visual_mode_anchor, QTextCursor::MoveAnchor);
     cursor.setPosition(pos, QTextCursor::KeepAnchor);
+
     setTextCursor(cursor);
 }
 
@@ -2066,4 +2069,20 @@ void VimLineEdit::add_event_to_current_macro(QKeyEvent *event){
         current_macro->events.push_back(std::unique_ptr<QKeyEvent>(event->clone()));
     }
 
+}
+
+void VimLineEdit::set_visual_selection(int begin, int length){
+    QTextCursor cursor = textCursor();
+    cursor.setPosition(begin);
+    cursor.movePosition(QTextCursor::Right, QTextCursor::KeepAnchor, length);
+
+    QTextEdit::ExtraSelection selection;
+    selection.cursor = cursor;
+
+    QColor selection_foreground_color = palette().color(QPalette::Text);
+    QColor selection_background_color = palette().color(QPalette::Highlight);
+    selection.format.setBackground(selection_background_color);
+    selection.format.setForeground(selection_foreground_color);
+
+    setExtraSelections({selection});
 }

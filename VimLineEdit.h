@@ -302,6 +302,7 @@ private:
     void insert_text(QString text, int left_index, int right_index = -1);
     bool requires_symbol(VimLineEditCommand cmd);
     void add_event_to_current_macro(QKeyEvent* event);
+    void set_visual_selection(int begin, int length);
 };
 
 #endif // VIMLINEEDIT_H
