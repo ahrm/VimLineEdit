@@ -320,6 +320,7 @@ void VimLineEdit::add_vim_keybindings() {
         KeyBinding{{KeyChord{"*", {}}}, VimLineEditCommand::SearchTextUnderCursor},
         KeyBinding{{KeyChord{"#", {}}}, VimLineEditCommand::SearchTextUnderCursorBackward},
         KeyBinding{{KeyChord{"%", {}}}, VimLineEditCommand::GotoMatchingBracket},
+        KeyBinding{{KeyChord{"~", {}}}, VimLineEditCommand::SwapcaseCharacterUnderCursor},
     };
 
     for (const auto &binding : key_bindings) {
@@ -523,6 +524,8 @@ std::string to_string(VimLineEditCommand cmd) {
         return "GotoMatchingBracket";
     case VimLineEditCommand::Uppercasify:
         return "Uppercasify";
+    case VimLineEditCommand::SwapcaseCharacterUnderCursor:
+        return "SwapcaseCharacterUnderCursor";
     default:
         return "Unknown";
     }
@@ -1017,6 +1020,28 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
     case VimLineEditCommand::IncrementNextNumberOnCurrentLine: {
         push_history(current_state);
         handle_number_increment_decrement(cmd == VimLineEditCommand::IncrementNextNumberOnCurrentLine);
+        break;
+    }
+    case VimLineEditCommand::SwapcaseCharacterUnderCursor: {
+        int cursor_pos = textCursor().position();
+        if (cursor_pos < 0 || cursor_pos >= current_state.text.length()) {
+            break;
+        }
+
+        QChar current_char = current_state.text[cursor_pos];
+        if (current_char.isLetter()) {
+            // Swap case of the character under the cursor
+            QString new_text = current_state.text;
+            if (current_char.isUpper()) {
+                new_text[cursor_pos] = current_char.toLower();
+            } else {
+                new_text[cursor_pos] = current_char.toUpper();
+            }
+            setPlainText(new_text);
+        }
+        if (cursor_pos < current_state.text.length()) {
+            new_pos = cursor_pos + 1;
+        }
         break;
     }
     case VimLineEditCommand::GotoMatchingBracket: {

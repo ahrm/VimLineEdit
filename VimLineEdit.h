@@ -80,6 +80,7 @@ enum class VimLineEditCommand{
     SearchTextUnderCursorBackward,
     GotoMatchingBracket,
     Uppercasify,
+    SwapcaseCharacterUnderCursor,
 };
 
 
