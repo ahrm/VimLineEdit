@@ -76,6 +76,7 @@ enum class VimLineEditCommand{
     GotoMark,
     RecordMacro,
     RepeatMacro,
+    SearchTextUnderCursor,
 };
 
 
@@ -253,6 +254,7 @@ public:
 
     void keyPressEvent(QKeyEvent *event) override;
 
+    QString get_word_under_cursor_bounds(int& start, int& end);
     void add_vim_keybindings();
     std::optional<VimLineEditCommand> handle_key_event(QString event_text, int key, Qt::KeyboardModifiers modifiers);
     void handle_command(VimLineEditCommand cmd, std::optional<char> symbol = {});
