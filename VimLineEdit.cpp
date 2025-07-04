@@ -889,8 +889,12 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
     case VimLineEditCommand::DeletePreviousWord: {
         QString current_text = current_state.text;
         int cursor_pos = textCursor().position();
-        int previous_space_index = current_text.lastIndexOf(' ', cursor_pos - 2);
-        int previous_non_space_index = current_text.lastIndexOf(QRegularExpression("\\S"), previous_space_index - 1);
+        int previous_space_index = current_text.lastIndexOf(' ', std::max<int>(cursor_pos - 2, 0));
+        int previous_non_space_index = current_text.lastIndexOf(QRegularExpression("\\S"), std::max(previous_space_index - 1, 0));
+
+        if (cursor_pos-1 == previous_non_space_index){
+            break;
+        }
 
         if (previous_space_index != -1){
             previous_space_index = previous_non_space_index != -1 ? previous_non_space_index + 1 : previous_space_index;
