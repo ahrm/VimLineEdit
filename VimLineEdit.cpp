@@ -1880,7 +1880,7 @@ void VimLineEdit::perform_pending_text_command_with_text(QString text){
     if (pending_text_command.has_value()){
         switch (pending_text_command.value()) {
         case VimLineEditCommand::CommandCommand: {
-            qDebug() << "performing command: " << text;
+            handle_text_command(text);
         }
         case VimLineEditCommand::ReverseSearchCommand:
         case VimLineEditCommand::SearchCommand: {
@@ -2173,4 +2173,20 @@ QString swap_case(QString input){
     }
     return result;
 
+}
+
+void VimLineEdit::handle_text_command(QString text){
+    if (text == "w" || text == "wq" || text == "write"){
+        qDebug() << "emitting write";
+        emit writeCommand();
+    }
+
+    if (text == "q" || text == "quit" || text == "wq"){
+        qDebug() << "emitting quit";
+        emit quitCommand();
+    }
+
+    else {
+        qDebug() << "Unknown command: " << text;
+    }
 }

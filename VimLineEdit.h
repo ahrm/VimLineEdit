@@ -309,6 +309,12 @@ private:
     void add_event_to_current_macro(QKeyEvent* event);
     void set_visual_selection(int begin, int length);
     QString get_current_selection(int& begin, int& end);
+    void handle_text_command(QString text);
+
+signals:
+    void quitCommand();
+    void writeCommand();
+
 };
 
 #endif // VIMLINEEDIT_H
