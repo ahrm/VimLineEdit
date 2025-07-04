@@ -389,7 +389,7 @@ std::optional<VimLineEditCommand> VimLineEdit::handle_key_event(QString event_te
     return {};
 }
 
-std::string to_string(VimLineEditCommand cmd) {
+QString to_string(VimLineEditCommand cmd) {
     switch (cmd) {
     case VimLineEditCommand::GotoBegin:
         return "GotoBegin";
@@ -1027,7 +1027,7 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
     case VimLineEditCommand::ReverseSearchCommand:
     case VimLineEditCommand::CommandCommand: {
         pending_text_command = cmd;
-        show_command_line_edit();
+        show_command_line_edit(to_string(cmd));
         break;
     }
     case VimLineEditCommand::DecrementNextNumberOnCurrentLine:
@@ -1863,8 +1863,9 @@ void VimLineEdit::resizeEvent(QResizeEvent *event) {
     QTextEdit::resizeEvent(event);
 }
 
-void VimLineEdit::show_command_line_edit(){
+void VimLineEdit::show_command_line_edit(QString placeholder_text){
     command_line_edit->setText("");
+    command_line_edit->setPlaceholderText(placeholder_text);
     command_line_edit->show();
     command_line_edit->setFocus();
 }

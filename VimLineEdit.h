@@ -127,7 +127,7 @@ struct ActionWaitingForMotion{
     SurroundingKind surrounding_kind = SurroundingKind::None;
 };
 
-std::string to_string(VimLineEditCommand cmd);
+QString to_string(VimLineEditCommand cmd);
 
 struct KeyboardModifierState{
     bool shift = false;
@@ -295,7 +295,7 @@ private:
     int get_line_start_position(int cursor_pos);
     int get_line_end_position(int cursor_pos);
     int get_ith_line_start_position(int i);
-    void show_command_line_edit();
+    void show_command_line_edit(QString placeholder_text = "");
     void hide_command_line_edit();
     void perform_pending_text_command_with_text(QString text);
     void handle_action_waiting_for_motion(int old_pos, int new_pos, int delete_pos_offset);
