@@ -617,6 +617,7 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
         }
 
         push_history(current_state);
+        VimMode previous_mode = current_mode;
         set_mode(VimMode::Normal);
 
         if (textCursor().position() <= 0) {
@@ -629,13 +630,15 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
         // In normal mode, cursor should be on a character, not between
         // characters Move cursor back by one position unless we're already at
         // the beginning of a line
-        bool is_at_beginning_of_line = (new_pos > 0 && current_state.text[new_pos - 1] == '\n');
-        if (textCursor().position() > 0) {
-            if (!is_at_beginning_of_line) {
-                new_pos = textCursor().position() - 1;
-            }
-            else {
-                new_pos = textCursor().position();
+        if (previous_mode == VimMode::Insert){
+            bool is_at_beginning_of_line = (new_pos > 0 && current_state.text[new_pos - 1] == '\n');
+            if (textCursor().position() > 0) {
+                if (!is_at_beginning_of_line) {
+                    new_pos = textCursor().position() - 1;
+                }
+                else {
+                    new_pos = textCursor().position();
+                }
             }
         }
         break;
@@ -648,6 +651,7 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
         cursor.setPosition(visual_mode_anchor);
         cursor.movePosition(QTextCursor::Right, QTextCursor::KeepAnchor, 1);
         setTextCursor(cursor);
+        action_waiting_for_motion = {ActionWaitingForMotionKind::Visual, SurroundingScope::None, SurroundingKind::None};
 
         break;
     }
@@ -964,7 +968,9 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
 
     // we we have a text selected in visual mode and then perform change or delete
     // we should use the selected text as the target of the change/delete
-    if (action_waiting_for_motion.has_value() && (current_mode == VimMode::Visual || current_mode == VimMode::VisualLine)){
+    if (action_waiting_for_motion.has_value() &&
+        (action_waiting_for_motion->kind == ActionWaitingForMotionKind::Change || action_waiting_for_motion->kind == ActionWaitingForMotionKind::Delete) &&
+        (current_mode == VimMode::Visual || current_mode == VimMode::VisualLine)){
         QTextCursor cursor = textCursor();
 
         if (current_mode == VimMode::Visual) {
@@ -1009,7 +1015,7 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
     }
 
     if (new_pos != -1) {
-        if (action_waiting_for_motion.has_value()) {
+        if (action_waiting_for_motion.has_value() && action_waiting_for_motion->kind != ActionWaitingForMotionKind::Visual) {
             handle_action_waiting_for_motion(old_pos, new_pos, delete_pos_offset);
         }
         else if (current_mode == VimMode::Visual) {
@@ -1308,6 +1314,17 @@ bool VimLineEdit::handle_surrounding_motion_action() {
                     if (action_waiting_for_motion->kind == ActionWaitingForMotionKind::Change) {
                         set_mode(VimMode::Insert);
                     }
+                }
+                else if (action_waiting_for_motion->kind == ActionWaitingForMotionKind::Yank) {
+                    set_last_deleted_text(current_text.mid(start, end - start));
+                }
+                else if (action_waiting_for_motion->kind == ActionWaitingForMotionKind::Visual) {
+                    QTextCursor cursor = textCursor();
+                    cursor.setPosition(start, QTextCursor::MoveAnchor);
+                    cursor.setPosition(end, QTextCursor::KeepAnchor);
+                    visual_line_selection_begin = start;
+                    visual_line_selection_end = end;
+                    setTextCursor(cursor);
                 }
             }
             action_waiting_for_motion = {};
