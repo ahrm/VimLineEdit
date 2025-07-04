@@ -1548,10 +1548,12 @@ bool VimLineEdit::handle_surrounding_motion_action() {
                 }
                 else if (action_waiting_for_motion->kind == ActionWaitingForMotionKind::Visual) {
                     QTextCursor cursor = textCursor();
-                    cursor.setPosition(start, QTextCursor::MoveAnchor);
-                    cursor.setPosition(end, QTextCursor::KeepAnchor);
+                    // cursor.setPosition(start, QTextCursor::MoveAnchor);
+                    // cursor.setPosition(end, QTextCursor::KeepAnchor);
                     visual_mode_anchor = start;
-                    setTextCursor(cursor);
+                    set_cursor_position(end - 1);
+                    set_visual_selection(start, end - start);
+                    // setTextCursor(cursor);
                 }
             }
             action_waiting_for_motion = {};
