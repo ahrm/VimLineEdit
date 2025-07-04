@@ -613,7 +613,9 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
             Macro& macro = macros[macro_symbol];
             for (int j = 0; j < num_repeats; j++){
                 for (int i = 0; i < macro.events.size(); i++) {
-                    keyPressEvent(macro.events[i].get()->clone());
+                    auto clone = macro.events[i].get()->clone();
+                    keyPressEvent(clone);
+                    delete clone;
                 }
             }
             last_macro_symbol = macro_symbol;
@@ -632,7 +634,6 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
             last_search_state = new_search_state;
             handle_search();
         }
-        // QString word_under_c
         break;
     }
 
