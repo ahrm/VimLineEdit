@@ -1571,7 +1571,11 @@ void VimLineEdit::set_cursor_position(int pos) {
 
 void VimLineEdit::set_cursor_position_with_selection(int pos) {
     QTextCursor cursor = textCursor();
-    set_visual_selection(visual_mode_anchor, pos - visual_mode_anchor + 1);
+    
+    int selection_min = std::min<int> (visual_mode_anchor, pos);
+    int selection_max = std::max<int> (visual_mode_anchor, pos);
+
+    set_visual_selection(selection_min, selection_max - selection_min + 1);
     // cursor.setPosition(visual_mode_anchor, QTextCursor::MoveAnchor);
     cursor.setPosition(pos, QTextCursor::KeepAnchor);
 
