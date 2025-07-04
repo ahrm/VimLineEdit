@@ -695,6 +695,8 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
             new_pos = textCursor().position();
         }
 
+        action_waiting_for_motion = {};
+
         // In normal mode, cursor should be on a character, not between
         // characters Move cursor back by one position unless we're already at
         // the beginning of a line
