@@ -221,7 +221,61 @@ struct LastDeletedTextState {
     bool is_line = false;
 };
 
-class VimLineEdit : public QTextEdit
+class TextInputAdapter{
+    public:
+    virtual QString get_text() const = 0;
+    virtual void set_text(QString text) = 0;
+    virtual void set_cursor_width(int width) = 0;
+    virtual void set_extra_selections(const QList<QTextEdit::ExtraSelection>& selections) = 0;
+    virtual QList<QTextEdit::ExtraSelection> get_extra_selections() const = 0;
+    virtual QString get_current_selection(int& begin, int& end) const = 0;
+    virtual int get_cursor_position() const = 0;
+    virtual void set_cursor_position(int pos) = 0;
+    virtual void set_visual_selection(int begin, int length) = 0;
+    virtual void set_cursor_position_with_selection(int pos, int anchor) = 0;
+    virtual QTextDocument* get_document() = 0;
+};
+
+class QLineEditAdapter : public TextInputAdapter{
+private:
+public:
+    QLineEdit* line_edit;
+    QLineEditAdapter(QLineEdit* line_edit);
+    QString get_text() const override;
+    void set_text(QString text) override;
+    void set_cursor_width(int width) override;
+    virtual void set_extra_selections(const QList<QTextEdit::ExtraSelection>& selections) override;
+    virtual QList<QTextEdit::ExtraSelection> get_extra_selections() const override;
+    virtual void set_cursor_position(int pos) override;
+    virtual int get_cursor_position() const override;
+    virtual void set_visual_selection(int begin, int length) override;
+    virtual void set_cursor_position_with_selection(int pos, int anchor) override;
+    virtual QString get_current_selection(int& begin, int& end) const override;
+    virtual QTextDocument* get_document() override;
+};
+
+class QTextEditAdapter : public TextInputAdapter{
+private:
+public:
+    QTextEdit* text_edit;
+    QTextEditAdapter(QTextEdit* text_edit);
+    QString get_text() const override;
+    void set_text(QString text) override;
+    void set_cursor_width(int width) override;
+    virtual void set_extra_selections(const QList<QTextEdit::ExtraSelection>& selections) override;
+    virtual QList<QTextEdit::ExtraSelection> get_extra_selections() const override;
+    virtual void set_cursor_position(int pos) override;
+    virtual int get_cursor_position() const override;
+    virtual void set_visual_selection(int begin, int length) override;
+    virtual void set_cursor_position_with_selection(int pos, int anchor) override;
+    virtual QString get_current_selection(int& begin, int& end) const override;
+    virtual QTextDocument* get_document() override;
+};
+
+// using BaseClass = QLineEdit;
+using BaseClass = QTextEdit;
+
+class VimLineEdit : public BaseClass
 {
     Q_OBJECT
 
@@ -259,6 +313,7 @@ private:
     void set_style_for_mode(VimMode mode);
 
 public:
+    TextInputAdapter* adapter = nullptr;
     explicit VimLineEdit(QWidget *parent = nullptr);
 
     void keyPressEvent(QKeyEvent *event) override;

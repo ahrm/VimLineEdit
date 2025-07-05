@@ -32,7 +32,15 @@ class LineEditStyle : public QCommonStyle {
     }
 };
 
-VimLineEdit::VimLineEdit(QWidget *parent) : QTextEdit(parent) {
+VimLineEdit::VimLineEdit(QWidget *parent) : BaseClass(parent) {
+
+    if (dynamic_cast<QLineEdit*>(this)){
+        adapter = new QLineEditAdapter(dynamic_cast<QLineEdit*>(this));
+    }
+    else{
+        adapter = new QTextEditAdapter(dynamic_cast<QTextEdit*>(this));
+    }
+
     QFont font = this->font();
     font.setFamily("Courier New");
     font.setStyleHint(QFont::TypeWriter);
@@ -212,25 +220,28 @@ void VimLineEdit::keyPressEvent(QKeyEvent *event) {
         }
     }
 
-    QTextEdit::keyPressEvent(event);
+    BaseClass::keyPressEvent(event);
 }
 
 void VimLineEdit::set_style_for_mode(VimMode mode) {
     if (mode == VimMode::Normal) {
         // setStyleSheet("background-color: lightgray;");
         int font_width = fontMetrics().horizontalAdvance(" ");
-        setCursorWidth(font_width);
+        adapter->set_cursor_width(font_width);
+        // setCursorWidth(font_width);
         // setStyle(new LineEditStyle(font_width));
     }
     else if (mode == VimMode::Insert) {
         // setStyleSheet("background-color: white;");
-        setCursorWidth(1);
+        // setCursorWidth(1);
+        adapter->set_cursor_width(1);
         // setStyle(new LineEditStyle(1));
     }
     else if (mode == VimMode::Visual || mode == VimMode::VisualLine) {
         // setStyleSheet("background-color: pink;");
         int font_width = fontMetrics().horizontalAdvance(" ");
-        setCursorWidth(font_width);
+        // setCursorWidth(font_width);
+        adapter->set_cursor_width(font_width);
         // setStyle(new LineEditStyle(font_width));
     }
 }
@@ -591,7 +602,7 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
     int delete_pos_offset = 0;
 
     HistoryState current_state;
-    current_state.text = toPlainText();
+    current_state.text = adapter->get_text();
     current_state.cursor_position = old_pos;
     current_state.marks = marks;
 
@@ -745,12 +756,12 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
     }
     case VimLineEditCommand::EnterNormalMode: {
         if (visual_line_selection_begin != -1){
-            setExtraSelections(QList<QTextEdit::ExtraSelection>());
+            adapter->set_extra_selections(QList<QTextEdit::ExtraSelection>());
             visual_line_selection_begin = -1;
             visual_line_selection_end = -1;
         }
         if (current_mode == VimMode::Visual){
-            setExtraSelections(QList<QTextEdit::ExtraSelection>());
+            adapter->set_extra_selections(QList<QTextEdit::ExtraSelection>());
         }
 
         push_history(current_state);
@@ -1095,7 +1106,7 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
             } else {
                 new_text[cursor_pos] = current_char.toUpper();
             }
-            setPlainText(new_text);
+            adapter->set_text(new_text);
         }
         if (cursor_pos < current_state.text.length()) {
             new_pos = cursor_pos + 1;
@@ -1186,7 +1197,7 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
         QString selected_text = get_current_selection(selection_begin, selection_end);
 
         if (current_mode == VimMode::Visual) {
-            auto selections = extraSelections();
+            auto selections = adapter->get_extra_selections();
             set_last_deleted_text(selected_text);
             if (cmd !=  VimLineEditCommand::Yank) {
                 // int start_pos = cursor.selectionStart();
@@ -1216,7 +1227,7 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
 
         if (action_waiting_for_motion->kind == ActionWaitingForMotionKind::Delete || action_waiting_for_motion->kind == ActionWaitingForMotionKind::Yank) {
             set_mode(VimMode::Normal);
-            setExtraSelections({});
+            adapter->set_extra_selections({});
         }
 
         action_waiting_for_motion = {};
@@ -1250,19 +1261,20 @@ int VimLineEdit::calculate_find(FindState find_state, bool reverse) const {
         reverse ? (find_state.direction == FindDirection::Forward ? FindDirection::Backward
                                                                   : FindDirection::Forward)
                 : find_state.direction;
+    QString text = adapter->get_text();
     switch (direction) {
     case FindDirection::Forward:
-        location = toPlainText().indexOf(QChar(find_state.character.value_or(' ')),
+        location = text.indexOf(QChar(find_state.character.value_or(' ')),
                                          get_cursor_position() + 2);
         break;
     case FindDirection::Backward:
         if (get_cursor_position() == 0)
             return get_cursor_position();
-        location = toPlainText().lastIndexOf(QChar(find_state.character.value_or(' ')),
+        location = text.lastIndexOf(QChar(find_state.character.value_or(' ')),
                                              get_cursor_position() - 1);
         break;
     case FindDirection::ForwardTo:
-        location = toPlainText().indexOf(QChar(find_state.character.value_or(' ')),
+        location = text.indexOf(QChar(find_state.character.value_or(' ')),
                                          get_cursor_position() + 2);
         if (location != -1) {
             location--;
@@ -1271,7 +1283,7 @@ int VimLineEdit::calculate_find(FindState find_state, bool reverse) const {
     case FindDirection::BackwardTo:
         if (get_cursor_position() == 0)
             return get_cursor_position();
-        location = toPlainText().lastIndexOf(QChar(find_state.character.value_or(' ')),
+        location = text.lastIndexOf(QChar(find_state.character.value_or(' ')),
                                              get_cursor_position() - 1);
         if (location != -1) {
             location++;
@@ -1287,7 +1299,7 @@ int VimLineEdit::calculate_find(FindState find_state, bool reverse) const {
 
 int VimLineEdit::calculate_move_word_forward(bool with_symbols) const {
     int pos = get_cursor_position();
-    const QString &t = toPlainText();
+    const QString t = adapter->get_text();
     int len = t.length();
 
     if (pos >= len - 1) {
@@ -1323,7 +1335,7 @@ int VimLineEdit::calculate_move_word_forward(bool with_symbols) const {
 
 int VimLineEdit::calculate_move_to_end_of_word(bool with_symbols) const {
     int pos = get_cursor_position();
-    const QString &t = toPlainText();
+    const QString t = adapter->get_text();
     int len = t.length();
 
     if (pos >= len - 1) {
@@ -1373,7 +1385,7 @@ int VimLineEdit::calculate_move_to_end_of_word(bool with_symbols) const {
 
 int VimLineEdit::calculate_move_word_backward(bool with_symbols) const {
     int pos = get_cursor_position();
-    const QString &t = toPlainText();
+    const QString t = adapter->get_text();
 
     if (pos <= 0) {
         return pos;
@@ -1403,7 +1415,7 @@ int VimLineEdit::calculate_move_word_backward(bool with_symbols) const {
 
 void VimLineEdit::delete_char(bool is_single) {
     int current_pos = get_cursor_position();
-    QString current_text = toPlainText();
+    QString current_text = adapter->get_text();
     if (current_pos <= current_text.length()) {
         if (current_pos == current_text.length() || current_text[current_pos] == '\n') {
             if (!is_single){
@@ -1494,7 +1506,7 @@ KeyboardModifierState KeyboardModifierState::from_qt_modifiers(Qt::KeyboardModif
 QString VimLineEdit::get_word_under_cursor_bounds(int &start, int &end){
     // Handle surrounding word action
     int cursor_pos = get_cursor_position();
-    QString current_text = toPlainText();
+    QString current_text = adapter->get_text();
 
     // If cursor is not on a word character, don't do anything
     if (cursor_pos >= current_text.length() ||
@@ -1594,7 +1606,7 @@ bool VimLineEdit::handle_surrounding_motion_action() {
             }
 
             int cursor_pos = get_cursor_position();
-            QString current_text = toPlainText();
+            QString current_text = adapter->get_text();
             int start = cursor_pos;
             int end = cursor_pos;
             bool found_begin = false;
@@ -1656,26 +1668,20 @@ bool VimLineEdit::handle_surrounding_motion_action() {
 }
 
 void VimLineEdit::set_cursor_position(int pos) {
-    QTextCursor cursor = textCursor();
-    cursor.setPosition(pos);
-    setTextCursor(cursor);
+    adapter->set_cursor_position(pos);
 }
 
 void VimLineEdit::set_cursor_position_with_selection(int pos) {
-    QTextCursor cursor = textCursor();
-    
-    int selection_min = std::min<int> (visual_mode_anchor, pos);
-    int selection_max = std::max<int> (visual_mode_anchor, pos);
-
-    set_visual_selection(selection_min, selection_max - selection_min + 1);
-    // cursor.setPosition(visual_mode_anchor, QTextCursor::MoveAnchor);
-    cursor.setPosition(pos, QTextCursor::KeepAnchor);
-
-    setTextCursor(cursor);
+    adapter->set_cursor_position_with_selection(pos, visual_mode_anchor);
 }
 
 void VimLineEdit::set_cursor_position_with_line_selection(int pos) {
-    QTextCursor cursor = textCursor();
+    if (!dynamic_cast<QTextEditAdapter*>(adapter)){
+        return;
+    }
+    QTextEditAdapter *text_adapter = static_cast<QTextEditAdapter*>(adapter);
+    QTextCursor cursor = text_adapter->text_edit->textCursor();
+    int current_cursor_pos = get_cursor_position();
     
     // Get line boundaries for both anchor and current position
     int anchor_line_start = get_line_start_position(visual_mode_anchor);
@@ -1696,7 +1702,7 @@ void VimLineEdit::set_cursor_position_with_line_selection(int pos) {
     }
     
     // Include the newline character if it exists (except for the last line)
-    const QString &text = toPlainText();
+    const QString &text = adapter->get_text();
     if (selection_end < text.length() && text[selection_end] == '\n') {
         selection_end++;
     }
@@ -1715,12 +1721,12 @@ void VimLineEdit::set_cursor_position_with_line_selection(int pos) {
     selection.format.setBackground(selection_background_color);
     selection.format.setForeground(selection_foreground_color);
 
-    setExtraSelections({selection});
+    adapter->set_extra_selections({selection});
     set_cursor_position(pos);
 }
 
 int VimLineEdit::get_line_start_position(int cursor_pos) {
-    const QString &text = toPlainText();
+    const QString text = adapter->get_text();
     int pos = cursor_pos;
     pos = std::min<int>(pos, text.size());
 
@@ -1732,7 +1738,7 @@ int VimLineEdit::get_line_start_position(int cursor_pos) {
 }
 
 int VimLineEdit::get_ith_line_start_position(int i) {
-    const QString &text = toPlainText();
+    const QString text = adapter->get_text();
     int line_start = 0;
     for (int line = 0; line < i && line_start < text.length(); ++line) {
         line_start = text.indexOf('\n', line_start);
@@ -1746,7 +1752,7 @@ int VimLineEdit::get_ith_line_start_position(int i) {
 
 
 int VimLineEdit::get_line_end_position(int cursor_pos) {
-    const QString &text = toPlainText();
+    const QString text = adapter->get_text();
     int pos = cursor_pos;
     int length = text.length();
 
@@ -1758,7 +1764,7 @@ int VimLineEdit::get_line_end_position(int cursor_pos) {
 }
 
 int VimLineEdit::calculate_move_up(int cursor_pos) {
-    const QString &text = toPlainText();
+    const QString text = adapter->get_text();
 
     int current_line_start = get_line_start_position(cursor_pos);
     int column_offset = cursor_pos - current_line_start;
@@ -1782,7 +1788,7 @@ int VimLineEdit::calculate_move_up(int cursor_pos) {
 }
 
 int VimLineEdit::calculate_move_down(int cursor_pos) {
-    const QString &text = toPlainText();
+    const QString &text = adapter->get_text();
 
     int current_line_start = get_line_start_position(cursor_pos);
     int column_offset = cursor_pos - current_line_start;
@@ -1821,7 +1827,12 @@ int VimLineEdit::calculate_move_on_screen(int direction) {
     int current_pos = get_cursor_position();
 
     // Use the document's text layout directly
-    QTextDocument *doc = document();
+    QTextDocument *doc = adapter->get_document();
+
+    if (doc == nullptr) {
+        return 0;
+    }
+
     QTextBlock current_block = doc->findBlock(current_pos);
 
     if (!current_block.isValid()) {
@@ -1896,7 +1907,7 @@ void VimLineEdit::resizeEvent(QResizeEvent *event) {
     // move the command line edit to the bottom
     command_line_edit->resize(event->size().width(), command_line_edit->height());
     command_line_edit->move(0, height() - command_line_edit->height());
-    QTextEdit::resizeEvent(event);
+    BaseClass::resizeEvent(event);
 }
 
 void VimLineEdit::show_command_line_edit(QString placeholder_text){
@@ -1934,7 +1945,7 @@ void VimLineEdit::perform_pending_text_command_with_text(QString text){
 
 void VimLineEdit::handle_action_waiting_for_motion(int old_pos, int new_pos, int delete_pos_offset){
     if (action_waiting_for_motion.has_value()) {
-        QString current_text = toPlainText();
+        QString current_text = adapter->get_text();
         if (action_waiting_for_motion.value().kind == ActionWaitingForMotionKind::Delete ||
             action_waiting_for_motion.value().kind == ActionWaitingForMotionKind::Change) {
             // delete from old_pos to new_pos
@@ -1964,7 +1975,7 @@ void VimLineEdit::handle_search(bool reverse){
         return;
     }
 
-    QString document_text = toPlainText().toLower();
+    QString document_text = adapter->get_text().toLower();
     QString text = last_search_state->query.value().toLower();
 
     int from = 0;
@@ -2047,7 +2058,7 @@ void VimLineEdit::set_last_deleted_text(QString text, bool is_line){
 }
 
 void VimLineEdit::handle_number_increment_decrement(bool increment) {
-    QString current_text = toPlainText();
+    QString current_text = adapter->get_text();
     int cursor_pos = get_cursor_position();
 
     // Get current line boundaries
@@ -2155,7 +2166,7 @@ void VimLineEdit::insert_text(QString text, int left_index, int right_index){
         }
     }
 
-    QString old_text = toPlainText();
+    QString old_text = adapter->get_text();
     QString new_text = old_text.mid(0, left_index) + text + old_text.mid(right_index);
     setText(new_text);
 }
@@ -2168,27 +2179,11 @@ void VimLineEdit::add_event_to_current_macro(QKeyEvent *event){
 }
 
 void VimLineEdit::set_visual_selection(int begin, int length){
-    QTextCursor cursor = textCursor();
-    cursor.setPosition(begin);
-    cursor.movePosition(QTextCursor::Right, QTextCursor::KeepAnchor, length);
-
-    QTextEdit::ExtraSelection selection;
-    selection.cursor = cursor;
-
-    QColor selection_foreground_color = palette().color(QPalette::Text);
-    QColor selection_background_color = palette().color(QPalette::Highlight);
-    selection.format.setBackground(selection_background_color);
-    selection.format.setForeground(selection_foreground_color);
-
-    setExtraSelections({selection});
+    adapter->set_visual_selection(begin, length);
 }
 
 QString VimLineEdit::get_current_selection(int &begin, int &end){
-    QTextCursor cursor = extraSelections().isEmpty() ? textCursor() : extraSelections().first().cursor;
-    begin = cursor.selectionStart();
-    end = cursor.selectionEnd();
-    QString text_result = cursor.selectedText();
-    return text_result;
+    return adapter->get_current_selection(begin, end);
 }
 
 QString swap_case(QString input){
@@ -2222,6 +2217,131 @@ void VimLineEdit::handle_text_command(QString text){
 }
 
 int VimLineEdit::get_cursor_position() const {
-    return textCursor().position();
+    return adapter->get_cursor_position();
+}
 
+QLineEditAdapter::QLineEditAdapter(QLineEdit *line_edit) : line_edit(line_edit) {
+}
+
+QString QLineEditAdapter::get_text() const {
+    return line_edit->text();
+}
+
+QTextEditAdapter::QTextEditAdapter(QTextEdit* text_edit) : text_edit(text_edit) {
+
+}
+
+QString QTextEditAdapter::get_text() const {
+    return text_edit->toPlainText();
+}
+
+void QLineEditAdapter::set_cursor_width(int width) {
+    line_edit->setStyle(new LineEditStyle(width));
+}
+
+void QTextEditAdapter::set_cursor_width(int width) {
+    text_edit->setCursorWidth(width);
+}
+
+void QTextEditAdapter::set_extra_selections(const QList<QTextEdit::ExtraSelection> &selections) {
+    text_edit->setExtraSelections(selections);
+
+}
+
+void QLineEditAdapter::set_extra_selections(const QList<QTextEdit::ExtraSelection> &selections) {
+}
+
+void QTextEditAdapter::set_text(QString text) {
+    text_edit->setPlainText(text);
+}
+
+void QLineEditAdapter::set_text(QString text) {
+    line_edit->setText(text);
+}
+
+QList<QTextEdit::ExtraSelection> QTextEditAdapter::get_extra_selections() const {
+    return text_edit->extraSelections();
+}
+
+QList<QTextEdit::ExtraSelection> QLineEditAdapter::get_extra_selections() const {
+    return {};
+}
+
+void QTextEditAdapter::set_cursor_position(int pos) {
+    QTextCursor cursor = text_edit->textCursor();
+    cursor.setPosition(pos);
+    text_edit->setTextCursor(cursor);
+}
+
+void QLineEditAdapter::set_cursor_position(int pos) {
+    line_edit->setCursorPosition(pos);
+}
+
+void QTextEditAdapter::set_visual_selection(int begin, int length) {
+    QTextCursor cursor = text_edit->textCursor();
+    cursor.setPosition(begin);
+    cursor.movePosition(QTextCursor::Right, QTextCursor::KeepAnchor, length);
+
+    QTextEdit::ExtraSelection selection;
+    selection.cursor = cursor;
+
+    QColor selection_foreground_color = text_edit->palette().color(QPalette::Text);
+    QColor selection_background_color = text_edit->palette().color(QPalette::Highlight);
+    selection.format.setBackground(selection_background_color);
+    selection.format.setForeground(selection_foreground_color);
+
+    text_edit->setExtraSelections({selection});
+}
+
+void QLineEditAdapter::set_visual_selection(int begin, int length) {
+    line_edit->setSelection(begin, length);
+}
+
+void QTextEditAdapter::set_cursor_position_with_selection(int pos, int anchor) {
+
+    QTextCursor cursor = text_edit->textCursor();
+    
+    int selection_min = std::min<int> (anchor, pos);
+    int selection_max = std::max<int> (anchor, pos);
+
+    set_visual_selection(selection_min, selection_max - selection_min + 1);
+    cursor.setPosition(pos, QTextCursor::KeepAnchor);
+
+    text_edit->setTextCursor(cursor);
+}
+
+void QLineEditAdapter::set_cursor_position_with_selection(int pos, int anchor) {
+    int start = std::min<int>(pos, anchor);
+    int end = std::max<int>(pos, anchor);
+    line_edit->setSelection(start, end - start);
+}
+
+int QTextEditAdapter::get_cursor_position() const {
+    QTextCursor cursor = text_edit->textCursor();
+    return cursor.position();
+}
+
+int QLineEditAdapter::get_cursor_position() const {
+    return line_edit->cursorPosition();
+}
+
+QString QLineEditAdapter::get_current_selection(int &begin, int &end) const {
+    begin = line_edit->selectionStart();
+    end = line_edit->selectionEnd();
+    return line_edit->selectedText();
+}
+
+QString QTextEditAdapter::get_current_selection(int &begin, int &end) const {
+    QTextCursor cursor = text_edit->extraSelections().isEmpty() ? text_edit->textCursor() : text_edit->extraSelections().first().cursor;
+    begin = cursor.selectionStart();
+    end = cursor.selectionEnd();
+    return cursor.selectedText();
+}
+
+QTextDocument* QTextEditAdapter::get_document() {
+    return text_edit->document();
+}
+
+QTextDocument* QLineEditAdapter::get_document() {
+    return nullptr;
 }

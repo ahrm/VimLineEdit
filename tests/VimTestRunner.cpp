@@ -209,7 +209,7 @@ int main(int argc, char *argv[]) {
 
         simulate_keystrokes(&line_edit, keystrokes);
 
-        QString actual_output = line_edit.toPlainText();
+        QString actual_output = line_edit.adapter->get_text();
 
         if (actual_output.trimmed() == expected_output.trimmed()) {
             std::cout << "PASS: " << test_name.toStdString() << std::endl;
