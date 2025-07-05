@@ -12,9 +12,10 @@
 #include <QTextEdit>
 #include <QTextCursor>
 
+namespace QVimEditor {
 QString swap_case(QString input);
 
-enum class VimLineEditCommand{
+enum class VimLineEditCommand {
     GotoBegin,
     GotoEnd,
     EnterInsertMode,
@@ -88,31 +89,30 @@ enum class VimLineEditCommand{
     MoveToThePreviousParagraph,
 };
 
-
-enum class ActionWaitingForMotionKind{
+enum class ActionWaitingForMotionKind {
     Delete,
     Change,
     Yank,
     Visual,
 };
 
-struct Mark{
+struct Mark {
     int position;
     int name;
 };
 
-struct Macro{
+struct Macro {
     std::vector<std::unique_ptr<QKeyEvent>> events;
     int name;
 };
 
-enum class SurroundingScope{
+enum class SurroundingScope {
     None,
     Around,
     Inside,
 };
 
-enum class SurroundingKind{
+enum class SurroundingKind {
     None,
     Parentheses,
     Brackets,
@@ -123,7 +123,7 @@ enum class SurroundingKind{
     Word,
 };
 
-struct ActionWaitingForMotion{
+struct ActionWaitingForMotion {
     ActionWaitingForMotionKind kind;
     SurroundingScope surrounding_scope = SurroundingScope::None;
     SurroundingKind surrounding_kind = SurroundingKind::None;
@@ -131,7 +131,7 @@ struct ActionWaitingForMotion{
 
 QString to_string(VimLineEditCommand cmd);
 
-struct KeyboardModifierState{
+struct KeyboardModifierState {
     bool shift = false;
     bool control = false;
     bool command = false;
@@ -140,79 +140,74 @@ struct KeyboardModifierState{
     static KeyboardModifierState from_qt_modifiers(Qt::KeyboardModifiers modifiers);
 };
 
-struct KeyChord{
+struct KeyChord {
     std::variant<int, QString> key = -1;
     KeyboardModifierState modifiers;
 };
 
-
-bool equal_with_shift(const KeyboardModifierState& lhs, const KeyboardModifierState& rhs);
+bool equal_with_shift(const KeyboardModifierState &lhs, const KeyboardModifierState &rhs);
 bool equal_withotu_shift(const KeyboardModifierState &lhs, const KeyboardModifierState &rhs);
 
-struct KeyBinding{
+struct KeyBinding {
     std::vector<KeyChord> key_chords;
     VimLineEditCommand command;
 };
 
-struct InputTreeNode{
+struct InputTreeNode {
     KeyChord key_chord;
     std::vector<InputTreeNode> children;
     std::optional<VimLineEditCommand> command;
 
-    void add_keybinding(const std::vector<KeyChord>& key_chords, int index, VimLineEditCommand cmd);
+    void add_keybinding(const std::vector<KeyChord> &key_chords, int index, VimLineEditCommand cmd);
 
     InputTreeNode clone() const;
-
 };
 
-
-enum class VimMode{
+enum class VimMode {
     Normal,
     Insert,
     Visual,
     VisualLine,
 };
 
-enum class FindDirection{
+enum class FindDirection {
     Forward,
     Backward,
     ForwardTo,
     BackwardTo,
 };
 
-struct FindState{
+struct FindState {
     FindDirection direction;
     std::optional<char> character;
 };
 
-struct SearchState{
+struct SearchState {
     FindDirection direction;
     std::optional<QString> query;
 };
 
-struct HistoryState{
+struct HistoryState {
     QString text;
     int cursor_position;
     std::unordered_map<int, Mark> marks;
 };
 
-struct History{
+struct History {
     std::deque<HistoryState> states;
     int current_index = -1;
-
 };
 
 // same as QLineEdit but fires a signal when the escape key is pressed
-class EscapeLineEdit : public QLineEdit
-{
+class EscapeLineEdit : public QLineEdit {
     Q_OBJECT
-    public:
-        EscapeLineEdit(QWidget *parent = nullptr);
+  public:
+    EscapeLineEdit(QWidget *parent = nullptr);
 
-protected:
+  protected:
     void keyPressEvent(QKeyEvent *event) override;
 
-signals:
+  signals:
     void escapePressed();
 };
 
@@ -221,76 +216,75 @@ struct LastDeletedTextState {
     bool is_line = false;
 };
 
-class TextInputAdapter{
-    public:
+class TextInputAdapter {
+  public:
     virtual QString get_text() const = 0;
     virtual void set_text(QString text) = 0;
     virtual void set_cursor_width(int width) = 0;
-    virtual void set_extra_selections(const QList<QTextEdit::ExtraSelection>& selections) = 0;
+    virtual void set_extra_selections(const QList<QTextEdit::ExtraSelection> &selections) = 0;
     virtual QList<QTextEdit::ExtraSelection> get_extra_selections() const = 0;
-    virtual QString get_current_selection(int& begin, int& end) const = 0;
+    virtual QString get_current_selection(int &begin, int &end) const = 0;
     virtual int get_cursor_position() const = 0;
     virtual void set_cursor_position(int pos) = 0;
     virtual void set_visual_selection(int begin, int length) = 0;
     virtual void set_cursor_position_with_selection(int pos, int anchor) = 0;
-    virtual QTextDocument* get_document() = 0;
+    virtual QTextDocument *get_document() = 0;
     virtual void set_focus() = 0;
     virtual QFontMetrics get_font_metrics() = 0;
-    virtual void key_press_event(QKeyEvent* kevent) = 0;
+    virtual void key_press_event(QKeyEvent *kevent) = 0;
 };
 
-class QLineEditAdapter : public TextInputAdapter{
-private:
-public:
-    QLineEdit* line_edit;
-    QLineEditAdapter(QLineEdit* line_edit);
+class QLineEditAdapter : public TextInputAdapter {
+  private:
+  public:
+    QLineEdit *line_edit;
+    QLineEditAdapter(QLineEdit *line_edit);
     QString get_text() const override;
     void set_text(QString text) override;
     void set_cursor_width(int width) override;
-    virtual void set_extra_selections(const QList<QTextEdit::ExtraSelection>& selections) override;
+    virtual void set_extra_selections(const QList<QTextEdit::ExtraSelection> &selections) override;
     virtual QList<QTextEdit::ExtraSelection> get_extra_selections() const override;
     virtual void set_cursor_position(int pos) override;
     virtual int get_cursor_position() const override;
     virtual void set_visual_selection(int begin, int length) override;
     virtual void set_cursor_position_with_selection(int pos, int anchor) override;
-    virtual QString get_current_selection(int& begin, int& end) const override;
-    virtual QTextDocument* get_document() override;
+    virtual QString get_current_selection(int &begin, int &end) const override;
+    virtual QTextDocument *get_document() override;
     virtual void set_focus() override;
     virtual QFontMetrics get_font_metrics() override;
-    virtual void key_press_event(QKeyEvent* kevent) override;
+    virtual void key_press_event(QKeyEvent *kevent) override;
 };
 
-class QTextEditAdapter : public TextInputAdapter{
-private:
-public:
-    QTextEdit* text_edit;
-    QTextEditAdapter(QTextEdit* text_edit);
+class QTextEditAdapter : public TextInputAdapter {
+  private:
+  public:
+    QTextEdit *text_edit;
+    QTextEditAdapter(QTextEdit *text_edit);
     QString get_text() const override;
     void set_text(QString text) override;
     void set_cursor_width(int width) override;
-    virtual void set_extra_selections(const QList<QTextEdit::ExtraSelection>& selections) override;
+    virtual void set_extra_selections(const QList<QTextEdit::ExtraSelection> &selections) override;
     virtual QList<QTextEdit::ExtraSelection> get_extra_selections() const override;
     virtual void set_cursor_position(int pos) override;
     virtual int get_cursor_position() const override;
     virtual void set_visual_selection(int begin, int length) override;
     virtual void set_cursor_position_with_selection(int pos, int anchor) override;
-    virtual QString get_current_selection(int& begin, int& end) const override;
-    virtual QTextDocument* get_document() override;
+    virtual QString get_current_selection(int &begin, int &end) const override;
+    virtual QTextDocument *get_document() override;
     virtual void set_focus() override;
     virtual QFontMetrics get_font_metrics() override;
-    virtual void key_press_event(QKeyEvent* kevent) override;
+    virtual void key_press_event(QKeyEvent *kevent) override;
 };
-
 
 class VimEditor {
-private:
+  private:
     VimMode current_mode = VimMode::Normal;
     int visual_mode_anchor = -1;
     InputTreeNode normal_mode_input_tree;
     InputTreeNode visual_mode_input_tree;
     InputTreeNode insert_mode_input_tree;
 
-    InputTreeNode* current_node = nullptr;
+    InputTreeNode *current_node = nullptr;
 
     std::optional<VimLineEditCommand> pending_symbol_command = {};
     std::optional<VimLineEditCommand> pending_text_command = {};
@@ -315,22 +309,23 @@ private:
 
     void set_style_for_mode(VimMode mode);
 
-public:
-    EscapeLineEdit* command_line_edit;
-    TextInputAdapter* adapter = nullptr;
+  public:
+    EscapeLineEdit *command_line_edit;
+    TextInputAdapter *adapter = nullptr;
     explicit VimEditor(QWidget *editor_widget);
 
     bool key_press_event(QKeyEvent *event);
 
-    QString get_word_under_cursor_bounds(int& start, int& end);
+    QString get_word_under_cursor_bounds(int &start, int &end);
     void add_vim_keybindings();
-    std::optional<VimLineEditCommand> handle_key_event(QString event_text, int key, Qt::KeyboardModifiers modifiers);
+    std::optional<VimLineEditCommand> handle_key_event(QString event_text, int key,
+                                                       Qt::KeyboardModifiers modifiers);
     void handle_command(VimLineEditCommand cmd, std::optional<char> symbol = {});
-    int calculate_find(FindState find_state, bool reverse=false) const;
+    int calculate_find(FindState find_state, bool reverse = false) const;
 
     // void resizeEvent(QResizeEvent* event);
 
-private:
+  private:
     int calculate_move_word_forward(bool with_symbols) const;
     int calculate_move_to_end_of_word(bool with_symbols) const;
     int calculate_move_word_backward(bool with_symbols) const;
@@ -360,45 +355,43 @@ private:
     void hide_command_line_edit();
     void perform_pending_text_command_with_text(QString text);
     void handle_action_waiting_for_motion(int old_pos, int new_pos, int delete_pos_offset);
-    void handle_search(bool reverse=false);
-    void set_last_deleted_text(QString text, bool is_line=false);
+    void handle_search(bool reverse = false);
+    void set_last_deleted_text(QString text, bool is_line = false);
     void handle_number_increment_decrement(bool increment);
     void set_mode(VimMode mode);
     void remove_text(int begin, int num);
     void insert_text(QString text, int left_index, int right_index = -1);
     bool requires_symbol(VimLineEditCommand cmd);
-    void add_event_to_current_macro(QKeyEvent* event);
+    void add_event_to_current_macro(QKeyEvent *event);
     void set_visual_selection(int begin, int length);
-    QString get_current_selection(int& begin, int& end);
+    QString get_current_selection(int &begin, int &end);
     void handle_text_command(QString text);
     int get_cursor_position() const;
 
-// signals:
-//     void quitCommand();
-//     void writeCommand();
-
+    // signals:
+    //     void quitCommand();
+    //     void writeCommand();
 };
 
 class VimLineEdit : public QLineEdit {
     Q_OBJECT
-    VimEditor* editor = nullptr;
-    public:
+    VimEditor *editor = nullptr;
 
+  public:
     VimLineEdit(QWidget *parent = nullptr);
     void keyPressEvent(QKeyEvent *event) override;
     void resizeEvent(QResizeEvent *event) override;
-
 };
 
 class VimTextEdit : public QTextEdit {
     Q_OBJECT
-    VimEditor* editor = nullptr;
-    public:
+    VimEditor *editor = nullptr;
 
+  public:
     VimTextEdit(QWidget *parent = nullptr);
     void keyPressEvent(QKeyEvent *event) override;
     void resizeEvent(QResizeEvent *event) override;
-
 };
+} // namespace QVimEditor
 
 #endif // VIMLINEEDIT_H

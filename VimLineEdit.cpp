@@ -17,6 +17,9 @@
 #include <vector>
 #include <QClipboard>
 
+namespace QVimEditor{
+
+
 class LineEditStyle : public QCommonStyle {
     int font_width;
 
@@ -2402,4 +2405,6 @@ void VimTextEdit::resizeEvent(QResizeEvent *event) {
     editor->command_line_edit->resize(event->size().width(), editor->command_line_edit->height());
     editor->command_line_edit->move(0, height() - editor->command_line_edit->height());
     QTextEdit::resizeEvent(event);
+}
+
 }
