@@ -278,7 +278,7 @@ class QTextEditAdapter : public TextInputAdapter {
 
 class VimEditor {
   private:
-    VimMode current_mode = VimMode::Normal;
+    VimMode current_mode = VimMode::Insert;
     int visual_mode_anchor = -1;
     InputTreeNode normal_mode_input_tree;
     InputTreeNode visual_mode_input_tree;
@@ -323,6 +323,7 @@ class VimEditor {
                                                        Qt::KeyboardModifiers modifiers);
     void handle_command(VimLineEditCommand cmd, std::optional<char> symbol = {});
     int calculate_find(FindState find_state, bool reverse = false) const;
+    void set_mode(VimMode mode);
 
     // void resizeEvent(QResizeEvent* event);
 
@@ -359,7 +360,6 @@ class VimEditor {
     void handle_search(bool reverse = false);
     void set_last_deleted_text(QString text, bool is_line = false);
     void handle_number_increment_decrement(bool increment);
-    void set_mode(VimMode mode);
     void remove_text(int begin, int num);
     void insert_text(QString text, int left_index, int right_index = -1);
     bool requires_symbol(VimLineEditCommand cmd);
@@ -386,9 +386,9 @@ signals:
 
 class VimTextEdit : public QTextEdit {
     Q_OBJECT
-    VimEditor *editor = nullptr;
 
   public:
+    VimEditor *editor = nullptr;
     VimTextEdit(QWidget *parent = nullptr);
     void keyPressEvent(QKeyEvent *event) override;
     void resizeEvent(QResizeEvent *event) override;

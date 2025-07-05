@@ -134,6 +134,7 @@ int main(int argc, char *argv[]) {
     QApplication a(argc, argv);
 
     QVimEditor::VimTextEdit line_edit;
+    line_edit.editor->set_mode(QVimEditor::VimMode::Normal);
 
     QString test_cases_path = TESTS_DIR;
 
