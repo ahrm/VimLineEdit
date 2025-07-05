@@ -197,10 +197,17 @@ void VimLineEdit::keyPressEvent(QKeyEvent *event) {
 
     if (current_mode == VimMode::Insert){
         current_insert_mode_text += event->text();
+        int text_size = event->text().size();
+
+        if (event->key() == Qt::Key_Backspace) {
+            text_size = -1;
+            current_insert_mode_text = current_insert_mode_text.left(current_insert_mode_text.length() - 1);
+        }
+
         int current_position = get_cursor_position();
         for (auto& [_, mark] : marks){
             if (mark.position > current_position){
-                mark.position += event->text().size();
+                mark.position += text_size;
             }
         }
     }
@@ -1041,9 +1048,11 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
             delete_length = cursor_pos;
         }
         remove_text(delete_begin, delete_length);
+
         if (current_mode == VimMode::Insert){
             current_insert_mode_text = current_insert_mode_text.left(current_insert_mode_text.length() - delete_length);
         }
+
         new_pos = delete_begin;
 
         break;
