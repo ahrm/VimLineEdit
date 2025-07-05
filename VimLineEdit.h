@@ -374,11 +374,13 @@ class VimEditor {
 class VimLineEdit : public QLineEdit {
     Q_OBJECT
     VimEditor *editor = nullptr;
+   bool vim_enabled = true; 
 
   public:
     VimLineEdit(QWidget *parent = nullptr);
     void keyPressEvent(QKeyEvent *event) override;
     void resizeEvent(QResizeEvent *event) override;
+    void set_vim_enabled(bool enabled);
 signals:
     void quitCommand();
     void writeCommand();
@@ -386,12 +388,14 @@ signals:
 
 class VimTextEdit : public QTextEdit {
     Q_OBJECT
+    bool vim_enabled = true;
 
   public:
     VimEditor *editor = nullptr;
     VimTextEdit(QWidget *parent = nullptr);
     void keyPressEvent(QKeyEvent *event) override;
     void resizeEvent(QResizeEvent *event) override;
+    void set_vim_enabled(bool enabled);
 signals:
     void quitCommand();
     void writeCommand();

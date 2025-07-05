@@ -2422,7 +2422,7 @@ VimLineEdit::VimLineEdit(QWidget *parent) : QLineEdit(parent) {
 }
 
 void VimLineEdit::keyPressEvent(QKeyEvent *event) {
-    if (editor->key_press_event(event)){
+    if ((!vim_enabled) || editor->key_press_event(event)){
         QLineEdit::keyPressEvent(event);
     }
 }
@@ -2438,7 +2438,7 @@ VimTextEdit::VimTextEdit(QWidget *parent) : QTextEdit(parent) {
 }
 
 void VimTextEdit::keyPressEvent(QKeyEvent *event) {
-    if (editor->key_press_event(event)){
+    if ((!vim_enabled) || editor->key_press_event(event)){
         QTextEdit::keyPressEvent(event);
     }
 }
@@ -2449,5 +2449,13 @@ void VimTextEdit::resizeEvent(QResizeEvent *event) {
     QTextEdit::resizeEvent(event);
 }
 
+
+void VimLineEdit::set_vim_enabled(bool enabled){
+    vim_enabled = enabled;
+}
+
+void VimTextEdit::set_vim_enabled(bool enabled){
+    vim_enabled = enabled;
+}
 
 }
