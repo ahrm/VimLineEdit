@@ -228,10 +228,12 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    std::cout << std::endl;
-    std::cout << "Tests run: " << (num_passed_tests + num_failed_tests) << std::endl;
-    std::cout << "Failures: " << num_failed_tests << std::endl;
-    std::cout << "Passed: " << num_passed_tests << std::endl;
+    if (only_index == -1){
+        std::cout << std::endl;
+        std::cout << "Tests run: " << (num_passed_tests + num_failed_tests) << std::endl;
+        std::cout << "Failures: " << num_failed_tests << std::endl;
+        std::cout << "Passed: " << num_passed_tests << std::endl;
 
+    }
     return (num_failed_tests == 0) ? 0 : 1;
 }
