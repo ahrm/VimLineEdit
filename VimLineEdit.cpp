@@ -73,9 +73,14 @@ VimEditor::VimEditor(QWidget *editor_widget) : editor_widget(editor_widget) {
 bool VimEditor::key_press_event(QKeyEvent *event) {
 
     if (event->key() == Qt::Key_Escape) {
-        add_event_to_current_macro(event);
-        handle_command(VimLineEditCommand::EnterNormalMode, {});
-        return false;
+        if (current_mode == VimMode::Normal){
+            return true;
+        }
+        else{
+            add_event_to_current_macro(event);
+            handle_command(VimLineEditCommand::EnterNormalMode, {});
+            return false;
+        }
     }
     if (current_mode != VimMode::Normal || (event->key() != Qt::Key_Q)){
         add_event_to_current_macro(event);
