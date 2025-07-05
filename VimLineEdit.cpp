@@ -813,17 +813,27 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
         // Immediately select the current line
         set_cursor_position_with_line_selection(get_cursor_position());
         break;
-    case VimLineEditCommand::MoveLeft:
-        new_pos = get_cursor_position() - num_repeats;
+    case VimLineEditCommand::MoveLeft: {
+        int old_pos = get_cursor_position();
+        new_pos = old_pos - num_repeats;
+        if (new_pos >= 0 && current_state.text[new_pos] == '\n') {
+            new_pos = old_pos;
+        }
         break;
-    case VimLineEditCommand::MoveRight:
+    }
+    case VimLineEditCommand::MoveRight: {
+        int old_pos = get_cursor_position();
         if ((get_cursor_position() + num_repeats - 1) < current_state.text.length()) {
             new_pos = get_cursor_position() + num_repeats;
         }
         else {
             new_pos = current_state.text.length();
         }
+        if (new_pos < current_state.text.length() && current_state.text[new_pos] == '\n') {
+            new_pos = old_pos;
+        }
         break;
+    }
     case VimLineEditCommand::MoveUp:
         new_pos = get_cursor_position();
         for (int i = 0; i < num_repeats; i++) {

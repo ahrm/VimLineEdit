@@ -23,5 +23,7 @@ int main(int argc, char *argv[])
     main_widget->layout()->addWidget(&vim_text_edit);
     main_widget->show();
 
+    vim_text_edit.setFocus();
+
     return a.exec();
 }
