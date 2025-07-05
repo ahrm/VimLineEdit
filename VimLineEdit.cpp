@@ -1182,16 +1182,17 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
     if (action_waiting_for_motion.has_value() &&
         (action_waiting_for_motion->kind == ActionWaitingForMotionKind::Change || action_waiting_for_motion->kind == ActionWaitingForMotionKind::Delete) &&
         (current_mode == VimMode::Visual || current_mode == VimMode::VisualLine)){
-        // QTextCursor cursor = textCursor();
-        QTextCursor cursor = extraSelections().isEmpty() ? textCursor() : extraSelections().first().cursor;
+        // QTextCursor cursor = extraSelections().isEmpty() ? textCursor() : extraSelections().first().cursor;
+        int selection_begin, selection_end;
+        QString selected_text = get_current_selection(selection_begin, selection_end);
 
         if (current_mode == VimMode::Visual) {
             auto selections = extraSelections();
-            set_last_deleted_text(cursor.selectedText());
+            set_last_deleted_text(selected_text);
             if (cmd !=  VimLineEditCommand::Yank) {
-                int start_pos = cursor.selectionStart();
-                remove_text(cursor.selectionStart(), cursor.selectionEnd() - cursor.selectionStart());
-                set_cursor_position(start_pos);
+                // int start_pos = cursor.selectionStart();
+                remove_text(selection_begin, selection_end - selection_begin);
+                set_cursor_position(selection_begin);
             }
         }
         if (current_mode == VimMode::VisualLine) {
@@ -2192,15 +2193,11 @@ void VimLineEdit::set_visual_selection(int begin, int length){
 }
 
 QString VimLineEdit::get_current_selection(int &begin, int &end){
-    if (extraSelections().size() > 0){
-        QTextCursor cursor = extraSelections().at(0).cursor;
-        begin = cursor.selectionStart();
-        end = cursor.selectionEnd();
-        QString text_result = cursor.selectedText();
-        return text_result;
-    }
-
-    return "";
+    QTextCursor cursor = extraSelections().isEmpty() ? textCursor() : extraSelections().first().cursor;
+    begin = cursor.selectionStart();
+    end = cursor.selectionEnd();
+    QString text_result = cursor.selectedText();
+    return text_result;
 }
 
 QString swap_case(QString input){
