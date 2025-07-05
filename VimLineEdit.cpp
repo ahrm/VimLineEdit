@@ -197,7 +197,7 @@ void VimLineEdit::keyPressEvent(QKeyEvent *event) {
 
     if (current_mode == VimMode::Insert){
         current_insert_mode_text += event->text();
-        int current_position = textCursor().position();
+        int current_position = get_cursor_position();
         for (auto& [_, mark] : marks){
             if (mark.position > current_position){
                 mark.position += event->text().size();
@@ -576,7 +576,7 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
 
 
     int new_pos = -1;
-    int old_pos = textCursor().position();
+    int old_pos = get_cursor_position();
     // some commands' delete differs from the way they move
     // for example, pressing w moves the cursor to the beginning of the next word,
     // but does not delete the first character of the next word, but pressing e
@@ -595,7 +595,7 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
         break;
     case VimLineEditCommand::EnterInsertModeAfter:
         set_mode(VimMode::Insert);
-        new_pos = textCursor().position() + 1;
+        new_pos = get_cursor_position() + 1;
         break;
     case VimLineEditCommand::EnterInsertModeBegin:
         set_mode(VimMode::Insert);
@@ -629,7 +629,7 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
     }
     case VimLineEditCommand::EnterInsertModeBeginLine:
         set_mode(VimMode::Insert);
-        new_pos = get_line_start_position(textCursor().position());
+        new_pos = get_line_start_position(get_cursor_position());
         break;
     case VimLineEditCommand::RecordMacro:
         if (current_macro.has_value()){
@@ -679,7 +679,7 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
 
     case VimLineEditCommand::EnterInsertModeEndLine:
         set_mode(VimMode::Insert);
-        new_pos = get_line_end_position(textCursor().position());
+        new_pos = get_line_end_position(get_cursor_position());
         break;
     case VimLineEditCommand::GotoBegin:
         if (num_repeats <= 1){
@@ -698,16 +698,16 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
         }
         break;
     case VimLineEditCommand::MoveToBeginningOfLine:{
-        new_pos = get_line_start_position(textCursor().position());
+        new_pos = get_line_start_position(get_cursor_position());
         break;
     }
     case VimLineEditCommand::MoveToEndOfLine:{
-        new_pos = get_line_end_position(textCursor().position()) - 1;
+        new_pos = get_line_end_position(get_cursor_position()) - 1;
         delete_pos_offset = 1;
         break;
     }
     case VimLineEditCommand::MoveToTheNextParagraph:{
-        int next_paragraph_start = current_state.text.indexOf("\n\n", textCursor().position());
+        int next_paragraph_start = current_state.text.indexOf("\n\n", get_cursor_position());
         if (next_paragraph_start == -1) {
             new_pos = current_state.text.length();
         }
@@ -717,8 +717,8 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
         break;
     }
     case VimLineEditCommand::MoveToThePreviousParagraph:{
-        int previous_paragraph_end = current_state.text.mid(0, textCursor().position()-1).lastIndexOf("\n\n");
-        if (previous_paragraph_end == -1 || previous_paragraph_end > textCursor().position()) {
+        int previous_paragraph_end = current_state.text.mid(0, get_cursor_position()-1).lastIndexOf("\n\n");
+        if (previous_paragraph_end == -1 || previous_paragraph_end > get_cursor_position()) {
             new_pos = 0;
         }
         else {
@@ -729,7 +729,9 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
     case VimLineEditCommand::InsertLastInsertModeText:{
         // Insert the last text entered in insert mode in the current position
         if (last_insert_mode_text.size() > 0) {
-            textCursor().insertText(last_insert_mode_text);
+            int cursor_position = get_cursor_position();
+            insert_text(last_insert_mode_text, get_cursor_position());
+            set_cursor_position(cursor_position + last_insert_mode_text.size());
             current_insert_mode_text += last_insert_mode_text;
         }
         break;
@@ -748,11 +750,11 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
         VimMode previous_mode = current_mode;
         set_mode(VimMode::Normal);
 
-        if (textCursor().position() <= 0) {
+        if (get_cursor_position() <= 0) {
             new_pos = 0;
         }
         else {
-            new_pos = textCursor().position();
+            new_pos = get_cursor_position();
         }
 
         action_waiting_for_motion = {};
@@ -762,12 +764,12 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
         // the beginning of a line
         if (previous_mode == VimMode::Insert){
             bool is_at_beginning_of_line = (new_pos > 0 && current_state.text[new_pos - 1] == '\n');
-            if (textCursor().position() > 0) {
+            if (get_cursor_position() > 0) {
                 if (!is_at_beginning_of_line) {
-                    new_pos = textCursor().position() - 1;
+                    new_pos = get_cursor_position() - 1;
                 }
                 else {
-                    new_pos = textCursor().position();
+                    new_pos = get_cursor_position();
                 }
             }
         }
@@ -775,7 +777,7 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
     }
     case VimLineEditCommand::EnterVisualMode: {
         set_mode(VimMode::Visual);
-        visual_mode_anchor = textCursor().position();
+        visual_mode_anchor = get_cursor_position();
         set_visual_selection(visual_mode_anchor, 1);
 
         action_waiting_for_motion = {ActionWaitingForMotionKind::Visual, SurroundingScope::None, SurroundingKind::None};
@@ -784,29 +786,29 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
     }
     case VimLineEditCommand::EnterVisualLineMode:
         set_mode(VimMode::VisualLine);
-        visual_mode_anchor = textCursor().position();
+        visual_mode_anchor = get_cursor_position();
         // Immediately select the current line
-        set_cursor_position_with_line_selection(textCursor().position());
+        set_cursor_position_with_line_selection(get_cursor_position());
         break;
     case VimLineEditCommand::MoveLeft:
-        new_pos = textCursor().position() - num_repeats;
+        new_pos = get_cursor_position() - num_repeats;
         break;
     case VimLineEditCommand::MoveRight:
-        if ((textCursor().position() + num_repeats - 1) < current_state.text.length()) {
-            new_pos = textCursor().position() + num_repeats;
+        if ((get_cursor_position() + num_repeats - 1) < current_state.text.length()) {
+            new_pos = get_cursor_position() + num_repeats;
         }
         else {
             new_pos = current_state.text.length();
         }
         break;
     case VimLineEditCommand::MoveUp:
-        new_pos = textCursor().position();
+        new_pos = get_cursor_position();
         for (int i = 0; i < num_repeats; i++) {
             new_pos = calculate_move_up(new_pos);
         }
         break;
     case VimLineEditCommand::MoveDown:
-        new_pos = textCursor().position();
+        new_pos = get_cursor_position();
         for (int i = 0; i < num_repeats; i++) {
             new_pos = calculate_move_down(new_pos);
         }
@@ -871,7 +873,7 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
     case VimLineEditCommand::ChangeToEndOfLine:
     {
         push_history(current_state);
-        int cursor_pos = textCursor().position();
+        int cursor_pos = get_cursor_position();
         int line_end = get_line_end_position(cursor_pos);
         int cursor_offset = cmd == VimLineEditCommand::DeleteToEndOfLine ? -1 : 0;
         
@@ -893,7 +895,7 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
     case VimLineEditCommand::SetMark: {
         Mark mark;
         mark.name = symbol.value();
-        mark.position = textCursor().position();
+        mark.position = get_cursor_position();
         marks[symbol.value()] = mark;
         break;
     }
@@ -943,7 +945,7 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
     case VimLineEditCommand::YankCurrentLine:
     case VimLineEditCommand::ChangeCurrentLine:
     case VimLineEditCommand::DeleteCurrentLine: {
-        int cursor_pos = textCursor().position();
+        int cursor_pos = get_cursor_position();
         int line_start = get_line_start_position(cursor_pos);
         int line_end = get_line_end_position(cursor_pos);
 
@@ -969,8 +971,8 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
     case VimLineEditCommand::PasteForward: {
         if (last_deleted_text.text.size() > 0) {
             QString current_text = current_state.text;
-            int cursor_pos = textCursor().position();
-            
+            int cursor_pos = get_cursor_position();
+
             for (int i = 0; i < num_repeats; i++){
                 if (last_deleted_text.is_line) {
                     // Paste the line below the current line
@@ -992,8 +994,8 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
     case VimLineEditCommand::PasteBackward: {
         if (last_deleted_text.text.size() > 0) {
             QString current_text = current_state.text;
-            int cursor_pos = textCursor().position();
-            
+            int cursor_pos = get_cursor_position();
+
             if (last_deleted_text.is_line) {
                 // Paste the line above the current line
                 int line_start = get_line_start_position(cursor_pos);
@@ -1010,7 +1012,7 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
     case VimLineEditCommand::InsertLineBelow: {
         push_history(current_state);
         QString current_text = current_state.text;
-        int cursor_pos = textCursor().position();
+        int cursor_pos = get_cursor_position();
         int line_end = get_line_end_position(cursor_pos);
         insert_text("\n", line_end);
         new_pos = line_end + 1;
@@ -1019,7 +1021,7 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
     }
     case VimLineEditCommand::DeletePreviousWord: {
         QString current_text = current_state.text;
-        int cursor_pos = textCursor().position();
+        int cursor_pos = get_cursor_position();
         int previous_space_index = current_text.lastIndexOf(' ', std::max<int>(cursor_pos - 2, 0));
         int previous_non_space_index = current_text.lastIndexOf(QRegularExpression("\\S"), std::max(previous_space_index - 1, 0));
 
@@ -1046,7 +1048,7 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
     case VimLineEditCommand::InsertLineAbove: {
         push_history(current_state);
         QString current_text = current_state.text;
-        int cursor_pos = textCursor().position();
+        int cursor_pos = get_cursor_position();
         int line_start = get_line_start_position(cursor_pos);
         insert_text("\n", line_start);
         new_pos = line_start;
@@ -1067,7 +1069,7 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
         break;
     }
     case VimLineEditCommand::SwapCaseCharacterUnderCursor: {
-        int cursor_pos = textCursor().position();
+        int cursor_pos = get_cursor_position();
         if (cursor_pos < 0 || cursor_pos >= current_state.text.length()) {
             break;
         }
@@ -1089,7 +1091,7 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
         break;
     }
     case VimLineEditCommand::GotoMatchingBracket: {
-        int cursor_pos = textCursor().position();
+        int cursor_pos = get_cursor_position();
         std::unordered_map<int, int> matching_brackets = {
             {'(', ')'},
             {')', '('},
@@ -1130,14 +1132,14 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
     }
     case VimLineEditCommand::ToggleVisualCursor: {
         if (current_mode == VimMode::Visual) {
-            int current_cursor_pos = textCursor().position();
+            int current_cursor_pos = get_cursor_position();
             int temp = visual_mode_anchor;
             visual_mode_anchor = current_cursor_pos;
             new_pos = temp;
         }
         if (current_mode == VimMode::VisualLine){
             // swap between the first and last line of the selection, but keep the cursor position in the line (if possible)
-            int current_cursor_pos = textCursor().position();
+            int current_cursor_pos = get_cursor_position();
             int start_line = get_line_start_position(visual_line_selection_begin);
             int end_line = get_line_start_position(visual_line_selection_end-1);
             int current_line = get_line_start_position(current_cursor_pos);
@@ -1239,26 +1241,26 @@ int VimLineEdit::calculate_find(FindState find_state, bool reverse) const {
     switch (direction) {
     case FindDirection::Forward:
         location = toPlainText().indexOf(QChar(find_state.character.value_or(' ')),
-                                         textCursor().position() + 2);
+                                         get_cursor_position() + 2);
         break;
     case FindDirection::Backward:
-        if (textCursor().position() == 0)
-            return textCursor().position();
+        if (get_cursor_position() == 0)
+            return get_cursor_position();
         location = toPlainText().lastIndexOf(QChar(find_state.character.value_or(' ')),
-                                             textCursor().position() - 1);
+                                             get_cursor_position() - 1);
         break;
     case FindDirection::ForwardTo:
         location = toPlainText().indexOf(QChar(find_state.character.value_or(' ')),
-                                         textCursor().position() + 2);
+                                         get_cursor_position() + 2);
         if (location != -1) {
             location--;
         }
         break;
     case FindDirection::BackwardTo:
-        if (textCursor().position() == 0)
-            return textCursor().position();
+        if (get_cursor_position() == 0)
+            return get_cursor_position();
         location = toPlainText().lastIndexOf(QChar(find_state.character.value_or(' ')),
-                                             textCursor().position() - 1);
+                                             get_cursor_position() - 1);
         if (location != -1) {
             location++;
         }
@@ -1268,11 +1270,11 @@ int VimLineEdit::calculate_find(FindState find_state, bool reverse) const {
     if (location != -1) {
         return location;
     }
-    return textCursor().position();
+    return get_cursor_position();
 }
 
 int VimLineEdit::calculate_move_word_forward(bool with_symbols) const {
-    int pos = textCursor().position();
+    int pos = get_cursor_position();
     const QString &t = toPlainText();
     int len = t.length();
 
@@ -1308,7 +1310,7 @@ int VimLineEdit::calculate_move_word_forward(bool with_symbols) const {
 }
 
 int VimLineEdit::calculate_move_to_end_of_word(bool with_symbols) const {
-    int pos = textCursor().position();
+    int pos = get_cursor_position();
     const QString &t = toPlainText();
     int len = t.length();
 
@@ -1358,7 +1360,7 @@ int VimLineEdit::calculate_move_to_end_of_word(bool with_symbols) const {
 }
 
 int VimLineEdit::calculate_move_word_backward(bool with_symbols) const {
-    int pos = textCursor().position();
+    int pos = get_cursor_position();
     const QString &t = toPlainText();
 
     if (pos <= 0) {
@@ -1388,7 +1390,7 @@ int VimLineEdit::calculate_move_word_backward(bool with_symbols) const {
 }
 
 void VimLineEdit::delete_char(bool is_single) {
-    int current_pos = textCursor().position();
+    int current_pos = get_cursor_position();
     QString current_text = toPlainText();
     if (current_pos <= current_text.length()) {
         if (current_pos == current_text.length() || current_text[current_pos] == '\n') {
@@ -1479,7 +1481,7 @@ KeyboardModifierState KeyboardModifierState::from_qt_modifiers(Qt::KeyboardModif
 
 QString VimLineEdit::get_word_under_cursor_bounds(int &start, int &end){
     // Handle surrounding word action
-    int cursor_pos = textCursor().position();
+    int cursor_pos = get_cursor_position();
     QString current_text = toPlainText();
 
     // If cursor is not on a word character, don't do anything
@@ -1580,7 +1582,7 @@ bool VimLineEdit::handle_surrounding_motion_action() {
                 return false; // Unsupported surrounding kind
             }
 
-            int cursor_pos = textCursor().position();
+            int cursor_pos = get_cursor_position();
             QString current_text = toPlainText();
             int start = cursor_pos;
             int end = cursor_pos;
@@ -1976,7 +1978,7 @@ void VimLineEdit::handle_search(bool reverse){
         return; // No matches found
     }
     
-    int current_pos = textCursor().position();
+    int current_pos = get_cursor_position();
     int target_index = -1;
     bool is_reversed = last_search_state->direction == FindDirection::Forward 
                        ? reverse
@@ -2042,8 +2044,8 @@ void VimLineEdit::set_last_deleted_text(QString text, bool is_line){
 
 void VimLineEdit::handle_number_increment_decrement(bool increment) {
     QString current_text = toPlainText();
-    int cursor_pos = textCursor().position();
-    
+    int cursor_pos = get_cursor_position();
+
     // Get current line boundaries
     int line_start = get_line_start_position(cursor_pos);
     int line_end = get_line_end_position(cursor_pos);
@@ -2217,4 +2219,9 @@ void VimLineEdit::handle_text_command(QString text){
     else {
         qDebug() << "Unknown command: " << text;
     }
+}
+
+int VimLineEdit::get_cursor_position() const {
+    return textCursor().position();
+
 }
