@@ -1182,7 +1182,6 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
     if (action_waiting_for_motion.has_value() &&
         (action_waiting_for_motion->kind == ActionWaitingForMotionKind::Change || action_waiting_for_motion->kind == ActionWaitingForMotionKind::Delete) &&
         (current_mode == VimMode::Visual || current_mode == VimMode::VisualLine)){
-        // QTextCursor cursor = extraSelections().isEmpty() ? textCursor() : extraSelections().first().cursor;
         int selection_begin, selection_end;
         QString selected_text = get_current_selection(selection_begin, selection_end);
 
@@ -1556,7 +1555,6 @@ bool VimLineEdit::handle_surrounding_motion_action() {
                     set_last_deleted_text(text_under_cursor);
                 }
                 else if (action_waiting_for_motion->kind == ActionWaitingForMotionKind::Visual) {
-                    QTextCursor cursor = textCursor();
                     visual_mode_anchor = start;
                     set_cursor_position(end - 1);
                     set_visual_selection(start, end - start);
@@ -1645,13 +1643,9 @@ bool VimLineEdit::handle_surrounding_motion_action() {
                     set_last_deleted_text(current_text.mid(start, end - start));
                 }
                 else if (action_waiting_for_motion->kind == ActionWaitingForMotionKind::Visual) {
-                    QTextCursor cursor = textCursor();
-                    // cursor.setPosition(start, QTextCursor::MoveAnchor);
-                    // cursor.setPosition(end, QTextCursor::KeepAnchor);
                     visual_mode_anchor = start;
                     set_cursor_position(end - 1);
                     set_visual_selection(start, end - start);
-                    // setTextCursor(cursor);
                 }
             }
             action_waiting_for_motion = {};
@@ -1764,7 +1758,6 @@ int VimLineEdit::get_line_end_position(int cursor_pos) {
 }
 
 int VimLineEdit::calculate_move_up(int cursor_pos) {
-    // int cursor_pos = textCursor().position();
     const QString &text = toPlainText();
 
     int current_line_start = get_line_start_position(cursor_pos);
@@ -1789,7 +1782,6 @@ int VimLineEdit::calculate_move_up(int cursor_pos) {
 }
 
 int VimLineEdit::calculate_move_down(int cursor_pos) {
-    // int cursor_pos = textCursor().position();
     const QString &text = toPlainText();
 
     int current_line_start = get_line_start_position(cursor_pos);
@@ -1826,8 +1818,7 @@ int VimLineEdit::calculate_move_up_on_screen() { return calculate_move_on_screen
 int VimLineEdit::calculate_move_down_on_screen() { return calculate_move_on_screen(1); }
 
 int VimLineEdit::calculate_move_on_screen(int direction) {
-    QTextCursor cursor = textCursor();
-    int current_pos = cursor.position();
+    int current_pos = get_cursor_position();
 
     // Use the document's text layout directly
     QTextDocument *doc = document();
