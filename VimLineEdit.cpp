@@ -1041,6 +1041,9 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
             delete_length = cursor_pos;
         }
         remove_text(delete_begin, delete_length);
+        if (current_mode == VimMode::Insert){
+            current_insert_mode_text = current_insert_mode_text.left(current_insert_mode_text.length() - delete_length);
+        }
         new_pos = delete_begin;
 
         break;
