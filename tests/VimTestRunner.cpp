@@ -135,7 +135,7 @@ int main(int argc, char *argv[]) {
 
     QVimEditor::VimTextEdit line_edit;
 
-    QString test_cases_path = "/Users/ali/projects/vim_lineedit/test_generator/test_cases";
+    QString test_cases_path = TESTS_DIR;
 
     QDir test_dir(test_cases_path);
     if (!test_dir.exists()) {

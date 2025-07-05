@@ -58,3 +58,6 @@ foreach(test_path IN LISTS ALL_DATA_FILES)
   )
 endforeach()
 
+# Add compile-time definition for tests folder path
+target_compile_definitions(vim_lineedit_tests PRIVATE TESTS_DIR="${CMAKE_SOURCE_DIR}/test_generator/test_cases")
+
