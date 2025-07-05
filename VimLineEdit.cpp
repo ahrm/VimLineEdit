@@ -935,6 +935,7 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
     case VimLineEditCommand::FindForward: {
         last_find_state = FindState{FindDirection::Forward, symbol};
         new_pos = calculate_find(last_find_state.value());
+        delete_pos_offset = 1;
         break;
     }
     case VimLineEditCommand::SetMark: {
@@ -960,6 +961,7 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
     case VimLineEditCommand::FindForwardTo: {
         last_find_state = FindState{FindDirection::ForwardTo, symbol};
         new_pos = calculate_find(last_find_state.value());
+        delete_pos_offset = 1;
         break;
     }
     case VimLineEditCommand::FindBackwardTo: {
