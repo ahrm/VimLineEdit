@@ -308,6 +308,7 @@ class VimEditor {
     int visual_line_selection_end = -1;
 
     void set_style_for_mode(VimMode mode);
+    QWidget* editor_widget = nullptr;
 
   public:
     EscapeLineEdit *command_line_edit;
@@ -368,9 +369,6 @@ class VimEditor {
     void handle_text_command(QString text);
     int get_cursor_position() const;
 
-    // signals:
-    //     void quitCommand();
-    //     void writeCommand();
 };
 
 class VimLineEdit : public QLineEdit {
@@ -381,6 +379,9 @@ class VimLineEdit : public QLineEdit {
     VimLineEdit(QWidget *parent = nullptr);
     void keyPressEvent(QKeyEvent *event) override;
     void resizeEvent(QResizeEvent *event) override;
+signals:
+    void quitCommand();
+    void writeCommand();
 };
 
 class VimTextEdit : public QTextEdit {
@@ -391,6 +392,9 @@ class VimTextEdit : public QTextEdit {
     VimTextEdit(QWidget *parent = nullptr);
     void keyPressEvent(QKeyEvent *event) override;
     void resizeEvent(QResizeEvent *event) override;
+signals:
+    void quitCommand();
+    void writeCommand();
 };
 } // namespace QVimEditor
 

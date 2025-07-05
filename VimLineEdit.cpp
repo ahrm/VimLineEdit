@@ -35,7 +35,7 @@ class LineEditStyle : public QCommonStyle {
     }
 };
 
-VimEditor::VimEditor(QWidget *editor_widget) {
+VimEditor::VimEditor(QWidget *editor_widget) : editor_widget(editor_widget) {
 
     if (dynamic_cast<QLineEdit*>(editor_widget)){
         adapter = new QLineEditAdapter(dynamic_cast<QLineEdit*>(editor_widget));
@@ -2230,17 +2230,30 @@ QString swap_case(QString input){
 }
 
 void VimEditor::handle_text_command(QString text){
-    // if (text == "w" || text == "wq" || text == "write"){
-    //     emit writeCommand();
-    // }
 
-    // if (text == "q" || text == "quit" || text == "wq"){
-    //     emit quitCommand();
-    // }
+    VimLineEdit* line_edit = dynamic_cast<VimLineEdit*>(editor_widget);
+    VimTextEdit* text_edit = dynamic_cast<VimTextEdit*>(editor_widget);
+    if (text == "w" || text == "wq" || text == "write"){
+        if (line_edit){
+            emit line_edit->writeCommand();
+        }
+        if (text_edit){
+            emit text_edit->writeCommand();
+        }
+    }
 
-    // else {
-    //     qDebug() << "Unknown command: " << text;
-    // }
+    if (text == "q" || text == "quit" || text == "wq"){
+        if (line_edit){
+            emit line_edit->quitCommand();
+        }
+        if (text_edit){
+            emit text_edit->quitCommand();
+        }
+    }
+
+    else {
+        qDebug() << "Unknown command: " << text;
+    }
 }
 
 int VimEditor::get_cursor_position() const {
@@ -2428,5 +2441,6 @@ void VimTextEdit::resizeEvent(QResizeEvent *event) {
     editor->command_line_edit->move(0, height() - editor->command_line_edit->height());
     QTextEdit::resizeEvent(event);
 }
+
 
 }

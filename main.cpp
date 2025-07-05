@@ -25,5 +25,9 @@ int main(int argc, char *argv[])
 
     vim_text_edit.setFocus();
 
+    QObject::connect(&vim_text_edit, &QVimEditor::VimTextEdit::quitCommand, [&]() {
+        a.quit();
+    });
+
     return a.exec();
 }
