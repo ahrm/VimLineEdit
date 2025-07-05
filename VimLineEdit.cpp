@@ -614,10 +614,22 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
         push_history(current_state);
         set_mode(VimMode::Insert);
         break;
-    case VimLineEditCommand::EnterInsertModeAfter:
+    case VimLineEditCommand::EnterInsertModeAfter:{
         set_mode(VimMode::Insert);
-        new_pos = get_cursor_position() + 1;
+        int current_pos = get_cursor_position();
+
+        bool is_ony_empty_line = false;
+        if (current_pos >= 0 && current_pos < current_state.text.length()) {
+            if (current_state.text[current_pos] == '\n'){
+                is_ony_empty_line = true;
+            }
+        }
+
+        if (!is_ony_empty_line){
+            new_pos = get_cursor_position() + 1;
+        }
         break;
+    }
     case VimLineEditCommand::EnterInsertModeBegin:
         set_mode(VimMode::Insert);
         new_pos = 0;
