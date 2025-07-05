@@ -32,22 +32,22 @@ class LineEditStyle : public QCommonStyle {
     }
 };
 
-VimLineEdit::VimLineEdit(QWidget *parent) : BaseClass(parent) {
+VimEditor::VimEditor(QWidget *editor_widget) {
 
-    if (dynamic_cast<QLineEdit*>(this)){
-        adapter = new QLineEditAdapter(dynamic_cast<QLineEdit*>(this));
+    if (dynamic_cast<QLineEdit*>(editor_widget)){
+        adapter = new QLineEditAdapter(dynamic_cast<QLineEdit*>(editor_widget));
     }
     else{
-        adapter = new QTextEditAdapter(dynamic_cast<QTextEdit*>(this));
+        adapter = new QTextEditAdapter(dynamic_cast<QTextEdit*>(editor_widget));
     }
 
-    QFont font = this->font();
+    QFont font = editor_widget->font();
     font.setFamily("Courier New");
     font.setStyleHint(QFont::TypeWriter);
-    this->setFont(font);
+    editor_widget->setFont(font);
     add_vim_keybindings();
 
-    command_line_edit = new EscapeLineEdit(this);
+    command_line_edit = new EscapeLineEdit(editor_widget);
     command_line_edit->setFont(font);
     command_line_edit->hide();
 
@@ -67,12 +67,12 @@ VimLineEdit::VimLineEdit(QWidget *parent) : BaseClass(parent) {
     set_style_for_mode(current_mode);
 }
 
-void VimLineEdit::keyPressEvent(QKeyEvent *event) {
+bool VimEditor::key_press_event(QKeyEvent *event) {
 
     if (event->key() == Qt::Key_Escape) {
         add_event_to_current_macro(event);
         handle_command(VimLineEditCommand::EnterNormalMode, {});
-        return;
+        return false;
     }
     if (current_mode != VimMode::Normal || (event->key() != Qt::Key_Q)){
         add_event_to_current_macro(event);
@@ -99,7 +99,7 @@ void VimLineEdit::keyPressEvent(QKeyEvent *event) {
                 handle_command(command, static_cast<char>(event->text().at(0).toLatin1()));
             }
 
-            return;
+            return false;
         }
 
         if (!is_keypress_a_modifier && action_waiting_for_motion.has_value()) {
@@ -108,30 +108,30 @@ void VimLineEdit::keyPressEvent(QKeyEvent *event) {
 
                 if (event->key() == Qt::Key_I) {
                     action_waiting_for_motion->surrounding_scope = SurroundingScope::Inside;
-                    return;
+                    return false;
                 }
                 else if (event->key() == Qt::Key_A) {
                     action_waiting_for_motion->surrounding_scope = SurroundingScope::Around;
-                    return;
+                    return false;
                 }
                 else{
                     // pressing dd should delete the current line
                     if (action_waiting_for_motion->kind == ActionWaitingForMotionKind::Delete && event->key() == Qt::Key_D){
                         action_waiting_for_motion = {};
                         handle_command(VimLineEditCommand::DeleteCurrentLine);
-                        return;
+                        return false;
                     }
                     // pressing cc should change the current line
                     if (action_waiting_for_motion->kind == ActionWaitingForMotionKind::Change && event->key() == Qt::Key_C){
                         action_waiting_for_motion = {};
                         handle_command(VimLineEditCommand::ChangeCurrentLine);
-                        return;
+                        return false;
                     }
                     // pressing yy should yank the current line
                     if (action_waiting_for_motion->kind == ActionWaitingForMotionKind::Yank && event->key() == Qt::Key_Y){
                         action_waiting_for_motion = {};
                         handle_command(VimLineEditCommand::YankCurrentLine);
-                        return;
+                        return false;
                     }
                 }
             }
@@ -158,11 +158,11 @@ void VimLineEdit::keyPressEvent(QKeyEvent *event) {
                 default:
                     // If the key is not recognized, we reset the action waiting for motion
                     action_waiting_for_motion = {};
-                    return;
+                    return false;
                 }
             }
             if (handle_surrounding_motion_action()) {
-                return;
+                return false;
             }
         }
 
@@ -173,7 +173,7 @@ void VimLineEdit::keyPressEvent(QKeyEvent *event) {
                 if (requires_symbol(command.value())) {
                     // If the command requires a symbol, we need to wait for the next key press
                     pending_symbol_command = command;
-                    return;
+                    return false;
                 }
                 else {
                     handle_command(command.value());
@@ -181,7 +181,7 @@ void VimLineEdit::keyPressEvent(QKeyEvent *event) {
             }
         }
 
-        return;
+        return false;
     }
     else{
         Qt::KeyboardModifier CONTROL = Qt::ControlModifier;
@@ -198,7 +198,7 @@ void VimLineEdit::keyPressEvent(QKeyEvent *event) {
             
             if (command){
                 handle_command(command.value());
-                return;
+                return false;
             }
         }
     }
@@ -220,13 +220,13 @@ void VimLineEdit::keyPressEvent(QKeyEvent *event) {
         }
     }
 
-    BaseClass::keyPressEvent(event);
+    return true;
 }
 
-void VimLineEdit::set_style_for_mode(VimMode mode) {
+void VimEditor::set_style_for_mode(VimMode mode) {
     if (mode == VimMode::Normal) {
         // setStyleSheet("background-color: lightgray;");
-        int font_width = fontMetrics().horizontalAdvance(" ");
+        int font_width = adapter->get_font_metrics().horizontalAdvance(" ");
         adapter->set_cursor_width(font_width);
         // setCursorWidth(font_width);
         // setStyle(new LineEditStyle(font_width));
@@ -239,7 +239,7 @@ void VimLineEdit::set_style_for_mode(VimMode mode) {
     }
     else if (mode == VimMode::Visual || mode == VimMode::VisualLine) {
         // setStyleSheet("background-color: pink;");
-        int font_width = fontMetrics().horizontalAdvance(" ");
+        int font_width = adapter->get_font_metrics().horizontalAdvance(" ");
         // setCursorWidth(font_width);
         adapter->set_cursor_width(font_width);
         // setStyle(new LineEditStyle(font_width));
@@ -268,7 +268,7 @@ void InputTreeNode::add_keybinding(const std::vector<KeyChord> &key_chords, int 
     children.push_back(new_node);
 }
 
-void VimLineEdit::add_vim_keybindings() {
+void VimEditor::add_vim_keybindings() {
     KeyboardModifierState CONTROL = KeyboardModifierState{false, true, false, false};
 
     // KeyboardModifierState SHIFT = KeyboardModifierState{true, false, false, false};
@@ -369,7 +369,7 @@ void VimLineEdit::add_vim_keybindings() {
 
 }
 
-std::optional<VimLineEditCommand> VimLineEdit::handle_key_event(QString event_text, int key,
+std::optional<VimLineEditCommand> VimEditor::handle_key_event(QString event_text, int key,
                                                                 Qt::KeyboardModifiers modifiers) {
 
     InputTreeNode* current_mode_root = &normal_mode_input_tree;
@@ -558,7 +558,7 @@ QString to_string(VimLineEditCommand cmd) {
     }
 }
 
-bool VimLineEdit::requires_symbol(VimLineEditCommand cmd) {
+bool VimEditor::requires_symbol(VimLineEditCommand cmd) {
     switch (cmd) {
     case VimLineEditCommand::FindForward:
     case VimLineEditCommand::FindBackward:
@@ -575,7 +575,7 @@ bool VimLineEdit::requires_symbol(VimLineEditCommand cmd) {
     }
 }
 
-void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> symbol) {
+void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbol) {
 
     // don't handle the 0 key while we are typing a repeat number
     if (cmd == VimLineEditCommand::MoveToBeginningOfLine && current_command_repeat_number.size() > 1) {
@@ -672,7 +672,9 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
             for (int j = 0; j < num_repeats; j++){
                 for (int i = 0; i < macro.events.size(); i++) {
                     auto clone = macro.events[i].get()->clone();
-                    keyPressEvent(clone);
+                    if (key_press_event(clone)){
+                        adapter->key_press_event(clone);
+                    }
                     delete clone;
                 }
             }
@@ -1254,7 +1256,7 @@ void VimLineEdit::handle_command(VimLineEditCommand cmd, std::optional<char> sym
     }
 }
 
-int VimLineEdit::calculate_find(FindState find_state, bool reverse) const {
+int VimEditor::calculate_find(FindState find_state, bool reverse) const {
 
     int location = -1;
     FindDirection direction =
@@ -1297,7 +1299,7 @@ int VimLineEdit::calculate_find(FindState find_state, bool reverse) const {
     return get_cursor_position();
 }
 
-int VimLineEdit::calculate_move_word_forward(bool with_symbols) const {
+int VimEditor::calculate_move_word_forward(bool with_symbols) const {
     int pos = get_cursor_position();
     const QString t = adapter->get_text();
     int len = t.length();
@@ -1333,7 +1335,7 @@ int VimLineEdit::calculate_move_word_forward(bool with_symbols) const {
     return pos;
 }
 
-int VimLineEdit::calculate_move_to_end_of_word(bool with_symbols) const {
+int VimEditor::calculate_move_to_end_of_word(bool with_symbols) const {
     int pos = get_cursor_position();
     const QString t = adapter->get_text();
     int len = t.length();
@@ -1383,7 +1385,7 @@ int VimLineEdit::calculate_move_to_end_of_word(bool with_symbols) const {
     return next_pos;
 }
 
-int VimLineEdit::calculate_move_word_backward(bool with_symbols) const {
+int VimEditor::calculate_move_word_backward(bool with_symbols) const {
     int pos = get_cursor_position();
     const QString t = adapter->get_text();
 
@@ -1413,7 +1415,7 @@ int VimLineEdit::calculate_move_word_backward(bool with_symbols) const {
     return prev_pos;
 }
 
-void VimLineEdit::delete_char(bool is_single) {
+void VimEditor::delete_char(bool is_single) {
     int current_pos = get_cursor_position();
     QString current_text = adapter->get_text();
     if (current_pos <= current_text.length()) {
@@ -1437,7 +1439,7 @@ void VimLineEdit::delete_char(bool is_single) {
     }
 }
 
-void VimLineEdit::push_history(HistoryState state) {
+void VimEditor::push_history(HistoryState state) {
     if (history.current_index >= 0 && history.current_index < history.states.size() - 1) {
         // If we are in the middle of the history, remove all states after the current index
         history.states.erase(history.states.begin() + history.current_index + 1,
@@ -1453,7 +1455,7 @@ void VimLineEdit::push_history(HistoryState state) {
     history.current_index = history.states.size() - 1;
 }
 
-void VimLineEdit::undo() {
+void VimEditor::undo() {
 
     if (history.current_index < 0) {
         return;
@@ -1461,19 +1463,19 @@ void VimLineEdit::undo() {
 
     history.current_index--;
     const HistoryState &state = history.states[history.current_index + 1];
-    setText(state.text);
+    adapter->set_text(state.text);
     set_cursor_position(state.cursor_position);
     marks = state.marks;
 }
 
-void VimLineEdit::redo() {
+void VimEditor::redo() {
     if (history.current_index >= history.states.size() - 1) {
         return;
     }
 
     history.current_index++;
     const HistoryState &state = history.states[history.current_index];
-    setText(state.text);
+    adapter->set_text(state.text);
     set_cursor_position(state.cursor_position);
     marks = state.marks;
 }
@@ -1503,7 +1505,7 @@ KeyboardModifierState KeyboardModifierState::from_qt_modifiers(Qt::KeyboardModif
 #endif
 }
 
-QString VimLineEdit::get_word_under_cursor_bounds(int &start, int &end){
+QString VimEditor::get_word_under_cursor_bounds(int &start, int &end){
     // Handle surrounding word action
     int cursor_pos = get_cursor_position();
     QString current_text = adapter->get_text();
@@ -1540,7 +1542,7 @@ QString VimLineEdit::get_word_under_cursor_bounds(int &start, int &end){
     return current_text.mid(start, end - start);
 }
 
-bool VimLineEdit::handle_surrounding_motion_action() {
+bool VimEditor::handle_surrounding_motion_action() {
     if (action_waiting_for_motion.has_value()) {
         if (action_waiting_for_motion->surrounding_kind == SurroundingKind::Word) {
 
@@ -1667,15 +1669,15 @@ bool VimLineEdit::handle_surrounding_motion_action() {
     return false;
 }
 
-void VimLineEdit::set_cursor_position(int pos) {
+void VimEditor::set_cursor_position(int pos) {
     adapter->set_cursor_position(pos);
 }
 
-void VimLineEdit::set_cursor_position_with_selection(int pos) {
+void VimEditor::set_cursor_position_with_selection(int pos) {
     adapter->set_cursor_position_with_selection(pos, visual_mode_anchor);
 }
 
-void VimLineEdit::set_cursor_position_with_line_selection(int pos) {
+void VimEditor::set_cursor_position_with_line_selection(int pos) {
     if (!dynamic_cast<QTextEditAdapter*>(adapter)){
         return;
     }
@@ -1716,8 +1718,8 @@ void VimLineEdit::set_cursor_position_with_line_selection(int pos) {
     QTextEdit::ExtraSelection selection;
     selection.cursor = cursor;
 
-    QColor selection_foreground_color = palette().color(QPalette::Text);
-    QColor selection_background_color = palette().color(QPalette::Highlight);
+    QColor selection_foreground_color = text_adapter->text_edit->palette().color(QPalette::Text);
+    QColor selection_background_color = text_adapter->text_edit->palette().color(QPalette::Highlight);
     selection.format.setBackground(selection_background_color);
     selection.format.setForeground(selection_foreground_color);
 
@@ -1725,7 +1727,7 @@ void VimLineEdit::set_cursor_position_with_line_selection(int pos) {
     set_cursor_position(pos);
 }
 
-int VimLineEdit::get_line_start_position(int cursor_pos) {
+int VimEditor::get_line_start_position(int cursor_pos) {
     const QString text = adapter->get_text();
     int pos = cursor_pos;
     pos = std::min<int>(pos, text.size());
@@ -1737,7 +1739,7 @@ int VimLineEdit::get_line_start_position(int cursor_pos) {
     return pos;
 }
 
-int VimLineEdit::get_ith_line_start_position(int i) {
+int VimEditor::get_ith_line_start_position(int i) {
     const QString text = adapter->get_text();
     int line_start = 0;
     for (int line = 0; line < i && line_start < text.length(); ++line) {
@@ -1751,7 +1753,7 @@ int VimLineEdit::get_ith_line_start_position(int i) {
 }
 
 
-int VimLineEdit::get_line_end_position(int cursor_pos) {
+int VimEditor::get_line_end_position(int cursor_pos) {
     const QString text = adapter->get_text();
     int pos = cursor_pos;
     int length = text.length();
@@ -1763,7 +1765,7 @@ int VimLineEdit::get_line_end_position(int cursor_pos) {
     return pos;
 }
 
-int VimLineEdit::calculate_move_up(int cursor_pos) {
+int VimEditor::calculate_move_up(int cursor_pos) {
     const QString text = adapter->get_text();
 
     int current_line_start = get_line_start_position(cursor_pos);
@@ -1787,7 +1789,7 @@ int VimLineEdit::calculate_move_up(int cursor_pos) {
     return prev_line_start + new_column;
 }
 
-int VimLineEdit::calculate_move_down(int cursor_pos) {
+int VimEditor::calculate_move_down(int cursor_pos) {
     const QString &text = adapter->get_text();
 
     int current_line_start = get_line_start_position(cursor_pos);
@@ -1819,11 +1821,11 @@ int VimLineEdit::calculate_move_down(int cursor_pos) {
     return next_line_start + new_column;
 }
 
-int VimLineEdit::calculate_move_up_on_screen() { return calculate_move_on_screen(-1); }
+int VimEditor::calculate_move_up_on_screen() { return calculate_move_on_screen(-1); }
 
-int VimLineEdit::calculate_move_down_on_screen() { return calculate_move_on_screen(1); }
+int VimEditor::calculate_move_down_on_screen() { return calculate_move_on_screen(1); }
 
-int VimLineEdit::calculate_move_on_screen(int direction) {
+int VimEditor::calculate_move_on_screen(int direction) {
     int current_pos = get_cursor_position();
 
     // Use the document's text layout directly
@@ -1903,27 +1905,27 @@ InputTreeNode InputTreeNode::clone() const {
     return new_node;
 }
 
-void VimLineEdit::resizeEvent(QResizeEvent *event) {
-    // move the command line edit to the bottom
-    command_line_edit->resize(event->size().width(), command_line_edit->height());
-    command_line_edit->move(0, height() - command_line_edit->height());
-    BaseClass::resizeEvent(event);
-}
+// void VimEditor::resizeEvent(QResizeEvent *event) {
+//     // move the command line edit to the bottom
+//     command_line_edit->resize(event->size().width(), command_line_edit->height());
+//     command_line_edit->move(0, height() - command_line_edit->height());
+//     BaseClass::resizeEvent(event);
+// }
 
-void VimLineEdit::show_command_line_edit(QString placeholder_text){
+void VimEditor::show_command_line_edit(QString placeholder_text){
     command_line_edit->setText("");
     command_line_edit->setPlaceholderText(placeholder_text);
     command_line_edit->show();
     command_line_edit->setFocus();
 }
 
-void VimLineEdit::hide_command_line_edit(){
+void VimEditor::hide_command_line_edit(){
     command_line_edit->setText("");
     command_line_edit->hide();
-    setFocus();
+    adapter->set_focus();
 }
 
-void VimLineEdit::perform_pending_text_command_with_text(QString text){
+void VimEditor::perform_pending_text_command_with_text(QString text){
     if (pending_text_command.has_value()){
         switch (pending_text_command.value()) {
         case VimLineEditCommand::CommandCommand: {
@@ -1943,7 +1945,7 @@ void VimLineEdit::perform_pending_text_command_with_text(QString text){
 
 }
 
-void VimLineEdit::handle_action_waiting_for_motion(int old_pos, int new_pos, int delete_pos_offset){
+void VimEditor::handle_action_waiting_for_motion(int old_pos, int new_pos, int delete_pos_offset){
     if (action_waiting_for_motion.has_value()) {
         QString current_text = adapter->get_text();
         if (action_waiting_for_motion.value().kind == ActionWaitingForMotionKind::Delete ||
@@ -1970,7 +1972,7 @@ void VimLineEdit::handle_action_waiting_for_motion(int old_pos, int new_pos, int
     }
 }
 
-void VimLineEdit::handle_search(bool reverse){
+void VimEditor::handle_search(bool reverse){
     if (!last_search_state.has_value()) {
         return;
     }
@@ -2052,12 +2054,12 @@ void EscapeLineEdit::keyPressEvent(QKeyEvent *event) {
     QLineEdit::keyPressEvent(event);
 }
 
-void VimLineEdit::set_last_deleted_text(QString text, bool is_line){
+void VimEditor::set_last_deleted_text(QString text, bool is_line){
     last_deleted_text.text = text;
     last_deleted_text.is_line = is_line;
 }
 
-void VimLineEdit::handle_number_increment_decrement(bool increment) {
+void VimEditor::handle_number_increment_decrement(bool increment) {
     QString current_text = adapter->get_text();
     int cursor_pos = get_cursor_position();
 
@@ -2120,7 +2122,7 @@ void VimLineEdit::handle_number_increment_decrement(bool increment) {
     }
 }
 
-void VimLineEdit::set_mode(VimMode mode){
+void VimEditor::set_mode(VimMode mode){
     if (current_mode == VimMode::Insert){
         last_insert_mode_text = current_insert_mode_text;
     }
@@ -2138,11 +2140,11 @@ void VimLineEdit::set_mode(VimMode mode){
     set_style_for_mode(current_mode);
 }
 
-void VimLineEdit::remove_text(int begin, int num){
+void VimEditor::remove_text(int begin, int num){
     insert_text("", begin, begin + num);
 }
 
-void VimLineEdit::insert_text(QString text, int left_index, int right_index){
+void VimEditor::insert_text(QString text, int left_index, int right_index){
     if (right_index == -1){
         right_index  = left_index;
     }
@@ -2168,21 +2170,21 @@ void VimLineEdit::insert_text(QString text, int left_index, int right_index){
 
     QString old_text = adapter->get_text();
     QString new_text = old_text.mid(0, left_index) + text + old_text.mid(right_index);
-    setText(new_text);
+    adapter->set_text(new_text);
 }
 
-void VimLineEdit::add_event_to_current_macro(QKeyEvent *event){
+void VimEditor::add_event_to_current_macro(QKeyEvent *event){
     if (current_macro.has_value()) {
         current_macro->events.push_back(std::unique_ptr<QKeyEvent>(event->clone()));
     }
 
 }
 
-void VimLineEdit::set_visual_selection(int begin, int length){
+void VimEditor::set_visual_selection(int begin, int length){
     adapter->set_visual_selection(begin, length);
 }
 
-QString VimLineEdit::get_current_selection(int &begin, int &end){
+QString VimEditor::get_current_selection(int &begin, int &end){
     return adapter->get_current_selection(begin, end);
 }
 
@@ -2202,21 +2204,21 @@ QString swap_case(QString input){
 
 }
 
-void VimLineEdit::handle_text_command(QString text){
-    if (text == "w" || text == "wq" || text == "write"){
-        emit writeCommand();
-    }
+void VimEditor::handle_text_command(QString text){
+    // if (text == "w" || text == "wq" || text == "write"){
+    //     emit writeCommand();
+    // }
 
-    if (text == "q" || text == "quit" || text == "wq"){
-        emit quitCommand();
-    }
+    // if (text == "q" || text == "quit" || text == "wq"){
+    //     emit quitCommand();
+    // }
 
-    else {
-        qDebug() << "Unknown command: " << text;
-    }
+    // else {
+    //     qDebug() << "Unknown command: " << text;
+    // }
 }
 
-int VimLineEdit::get_cursor_position() const {
+int VimEditor::get_cursor_position() const {
     return adapter->get_cursor_position();
 }
 
@@ -2344,4 +2346,60 @@ QTextDocument* QTextEditAdapter::get_document() {
 
 QTextDocument* QLineEditAdapter::get_document() {
     return nullptr;
+}
+
+void QLineEditAdapter::set_focus() {
+    line_edit->setFocus();
+}
+
+void QTextEditAdapter::set_focus() {
+    text_edit->setFocus();
+}
+
+QFontMetrics QTextEditAdapter::get_font_metrics(){
+    return text_edit->fontMetrics();
+}
+
+QFontMetrics QLineEditAdapter::get_font_metrics(){
+    return line_edit->fontMetrics();
+}
+
+void QLineEditAdapter::key_press_event(QKeyEvent *kevent) {
+    QCoreApplication::sendEvent(line_edit, kevent);
+}
+
+void QTextEditAdapter::key_press_event(QKeyEvent *kevent) {
+    QCoreApplication::sendEvent(text_edit, kevent);
+}
+
+VimLineEdit::VimLineEdit(QWidget *parent) : QLineEdit(parent) {
+    editor = new VimEditor(this);
+}
+
+void VimLineEdit::keyPressEvent(QKeyEvent *event) {
+    if (editor->key_press_event(event)){
+        QLineEdit::keyPressEvent(event);
+    }
+}
+
+void VimLineEdit::resizeEvent(QResizeEvent *event) {
+    editor->command_line_edit->resize(event->size().width(), editor->command_line_edit->height());
+    editor->command_line_edit->move(0, height() - editor->command_line_edit->height());
+    QLineEdit::resizeEvent(event);
+}
+
+VimTextEdit::VimTextEdit(QWidget *parent) : QTextEdit(parent) {
+    editor = new VimEditor(this);
+}
+
+void VimTextEdit::keyPressEvent(QKeyEvent *event) {
+    if (editor->key_press_event(event)){
+        QTextEdit::keyPressEvent(event);
+    }
+}
+
+void VimTextEdit::resizeEvent(QResizeEvent *event) {
+    editor->command_line_edit->resize(event->size().width(), editor->command_line_edit->height());
+    editor->command_line_edit->move(0, height() - editor->command_line_edit->height());
+    QTextEdit::resizeEvent(event);
 }

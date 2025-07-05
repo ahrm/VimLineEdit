@@ -9,7 +9,7 @@
 #include "../VimLineEdit.h" // Assuming VimLineEdit.h is in the parent directory
 
 // Function to simulate keystrokes on VimLineEdit
-void simulate_keystrokes(VimLineEdit *lineEdit, const QByteArray &keystrokes) {
+void simulate_keystrokes(VimTextEdit *lineEdit, const QByteArray &keystrokes) {
     int index = 0;
     int BACKSPACE_KEY = 0xfffd;
     while (index < keystrokes.length()) {
@@ -133,7 +133,7 @@ QString keystrokes_to_human_readable_string(QString keystrokes) {
 int main(int argc, char *argv[]) {
     QApplication a(argc, argv);
 
-    VimLineEdit line_edit;
+    VimTextEdit line_edit;
 
     QString test_cases_path = "/Users/ali/projects/vim_lineedit/test_generator/test_cases";
 
@@ -204,12 +204,12 @@ int main(int argc, char *argv[]) {
 
         // No cleaning of keystrokes; VimLineEdit should handle all of them.
 
-        line_edit.clear(); // Clear previous test data
-        line_edit.setFocus(); // Ensure the widget has focus for events
+        // line_edit.clear(); // Clear previous test data
+        // line_edit.setFocus(); // Ensure the widget has focus for events
 
         simulate_keystrokes(&line_edit, keystrokes);
 
-        QString actual_output = line_edit.adapter->get_text();
+        QString actual_output = line_edit.toPlainText();
 
         if (actual_output.trimmed() == expected_output.trimmed()) {
             std::cout << "PASS: " << test_name.toStdString() << std::endl;

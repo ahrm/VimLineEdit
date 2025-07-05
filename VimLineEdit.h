@@ -234,6 +234,9 @@ class TextInputAdapter{
     virtual void set_visual_selection(int begin, int length) = 0;
     virtual void set_cursor_position_with_selection(int pos, int anchor) = 0;
     virtual QTextDocument* get_document() = 0;
+    virtual void set_focus() = 0;
+    virtual QFontMetrics get_font_metrics() = 0;
+    virtual void key_press_event(QKeyEvent* kevent) = 0;
 };
 
 class QLineEditAdapter : public TextInputAdapter{
@@ -252,6 +255,9 @@ public:
     virtual void set_cursor_position_with_selection(int pos, int anchor) override;
     virtual QString get_current_selection(int& begin, int& end) const override;
     virtual QTextDocument* get_document() override;
+    virtual void set_focus() override;
+    virtual QFontMetrics get_font_metrics() override;
+    virtual void key_press_event(QKeyEvent* kevent) override;
 };
 
 class QTextEditAdapter : public TextInputAdapter{
@@ -270,22 +276,19 @@ public:
     virtual void set_cursor_position_with_selection(int pos, int anchor) override;
     virtual QString get_current_selection(int& begin, int& end) const override;
     virtual QTextDocument* get_document() override;
+    virtual void set_focus() override;
+    virtual QFontMetrics get_font_metrics() override;
+    virtual void key_press_event(QKeyEvent* kevent) override;
 };
 
-// using BaseClass = QLineEdit;
-using BaseClass = QTextEdit;
 
-class VimLineEdit : public BaseClass
-{
-    Q_OBJECT
-
+class VimEditor {
 private:
     VimMode current_mode = VimMode::Normal;
     int visual_mode_anchor = -1;
     InputTreeNode normal_mode_input_tree;
     InputTreeNode visual_mode_input_tree;
     InputTreeNode insert_mode_input_tree;
-    EscapeLineEdit* command_line_edit;
 
     InputTreeNode* current_node = nullptr;
 
@@ -313,10 +316,11 @@ private:
     void set_style_for_mode(VimMode mode);
 
 public:
+    EscapeLineEdit* command_line_edit;
     TextInputAdapter* adapter = nullptr;
-    explicit VimLineEdit(QWidget *parent = nullptr);
+    explicit VimEditor(QWidget *editor_widget);
 
-    void keyPressEvent(QKeyEvent *event) override;
+    bool key_press_event(QKeyEvent *event);
 
     QString get_word_under_cursor_bounds(int& start, int& end);
     void add_vim_keybindings();
@@ -324,7 +328,7 @@ public:
     void handle_command(VimLineEditCommand cmd, std::optional<char> symbol = {});
     int calculate_find(FindState find_state, bool reverse=false) const;
 
-    void resizeEvent(QResizeEvent* event) override;
+    // void resizeEvent(QResizeEvent* event);
 
 private:
     int calculate_move_word_forward(bool with_symbols) const;
@@ -369,9 +373,31 @@ private:
     void handle_text_command(QString text);
     int get_cursor_position() const;
 
-signals:
-    void quitCommand();
-    void writeCommand();
+// signals:
+//     void quitCommand();
+//     void writeCommand();
+
+};
+
+class VimLineEdit : public QLineEdit {
+    Q_OBJECT
+    VimEditor* editor = nullptr;
+    public:
+
+    VimLineEdit(QWidget *parent = nullptr);
+    void keyPressEvent(QKeyEvent *event) override;
+    void resizeEvent(QResizeEvent *event) override;
+
+};
+
+class VimTextEdit : public QTextEdit {
+    Q_OBJECT
+    VimEditor* editor = nullptr;
+    public:
+
+    VimTextEdit(QWidget *parent = nullptr);
+    void keyPressEvent(QKeyEvent *event) override;
+    void resizeEvent(QResizeEvent *event) override;
 
 };
 
