@@ -47,7 +47,6 @@ VimEditor::VimEditor(QWidget *editor_widget) : editor_widget(editor_widget) {
     QFont font = editor_widget->font();
     font.setFamily("Courier New");
     font.setStyleHint(QFont::TypeWriter);
-    font.setPixelSize(30);
     editor_widget->setFont(font);
     add_vim_keybindings();
 
@@ -1087,7 +1086,8 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
     case VimLineEditCommand::DeletePreviousWord: {
         QString current_text = current_state.text;
         int cursor_pos = get_cursor_position();
-        int previous_space_index = current_text.lastIndexOf(' ', std::max<int>(cursor_pos - 2, 0));
+        // find the last space or newline
+        int previous_space_index = current_text.lastIndexOf(QRegularExpression("\\s"), std::max(cursor_pos - 2, 0));
         int previous_non_space_index = current_text.lastIndexOf(QRegularExpression("\\S"), std::max(previous_space_index - 1, 0));
 
         if (cursor_pos-1 == previous_non_space_index){
@@ -1238,7 +1238,7 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
     // we we have a text selected in visual mode and then perform change or delete
     // we should use the selected text as the target of the change/delete
     if (action_waiting_for_motion.has_value() &&
-        (action_waiting_for_motion->kind == ActionWaitingForMotionKind::Change || action_waiting_for_motion->kind == ActionWaitingForMotionKind::Delete) &&
+        (action_waiting_for_motion->kind == ActionWaitingForMotionKind::Change || action_waiting_for_motion->kind == ActionWaitingForMotionKind::Delete || action_waiting_for_motion->kind == ActionWaitingForMotionKind::Yank) &&
         (current_mode == VimMode::Visual || current_mode == VimMode::VisualLine)){
         int selection_begin, selection_end;
         QString selected_text = get_current_selection(selection_begin, selection_end);
@@ -1249,8 +1249,8 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
             if (cmd !=  VimLineEditCommand::Yank) {
                 // int start_pos = cursor.selectionStart();
                 remove_text(selection_begin, selection_end - selection_begin);
-                set_cursor_position(selection_begin);
             }
+            set_cursor_position(selection_begin);
         }
         if (current_mode == VimMode::VisualLine) {
             int start = visual_line_selection_begin;
@@ -1264,8 +1264,8 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
             set_last_deleted_text(current_state.text.mid(start, end - start - 1 + offset), true);
             if (cmd !=  VimLineEditCommand::Yank) {
                 remove_text(start, end - start);
-                set_cursor_position(start);
             }
+            set_cursor_position(start);
         }
 
         if (action_waiting_for_motion->kind == ActionWaitingForMotionKind::Change) {
