@@ -47,6 +47,7 @@ VimEditor::VimEditor(QWidget *editor_widget) : editor_widget(editor_widget) {
     QFont font = editor_widget->font();
     font.setFamily("Courier New");
     font.setStyleHint(QFont::TypeWriter);
+    font.setPixelSize(30);
     editor_widget->setFont(font);
     add_vim_keybindings();
 
@@ -1962,9 +1963,11 @@ void VimEditor::perform_pending_text_command_with_text(QString text){
         switch (pending_text_command.value()) {
         case VimLineEditCommand::CommandCommand: {
             handle_text_command(text);
+            break;
         }
         case VimLineEditCommand::ReverseSearchCommand:
         case VimLineEditCommand::SearchCommand: {
+            if (text.size() == 0) break;
             SearchState search_state;
             search_state.direction = (pending_text_command.value() == VimLineEditCommand::ReverseSearchCommand) ? FindDirection::Backward : FindDirection::Forward;
             search_state.query = text;
