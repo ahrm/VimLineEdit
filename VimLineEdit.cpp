@@ -73,6 +73,18 @@ VimEditor::VimEditor(QWidget *editor_widget) : editor_widget(editor_widget) {
 
 bool VimEditor::key_press_event(QKeyEvent *event) {
 
+    if (event->key() == Qt::Key_Return && current_mode == VimMode::Normal) {
+        if (dynamic_cast<QLineEditAdapter*>(adapter)){
+            return true;
+        }
+        else{
+            VimTextEdit* text_edit = dynamic_cast<VimTextEdit*>(editor_widget);
+            if (text_edit) {
+                emit text_edit->normalEnterPressed();
+            }
+            return false;
+        }
+    }
     if (event->key() == Qt::Key_Escape) {
         if (current_mode == VimMode::Normal){
             return true;

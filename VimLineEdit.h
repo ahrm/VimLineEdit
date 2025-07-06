@@ -404,6 +404,7 @@ class VimTextEdit : public QTextEdit {
 signals:
     void quitCommand();
     void writeCommand();
+    void normalEnterPressed();
 };
 } // namespace QVimEditor
 
