@@ -376,10 +376,10 @@ class VimEditor {
 
 class VimLineEdit : public QLineEdit {
     Q_OBJECT
-    VimEditor *editor = nullptr;
    bool vim_enabled = true; 
 
   public:
+    VimEditor *editor = nullptr;
     VimLineEdit(QWidget *parent = nullptr);
     void keyPressEvent(QKeyEvent *event) override;
     void resizeEvent(QResizeEvent *event) override;
