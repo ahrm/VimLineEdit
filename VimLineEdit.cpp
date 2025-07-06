@@ -2457,8 +2457,16 @@ void VimLineEdit::set_vim_enabled(bool enabled){
     vim_enabled = enabled;
 }
 
+bool VimLineEdit::get_vim_enabled(){
+    return vim_enabled;
+}
+
 void VimTextEdit::set_vim_enabled(bool enabled){
     vim_enabled = enabled;
+}
+
+bool VimTextEdit::get_vim_enabled(){
+    return vim_enabled;
 }
 
 void VimEditor::goto_line(int line_number){

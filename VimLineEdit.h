@@ -384,6 +384,7 @@ class VimLineEdit : public QLineEdit {
     void keyPressEvent(QKeyEvent *event) override;
     void resizeEvent(QResizeEvent *event) override;
     void set_vim_enabled(bool enabled);
+    bool get_vim_enabled();
 signals:
     void quitCommand();
     void writeCommand();
@@ -399,6 +400,7 @@ class VimTextEdit : public QTextEdit {
     void keyPressEvent(QKeyEvent *event) override;
     void resizeEvent(QResizeEvent *event) override;
     void set_vim_enabled(bool enabled);
+    bool get_vim_enabled();
 signals:
     void quitCommand();
     void writeCommand();
