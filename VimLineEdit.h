@@ -324,6 +324,9 @@ class VimEditor {
     void handle_command(VimLineEditCommand cmd, std::optional<char> symbol = {});
     int calculate_find(FindState find_state, bool reverse = false) const;
     void set_mode(VimMode mode);
+    void goto_line(int line_number);
+    void goto_begin();
+    void goto_end();
 
     // void resizeEvent(QResizeEvent* event);
 

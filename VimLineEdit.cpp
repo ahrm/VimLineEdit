@@ -2458,4 +2458,17 @@ void VimTextEdit::set_vim_enabled(bool enabled){
     vim_enabled = enabled;
 }
 
+void VimEditor::goto_line(int line_number){
+    int pos = get_ith_line_start_position(line_number);
+    adapter->set_cursor_position(pos);
+}
+
+void VimEditor::goto_begin(){
+    adapter->set_cursor_position(0);
+}
+
+void VimEditor::goto_end(){
+    adapter->set_cursor_position(adapter->get_text().length() - 1);
+}
+
 }
