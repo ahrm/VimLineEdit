@@ -2097,6 +2097,8 @@ EscapeLineEdit::EscapeLineEdit(QWidget *parent) : QLineEdit(parent) {
 void EscapeLineEdit::keyPressEvent(QKeyEvent *event) {
     if (event->key() == Qt::Key_Escape) {
         emit escapePressed();
+        // consume the event
+        event->accept();
     }
     QLineEdit::keyPressEvent(event);
 }
