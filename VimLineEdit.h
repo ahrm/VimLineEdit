@@ -401,9 +401,14 @@ class VimTextEdit : public QTextEdit {
     void resizeEvent(QResizeEvent *event) override;
     void set_vim_enabled(bool enabled);
     bool get_vim_enabled();
+    void focusInEvent(QFocusEvent* event) override;
+    void focusOutEvent(QFocusEvent* event) override;
+
 signals:
     void quitCommand();
     void writeCommand();
+    void focusGained();
+    void focusLost();
     void normalEnterPressed();
 };
 } // namespace QVimEditor

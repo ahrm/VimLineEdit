@@ -2494,4 +2494,13 @@ void VimEditor::goto_end(){
     adapter->set_cursor_position(adapter->get_text().length() - 1);
 }
 
+void VimTextEdit::focusInEvent(QFocusEvent* event){
+    emit focusGained();
+    return QTextEdit::focusInEvent(event);
+}
+void VimTextEdit::focusOutEvent(QFocusEvent* event){
+    emit focusLost();
+    return QTextEdit::focusOutEvent(event);
+}
+
 }
