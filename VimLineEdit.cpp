@@ -2099,6 +2099,13 @@ void EscapeLineEdit::keyPressEvent(QKeyEvent *event) {
         emit escapePressed();
         // consume the event
         event->accept();
+        return;
+    }
+    if (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter) {
+        emit returnPressed();
+        // consume the event
+        event->accept();
+        return;
     }
     QLineEdit::keyPressEvent(event);
 }
