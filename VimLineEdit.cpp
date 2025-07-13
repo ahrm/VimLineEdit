@@ -1957,11 +1957,25 @@ InputTreeNode InputTreeNode::clone() const {
 //     BaseClass::resizeEvent(event);
 // }
 
+QColor get_darker_color(QColor color){
+    // get a darker version of the color, unless the color is black, in which case return a lighter version
+    if (color == Qt::black) {
+        return QColor(50, 50, 50); // dark gray
+    }
+    return color.darker(150);
+}
+
 void VimEditor::show_command_line_edit(QString placeholder_text){
+    // get editor widget's background color
+    QColor background_color = get_darker_color(editor_widget->palette().color(QPalette::Base));
+    QColor text_color = editor_widget->palette().color(QPalette::Text);
+
     command_line_edit->setText("");
     command_line_edit->setPlaceholderText(placeholder_text);
     command_line_edit->show();
     command_line_edit->setFocus();
+    command_line_edit->setStyleSheet(QString("QLineEdit { background-color: %1; color: %2; }")
+                                     .arg(background_color.name(), text_color.name()));
 }
 
 void VimEditor::hide_command_line_edit(){
