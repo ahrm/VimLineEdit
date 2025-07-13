@@ -54,7 +54,7 @@ VimEditor::VimEditor(QWidget *editor_widget) : editor_widget(editor_widget) {
     command_line_edit->setFont(font);
     command_line_edit->hide();
 
-    command_line_edit->setStyleSheet("background-color: lightgray;");
+    command_line_edit->setStyleSheet("background-color: #222222;");
 
     QObject::connect(command_line_edit, &EscapeLineEdit::returnPressed, [&](){
         QString text = command_line_edit->text();
@@ -2508,7 +2508,9 @@ void VimTextEdit::focusInEvent(QFocusEvent* event){
     return QTextEdit::focusInEvent(event);
 }
 void VimTextEdit::focusOutEvent(QFocusEvent* event){
-    emit focusLost();
+    if (focusWidget() != editor->command_line_edit){
+        emit focusLost();
+    }
     return QTextEdit::focusOutEvent(event);
 }
 
