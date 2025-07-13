@@ -2281,6 +2281,14 @@ void VimEditor::handle_text_command(QString text){
             emit text_edit->quitCommand();
         }
     }
+    if (text == "q!" || text == "quit!"){
+        if (line_edit){
+            emit line_edit->forceQuitCommand();
+        }
+        if (text_edit){
+            emit text_edit->forceQuitCommand();
+        }
+    }
 
     else {
         qDebug() << "Unknown command: " << text;

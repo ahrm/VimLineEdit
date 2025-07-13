@@ -387,6 +387,7 @@ class VimLineEdit : public QLineEdit {
     bool get_vim_enabled();
 signals:
     void quitCommand();
+    void forceQuitCommand();
     void writeCommand();
 };
 
@@ -406,6 +407,7 @@ class VimTextEdit : public QTextEdit {
 
 signals:
     void quitCommand();
+    void forceQuitCommand();
     void writeCommand();
     void focusGained();
     void focusLost();
