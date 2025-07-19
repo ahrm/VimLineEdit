@@ -290,6 +290,7 @@ class VimEditor {
     std::optional<VimLineEditCommand> pending_text_command = {};
 
     std::optional<ActionWaitingForMotion> action_waiting_for_motion = {};
+    std::optional<int> desired_index_in_line = {};
 
     LastDeletedTextState last_deleted_text;
     QString last_insert_mode_text = "";

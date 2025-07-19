@@ -1,3 +1,4 @@
+#include <algorithm>
 #include "VimLineEdit.h"
 #include <QPainter>
 #include <QtCore/qnamespace.h>
@@ -625,6 +626,7 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
     current_state.text = adapter->get_text();
     current_state.cursor_position = old_pos;
     current_state.marks = marks;
+    bool should_reset_desired_pos = true;
 
     switch (cmd) {
     case VimLineEditCommand::EnterInsertMode:
@@ -864,12 +866,14 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
         break;
     }
     case VimLineEditCommand::MoveUp:
+        should_reset_desired_pos = false;
         new_pos = get_cursor_position();
         for (int i = 0; i < num_repeats; i++) {
             new_pos = calculate_move_up(new_pos);
         }
         break;
     case VimLineEditCommand::MoveDown:
+        should_reset_desired_pos = false;
         new_pos = get_cursor_position();
         for (int i = 0; i < num_repeats; i++) {
             new_pos = calculate_move_down(new_pos);
@@ -1233,6 +1237,10 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
     // Add more cases for other commands as needed
     default:
         break;
+    }
+
+    if (should_reset_desired_pos){
+        desired_index_in_line = {};
     }
 
     // we we have a text selected in visual mode and then perform change or delete
@@ -1816,6 +1824,7 @@ int VimEditor::calculate_move_up(int cursor_pos) {
     int current_line_start = get_line_start_position(cursor_pos);
     int column_offset = cursor_pos - current_line_start;
 
+
     // If we're already on the first line, stay at current position
     if (current_line_start == 0) {
         return cursor_pos;
@@ -1828,8 +1837,17 @@ int VimEditor::calculate_move_up(int cursor_pos) {
     // Calculate the length of the previous line
     int prev_line_length = prev_line_end - prev_line_start;
 
+    if (!desired_index_in_line.has_value()){
+        desired_index_in_line = column_offset;
+    }
+    else{
+        column_offset = desired_index_in_line.value();
+    }
+
+    column_offset = std::min<int>(column_offset, prev_line_end - prev_line_start);
+
     // Try to maintain the same column position, but clamp to line length
-    int new_column = std::min(column_offset, prev_line_length);
+    int new_column = std::min(column_offset, prev_line_length-1);
 
     return prev_line_start + new_column;
 }
@@ -1842,6 +1860,14 @@ int VimEditor::calculate_move_down(int cursor_pos) {
 
     // Find the end of the current line
     int current_line_end = get_line_end_position(cursor_pos);
+
+    if (!desired_index_in_line.has_value()){
+        desired_index_in_line = column_offset;
+    }
+    else{
+        column_offset = desired_index_in_line.value();
+    }
+
 
     // If we're at the last line, stay at current position
     if (current_line_end >= text.length()) {
@@ -1860,8 +1886,10 @@ int VimEditor::calculate_move_down(int cursor_pos) {
     int next_line_end = get_line_end_position(next_line_start);
     int next_line_length = next_line_end - next_line_start;
 
+    column_offset = std::min<int>(column_offset, next_line_end - next_line_start);
+
     // Try to maintain the same column position, but clamp to line length
-    int new_column = std::min(column_offset, next_line_length);
+    int new_column = std::min(column_offset, next_line_length-1);
 
     return next_line_start + new_column;
 }
