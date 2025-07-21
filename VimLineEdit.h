@@ -87,6 +87,7 @@ enum class VimLineEditCommand {
     SwapCaseSelection,
     MoveToTheNextParagraph,
     MoveToThePreviousParagraph,
+    SaveAndQuit,
 };
 
 enum class ActionWaitingForMotionKind {
@@ -372,6 +373,8 @@ class VimEditor {
     QString get_current_selection(int &begin, int &end);
     void handle_text_command(QString text);
     int get_cursor_position() const;
+    void emit_save();
+    void emit_quit();
 
 };
 

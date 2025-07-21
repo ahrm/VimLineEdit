@@ -362,6 +362,8 @@ void VimEditor::add_vim_keybindings() {
         KeyBinding{{KeyChord{"~", {}}}, VimLineEditCommand::SwapCaseCharacterUnderCursor},
         KeyBinding{{KeyChord{"}", {}}}, VimLineEditCommand::MoveToTheNextParagraph},
         KeyBinding{{KeyChord{"{", {}}}, VimLineEditCommand::MoveToThePreviousParagraph},
+        KeyBinding{{KeyChord{"Z", {}}, KeyChord{"Z", {}}},
+                   VimLineEditCommand::SaveAndQuit},
     };
 
     for (const auto &binding : key_bindings) {
@@ -574,6 +576,8 @@ QString to_string(VimLineEditCommand cmd) {
         return "MoveToTheNextParagraph";
     case VimLineEditCommand::MoveToThePreviousParagraph:
         return "MoveToThePreviousParagraph";
+    case VimLineEditCommand::SaveAndQuit:
+        return "SaveAndQuit";
     default:
         return "Unknown";
     }
@@ -788,6 +792,11 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
             set_cursor_position(cursor_position + last_insert_mode_text.size());
             current_insert_mode_text += last_insert_mode_text;
         }
+        break;
+    }
+    case VimLineEditCommand::SaveAndQuit:{
+        emit_save();
+        emit_quit();
         break;
     }
     case VimLineEditCommand::EnterNormalMode: {
@@ -2304,26 +2313,39 @@ QString swap_case(QString input){
 
 }
 
+void VimEditor::emit_save(){
+    VimLineEdit* line_edit = dynamic_cast<VimLineEdit*>(editor_widget);
+    VimTextEdit* text_edit = dynamic_cast<VimTextEdit*>(editor_widget);
+    if (line_edit) {
+        emit line_edit->writeCommand();
+    }
+    if (text_edit) {
+        emit text_edit->writeCommand();
+    }
+}
+
+void VimEditor::emit_quit(){
+    VimLineEdit* line_edit = dynamic_cast<VimLineEdit*>(editor_widget);
+    VimTextEdit* text_edit = dynamic_cast<VimTextEdit*>(editor_widget);
+    if (line_edit) {
+        emit line_edit->quitCommand();
+    }
+    if (text_edit) {
+        emit text_edit->quitCommand();
+    }
+
+}
+
 void VimEditor::handle_text_command(QString text){
 
     VimLineEdit* line_edit = dynamic_cast<VimLineEdit*>(editor_widget);
     VimTextEdit* text_edit = dynamic_cast<VimTextEdit*>(editor_widget);
     if (text == "w" || text == "wq" || text == "write"){
-        if (line_edit){
-            emit line_edit->writeCommand();
-        }
-        if (text_edit){
-            emit text_edit->writeCommand();
-        }
+        emit_save();
     }
 
     if (text == "q" || text == "quit" || text == "wq"){
-        if (line_edit){
-            emit line_edit->quitCommand();
-        }
-        if (text_edit){
-            emit text_edit->quitCommand();
-        }
+        emit_quit();
     }
     if (text == "q!" || text == "quit!"){
         if (line_edit){
