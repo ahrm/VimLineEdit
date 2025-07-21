@@ -1037,6 +1037,7 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
         break;
     }
     case VimLineEditCommand::PasteForward: {
+        push_history(current_state);
         if (last_deleted_text.text.size() > 0) {
             QString current_text = current_state.text;
             int cursor_pos = get_cursor_position();
@@ -1060,6 +1061,7 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
         break;
     }
     case VimLineEditCommand::PasteBackward: {
+        push_history(current_state);
         if (last_deleted_text.text.size() > 0) {
             QString current_text = current_state.text;
             int cursor_pos = get_cursor_position();
