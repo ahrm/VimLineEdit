@@ -74,7 +74,13 @@ void simulate_keystrokes(QVimEditor::VimTextEdit *lineEdit, const QByteArray &ke
 
         if (key != Qt::Key_unknown) {
             QKeyEvent press_event(QEvent::KeyPress, key, modifiers, text_val);
-            QApplication::sendEvent(lineEdit, &press_event);
+            QWidget* focus_widget = lineEdit->focusWidget();
+            if (focus_widget){
+                QApplication::sendEvent(focus_widget, &press_event);
+            }
+            else{
+                QApplication::sendEvent(lineEdit, &press_event);
+            }
             QApplication::processEvents(); // Process events immediately
 
             QKeyEvent release_event(QEvent::KeyRelease, key, modifiers, text_val);
@@ -150,7 +156,7 @@ int main(int argc, char *argv[]) {
 
     int num_passed_tests = 0;
     int num_failed_tests = 0;
-    int only_index = 24;
+    int only_index = 52;
     int current_test_index = 0;
     if (argc > 1) {
         bool ok;
