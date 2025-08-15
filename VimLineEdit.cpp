@@ -1967,10 +1967,16 @@ int VimEditor::calculate_move_down(int cursor_pos) {
     int next_line_end = get_line_end_position(next_line_start);
     int next_line_length = next_line_end - next_line_start;
 
-    column_offset = std::min<int>(column_offset, next_line_end - next_line_start);
+    // If the next line is empty, position should be at its start.
+    if (next_line_length <= 0) {
+        return next_line_start;
+    }
+
+    // Clamp desired column to the last character index of the next line
+    column_offset = std::min<int>(column_offset, next_line_length - 1);
 
     // Try to maintain the same column position, but clamp to line length
-    int new_column = std::min(column_offset, next_line_length-1);
+    int new_column = std::min<int>(column_offset, next_line_length - 1);
 
     return next_line_start + new_column;
 }
