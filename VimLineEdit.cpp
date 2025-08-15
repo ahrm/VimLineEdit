@@ -90,6 +90,13 @@ void VimEditor::highlight_matches(QString pattern){
 
     QTextCharFormat search_highlight_format;
     search_highlight_format.setBackground(Qt::yellow);
+    search_highlight_format.setForeground(Qt::black);
+
+    // identifier to distinguish search highlights from other highlights
+    const int SEARCH_HIGHLIGHT_PROPERTY_INDEX = 31;
+    search_highlight_format.setProperty(QTextFormat::UserProperty, SEARCH_HIGHLIGHT_PROPERTY_INDEX);
+
+    // search_highlight_format.setObjectType(int atype)
 
     while (next_index != -1) {
         int selection_begin = next_index;
@@ -123,7 +130,7 @@ void VimEditor::highlight_matches(QString pattern){
     for (const QTextEdit::ExtraSelection& old_selection : old_extra_selections) {
         // Restore the old selection format
         // selection.format = search_highlight_format;
-        if (old_selection.format != search_highlight_format){
+        if (old_selection.format.property(QTextFormat::UserProperty).toInt() != SEARCH_HIGHLIGHT_PROPERTY_INDEX){
             // old_selections_to_keep.append(old_selection);
             selections.append(old_selection);
 
