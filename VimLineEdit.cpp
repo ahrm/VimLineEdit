@@ -2068,6 +2068,10 @@ void VimEditor::handle_action_waiting_for_motion(int old_pos, int new_pos, int d
             }
         }
 
+        if (action_waiting_for_motion.value().kind == ActionWaitingForMotionKind::Visual) {
+            set_cursor_position_with_selection(new_pos);
+        }
+
         action_waiting_for_motion = {};
     }
 }
