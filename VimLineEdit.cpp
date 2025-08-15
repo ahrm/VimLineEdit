@@ -68,7 +68,70 @@ VimEditor::VimEditor(QWidget *editor_widget) : editor_widget(editor_widget) {
         hide_command_line_edit();
     });
 
+    QObject::connect(command_line_edit, &EscapeLineEdit::textChanged, [&](const QString& new_text){
+        highlight_matches(new_text);
+    });
+
     set_style_for_mode(current_mode);
+}
+
+void VimEditor::highlight_matches(QString pattern){
+    QTextEditAdapter *text_adapter = dynamic_cast<QTextEditAdapter*>(adapter);
+    if (text_adapter == nullptr) return;
+
+    QString current_text = adapter->get_text();
+
+    int first_index = 0;
+
+    int next_index = current_text.indexOf(pattern, first_index);
+
+    QList<QTextEdit::ExtraSelection> selections;
+
+
+    QTextCharFormat search_highlight_format;
+    search_highlight_format.setBackground(Qt::yellow);
+
+    while (next_index != -1) {
+        int selection_begin = next_index;
+        int selection_end = next_index + pattern.length();
+
+        QTextCursor cursor = text_adapter->text_edit->textCursor();
+
+        cursor.setPosition(selection_begin, QTextCursor::MoveAnchor);
+        cursor.setPosition(selection_end, QTextCursor::KeepAnchor);
+
+        QTextEdit::ExtraSelection selection;
+        selection.cursor = cursor;
+        selection.format = search_highlight_format;
+
+        QColor selection_foreground_color = text_adapter->text_edit->palette().color(QPalette::Text);
+        QColor selection_background_color = text_adapter->text_edit->palette().color(QPalette::Highlight);
+
+        // selection.format.setBackground(selection_background_color);
+        // selection.format.setForeground(selection_foreground_color);
+
+        selections.append(selection);
+
+
+        // Find the next match
+        first_index = next_index + 1;
+        next_index = current_text.indexOf(pattern, first_index);
+    }
+
+    QList<QTextEdit::ExtraSelection> old_extra_selections = adapter->get_extra_selections();
+    // QList<QTextEdit::ExtraSelection> old_selections_to_keep;
+    for (const QTextEdit::ExtraSelection& old_selection : old_extra_selections) {
+        // Restore the old selection format
+        // selection.format = search_highlight_format;
+        if (old_selection.format != search_highlight_format){
+            // old_selections_to_keep.append(old_selection);
+            selections.append(old_selection);
+
+        }
+    }
+
+    adapter->set_extra_selections(selections);
+
 }
 
 bool VimEditor::key_press_event(QKeyEvent *event) {

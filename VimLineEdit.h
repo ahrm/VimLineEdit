@@ -363,6 +363,7 @@ class VimEditor {
     void perform_pending_text_command_with_text(QString text);
     void handle_action_waiting_for_motion(int old_pos, int new_pos, int delete_pos_offset);
     void handle_search(bool reverse = false);
+    void highlight_matches(QString pattern);
     void set_last_deleted_text(QString text, bool is_line = false);
     void handle_number_increment_decrement(bool increment);
     void remove_text(int begin, int num);
