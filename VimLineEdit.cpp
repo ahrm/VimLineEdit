@@ -19,6 +19,7 @@
 #include <QClipboard>
 
 namespace QVimEditor{
+const int SEARCH_HIGHLIGHT_PROPERTY_INDEX = 31;
 
 
 class LineEditStyle : public QCommonStyle {
@@ -93,7 +94,6 @@ void VimEditor::highlight_matches(QString pattern){
     search_highlight_format.setForeground(Qt::black);
 
     // identifier to distinguish search highlights from other highlights
-    const int SEARCH_HIGHLIGHT_PROPERTY_INDEX = 31;
     search_highlight_format.setProperty(QTextFormat::UserProperty, SEARCH_HIGHLIGHT_PROPERTY_INDEX);
 
     // search_highlight_format.setObjectType(int atype)
@@ -2551,7 +2551,16 @@ QString QLineEditAdapter::get_current_selection(int &begin, int &end) const {
 }
 
 QString QTextEditAdapter::get_current_selection(int &begin, int &end) const {
-    QTextCursor cursor = text_edit->extraSelections().isEmpty() ? text_edit->textCursor() : text_edit->extraSelections().first().cursor;
+    QTextCursor cursor = text_edit->textCursor();
+    auto extra_selections = text_edit->extraSelections();
+    for (auto selection : extra_selections){
+        if (selection.format.property(QTextFormat::UserProperty).toInt() != SEARCH_HIGHLIGHT_PROPERTY_INDEX){
+            cursor = selection.cursor;
+            break;
+        }
+    }
+
+
     begin = cursor.selectionStart();
     end = cursor.selectionEnd();
     return cursor.selectedText();
