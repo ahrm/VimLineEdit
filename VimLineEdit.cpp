@@ -1940,6 +1940,11 @@ int VimEditor::calculate_move_up(int cursor_pos) {
         column_offset = desired_index_in_line.value();
     }
 
+    // If the previous line is empty, position should be at its start
+    if (prev_line_length <= 0) {
+        return prev_line_start;
+    }
+
     column_offset = std::min<int>(column_offset, prev_line_end - prev_line_start);
 
     // Try to maintain the same column position, but clamp to line length
@@ -2047,7 +2052,13 @@ int VimEditor::calculate_move_on_screen(int direction) {
     int target_line_index = current_line_index + direction;
     if (target_line_index >= 0 && target_line_index < layout->lineCount()) {
         QTextLine target_line = layout->lineAt(target_line_index);
-        int target_index = std::min(char_index_in_line, target_line.textLength() - 1);
+        int target_index;
+        // If the target visual line is empty, position at its start
+        if (target_line.textLength() <= 0) {
+            target_index = 0;
+        } else {
+            target_index = std::min(char_index_in_line, target_line.textLength() - 1);
+        }
         return current_block.position() + target_line.textStart() + target_index;
     }
 
@@ -2065,7 +2076,12 @@ int VimEditor::calculate_move_on_screen(int direction) {
     // Choose first or last line of the target block
     int target_block_line_index = (direction > 0) ? 0 : target_layout->lineCount() - 1;
     QTextLine target_line = target_layout->lineAt(target_block_line_index);
-    int target_index = std::min(char_index_in_line, target_line.textLength() - 1);
+    int target_index;
+    if (target_line.textLength() <= 0) {
+        target_index = 0;
+    } else {
+        target_index = std::min(char_index_in_line, target_line.textLength() - 1);
+    }
     return target_block.position() + target_line.textStart() + target_index;
 }
 
