@@ -88,6 +88,7 @@ enum class VimLineEditCommand {
     MoveToTheNextParagraph,
     MoveToThePreviousParagraph,
     SaveAndQuit,
+    SelectPasteRegister,
 };
 
 enum class ActionWaitingForMotionKind {
@@ -293,7 +294,9 @@ class VimEditor {
     std::optional<ActionWaitingForMotion> action_waiting_for_motion = {};
     std::optional<int> desired_index_in_line = {};
 
-    LastDeletedTextState last_deleted_text;
+    LastDeletedTextState last_deleted_text_;
+    std::unordered_map<int, LastDeletedTextState> paste_registers;
+
     QString last_insert_mode_text = "";
     QString current_insert_mode_text = "";
     QString current_command_repeat_number = "";
@@ -301,6 +304,7 @@ class VimEditor {
     std::unordered_map<int, Mark> marks;
     std::unordered_map<int, Macro> macros;
     std::optional<Macro> current_macro = {};
+    std::optional<char> current_paste_register = {};
     int last_macro_symbol = -1;
 
     std::optional<FindState> last_find_state = {};
@@ -364,7 +368,9 @@ class VimEditor {
     void handle_action_waiting_for_motion(int old_pos, int new_pos, int delete_pos_offset);
     void handle_search(bool reverse = false);
     void highlight_matches(QString pattern);
-    void set_last_deleted_text(QString text, bool is_line = false);
+    void set_last_deleted_text(QString text, std::optional<char> reg, bool is_line = false);
+    std::optional<LastDeletedTextState> get_last_deleted_text(std::optional<char> reg);
+
     void handle_number_increment_decrement(bool increment);
     void remove_text(int begin, int num);
     void insert_text(QString text, int left_index, int right_index = -1);

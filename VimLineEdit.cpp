@@ -17,6 +17,7 @@
 #include <variant>
 #include <vector>
 #include <QClipboard>
+#include <QApplication>
 
 namespace QVimEditor{
 const int SEARCH_HIGHLIGHT_PROPERTY_INDEX = 31;
@@ -425,6 +426,7 @@ void VimEditor::add_vim_keybindings() {
         KeyBinding{{KeyChord{"m", {}}}, VimLineEditCommand::SetMark},
         KeyBinding{{KeyChord{"`", {}}}, VimLineEditCommand::GotoMark},
         KeyBinding{{KeyChord{"q", {}}}, VimLineEditCommand::RecordMacro},
+        KeyBinding{{KeyChord{"\"", {}}}, VimLineEditCommand::SelectPasteRegister},
         KeyBinding{{KeyChord{"@", {}}}, VimLineEditCommand::RepeatMacro},
         KeyBinding{{KeyChord{"*", {}}}, VimLineEditCommand::SearchTextUnderCursor},
         KeyBinding{{KeyChord{"#", {}}}, VimLineEditCommand::SearchTextUnderCursorBackward},
@@ -628,6 +630,8 @@ QString to_string(VimLineEditCommand cmd) {
         return "GotoMark";
     case VimLineEditCommand::RecordMacro:
         return "RecordMacro";
+    case VimLineEditCommand::SelectPasteRegister:
+        return "SelectPasteRegister";
     case VimLineEditCommand::RepeatMacro:
         return "RepeatMacro";
     case VimLineEditCommand::SearchTextUnderCursor:
@@ -662,6 +666,7 @@ bool VimEditor::requires_symbol(VimLineEditCommand cmd) {
     case VimLineEditCommand::SetMark:
     case VimLineEditCommand::GotoMark:
     case VimLineEditCommand::RepeatMacro:
+    case VimLineEditCommand::SelectPasteRegister:
         return true;
     case VimLineEditCommand::RecordMacro:
         return !current_macro.has_value();
@@ -767,6 +772,9 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
             new_macro.name = symbol.value();
             current_macro = std::move(new_macro);
         }
+        break;
+    case VimLineEditCommand::SelectPasteRegister:
+        current_paste_register = symbol.value();
         break;
     case VimLineEditCommand::RepeatMacro: {
         int macro_symbol = symbol.value();
@@ -1023,7 +1031,7 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
         int cursor_offset = cmd == VimLineEditCommand::DeleteToEndOfLine ? -1 : 0;
         
         if (cursor_pos < line_end) {
-            set_last_deleted_text(current_state.text.mid(cursor_pos, line_end - cursor_pos));
+            set_last_deleted_text(current_state.text.mid(cursor_pos, line_end - cursor_pos), current_paste_register);
             remove_text(cursor_pos, line_end - cursor_pos);
             set_cursor_position(cursor_pos + cursor_offset);
         }
@@ -1096,7 +1104,7 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
         int line_start = get_line_start_position(cursor_pos);
         int line_end = get_line_end_position(cursor_pos);
 
-        set_last_deleted_text(current_state.text.mid(line_start, line_end - line_start), true);
+        set_last_deleted_text(current_state.text.mid(line_start, line_end - line_start), current_paste_register, true);
 
         if (cmd != VimLineEditCommand::YankCurrentLine){
 
@@ -1117,22 +1125,23 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
     }
     case VimLineEditCommand::PasteForward: {
         push_history(current_state);
-        if (last_deleted_text.text.size() > 0) {
+        std::optional<LastDeletedTextState> last_deleted_text = get_last_deleted_text(current_paste_register);
+        if (last_deleted_text && last_deleted_text->text.size() > 0) {
             QString current_text = current_state.text;
             int cursor_pos = get_cursor_position();
 
             for (int i = 0; i < num_repeats; i++){
-                if (last_deleted_text.is_line) {
+                if (last_deleted_text->is_line) {
                     // Paste the line below the current line
                     int line_end = get_line_end_position(cursor_pos);
-                    insert_text("\n" + last_deleted_text.text, line_end);
+                    insert_text("\n" + last_deleted_text->text, line_end);
 
                     new_pos = line_end + 1;
                 }
                 else {
                     // Paste the last deleted text after the cursor position
-                    insert_text(last_deleted_text.text, cursor_pos + 1);
-                    new_pos = cursor_pos + last_deleted_text.text.size();
+                    insert_text(last_deleted_text->text, cursor_pos + 1);
+                    new_pos = cursor_pos + last_deleted_text->text.size();
                 }
                 cursor_pos = new_pos;
             }
@@ -1141,19 +1150,20 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
     }
     case VimLineEditCommand::PasteBackward: {
         push_history(current_state);
-        if (last_deleted_text.text.size() > 0) {
+        std::optional<LastDeletedTextState> last_deleted_text = get_last_deleted_text(current_paste_register);
+        if (last_deleted_text && last_deleted_text->text.size() > 0) {
             QString current_text = current_state.text;
             int cursor_pos = get_cursor_position();
 
-            if (last_deleted_text.is_line) {
+            if (last_deleted_text->is_line) {
                 // Paste the line above the current line
                 int line_start = get_line_start_position(cursor_pos);
-                insert_text(last_deleted_text.text + "\n", line_start);
+                insert_text(last_deleted_text->text + "\n", line_start);
                 new_pos = line_start;
             } else {
                 // Paste the last deleted text before the cursor position
-                insert_text(last_deleted_text.text, cursor_pos);
-                new_pos = cursor_pos + last_deleted_text.text.size();
+                insert_text(last_deleted_text->text, cursor_pos);
+                new_pos = cursor_pos + last_deleted_text->text.size();
             }
         }
         break;
@@ -1320,6 +1330,10 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
         break;
     }
 
+    if (cmd != VimLineEditCommand::SelectPasteRegister && !action_waiting_for_motion.has_value()){
+        current_paste_register = {};
+    }
+
     if (should_reset_desired_pos){
         desired_index_in_line = {};
     }
@@ -1334,7 +1348,7 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
 
         if (current_mode == VimMode::Visual) {
             auto selections = adapter->get_extra_selections();
-            set_last_deleted_text(selected_text);
+            set_last_deleted_text(selected_text, current_paste_register);
             if (cmd !=  VimLineEditCommand::Yank) {
                 // int start_pos = cursor.selectionStart();
                 remove_text(selection_begin, selection_end - selection_begin);
@@ -1389,6 +1403,7 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
         }
     }
 }
+
 
 int VimEditor::calculate_find(FindState find_state, bool reverse) const {
 
@@ -1567,7 +1582,7 @@ void VimEditor::delete_char(bool is_single) {
             }
         }
 
-        set_last_deleted_text(current_text.mid(current_pos, 1));
+        set_last_deleted_text(current_text.mid(current_pos, 1), current_paste_register);
         remove_text(current_pos, 1);
         set_cursor_position(current_pos);
     }
@@ -1690,7 +1705,7 @@ bool VimEditor::handle_surrounding_motion_action() {
                 if (action_waiting_for_motion->kind == ActionWaitingForMotionKind::Delete ||
                     action_waiting_for_motion->kind == ActionWaitingForMotionKind::Change) {
                     // Store deleted text for paste operation
-                    set_last_deleted_text(text_under_cursor);
+                    set_last_deleted_text(text_under_cursor, current_paste_register);
                     // Delete only the word characters
                     remove_text(start, end - start);
                     set_cursor_position(start);
@@ -1700,7 +1715,7 @@ bool VimEditor::handle_surrounding_motion_action() {
                     }
                 }
                 else if (action_waiting_for_motion->kind == ActionWaitingForMotionKind::Yank) {
-                    set_last_deleted_text(text_under_cursor);
+                    set_last_deleted_text(text_under_cursor, current_paste_register);
                 }
                 else if (action_waiting_for_motion->kind == ActionWaitingForMotionKind::Visual) {
                     visual_mode_anchor = start;
@@ -1779,7 +1794,7 @@ bool VimEditor::handle_surrounding_motion_action() {
                 if (action_waiting_for_motion->kind == ActionWaitingForMotionKind::Delete ||
                     action_waiting_for_motion->kind == ActionWaitingForMotionKind::Change) {
                     // Store deleted text for paste operation
-                    set_last_deleted_text(current_text.mid(start, end - start));
+                    set_last_deleted_text(current_text.mid(start, end - start), current_paste_register);
                     // Delete the surrounding symbols
                     remove_text(start, end - start);
                     set_cursor_position(start);
@@ -1788,7 +1803,7 @@ bool VimEditor::handle_surrounding_motion_action() {
                     }
                 }
                 else if (action_waiting_for_motion->kind == ActionWaitingForMotionKind::Yank) {
-                    set_last_deleted_text(current_text.mid(start, end - start));
+                    set_last_deleted_text(current_text.mid(start, end - start), current_paste_register);
                 }
                 else if (action_waiting_for_motion->kind == ActionWaitingForMotionKind::Visual) {
                     visual_mode_anchor = start;
@@ -2129,12 +2144,12 @@ void VimEditor::handle_action_waiting_for_motion(int old_pos, int new_pos, int d
             // delete from old_pos to new_pos
             if (old_pos < new_pos) {
                 set_last_deleted_text(
-                    current_text.mid(old_pos, new_pos + delete_pos_offset - old_pos));
+                    current_text.mid(old_pos, new_pos + delete_pos_offset - old_pos), current_paste_register);
                 remove_text(old_pos, new_pos + delete_pos_offset - old_pos);
                 set_cursor_position(old_pos);
             }
             else if (old_pos > new_pos) {
-                set_last_deleted_text(current_text.mid(new_pos, old_pos - new_pos));
+                set_last_deleted_text(current_text.mid(new_pos, old_pos - new_pos), current_paste_register);
                 remove_text(new_pos, old_pos - new_pos);
                 set_cursor_position(new_pos);
             }
@@ -2243,9 +2258,47 @@ void EscapeLineEdit::keyPressEvent(QKeyEvent *event) {
     QLineEdit::keyPressEvent(event);
 }
 
-void VimEditor::set_last_deleted_text(QString text, bool is_line){
-    last_deleted_text.text = text;
-    last_deleted_text.is_line = is_line;
+void VimEditor::set_last_deleted_text(QString text, std::optional<char> reg, bool is_line){
+    if (reg.has_value()){
+        if (reg.value() == '+' || reg.value() == '*'){
+            // set the contents of the system clipboard
+            QClipboard *clipboard = QApplication::clipboard();
+            clipboard->setText(text);
+            return;
+        }
+        else{
+            LastDeletedTextState state;
+            state.text = text;
+            state.is_line = is_line;
+            paste_registers[reg.value()] = state;
+        }
+    }
+    else{
+        last_deleted_text_.text = text;
+        last_deleted_text_.is_line = is_line;
+    }
+
+}
+
+std::optional<LastDeletedTextState> VimEditor::get_last_deleted_text(std::optional<char> reg){
+    if (reg.has_value()){
+        if (reg.value() == '+' || reg.value() == '*'){
+            // return the contents of the system clipboard
+            QClipboard *clipboard = QApplication::clipboard();
+            LastDeletedTextState clipboard_state;
+            clipboard_state.text = clipboard->text();
+            clipboard_state.is_line = false;
+            return clipboard_state;
+        }
+        auto it = paste_registers.find(reg.value());
+        if (it != paste_registers.end()){
+            return it->second;
+        }
+        else{
+            return {};
+        }
+    }
+    return last_deleted_text_;
 }
 
 void VimEditor::handle_number_increment_decrement(bool increment) {
