@@ -1364,7 +1364,7 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
             }
             // // offset = 0;
 
-            set_last_deleted_text(current_state.text.mid(start, end - start - 1 + offset), true);
+            set_last_deleted_text(current_state.text.mid(start, end - start - 1 + offset), current_paste_register, true);
             if (cmd !=  VimLineEditCommand::Yank) {
                 remove_text(start, end - start);
             }
