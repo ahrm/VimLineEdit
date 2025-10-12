@@ -11,7 +11,7 @@
 #include <QTextBlock>
 #include <QTextLayout>
 #include <QtWidgets/qtextedit.h>
-#include <_stdio.h>
+#include <cstdio>
 #include <functional>
 #include <utility>
 #include <variant>
@@ -2152,8 +2152,10 @@ void VimEditor::perform_pending_text_command_with_text(QString text){
             search_state.query = text;
             last_search_state = search_state;
             handle_search();
+            break;
         }
         default:
+            break;
         }
     }
 
