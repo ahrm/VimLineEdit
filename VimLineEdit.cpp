@@ -1,9 +1,12 @@
 #include <algorithm>
 #include "VimLineEdit.h"
+#include <QAbstractTextDocumentLayout>
 #include <QPainter>
+#include <QScrollBar>
 #include <QtCore/qnamespace.h>
 #include <QtGui/qtextcursor.h>
 #include <QtWidgets/qlineedit.h>
+#include <QtWidgets/qwidget.h>
 // #include <QFontMetrics>
 #include <QCommonStyle>
 #include <QRegularExpression>
@@ -2719,8 +2722,36 @@ void VimLineEdit::resizeEvent(QResizeEvent *event) {
     QLineEdit::resizeEvent(event);
 }
 
+LineNumberArea::LineNumberArea(VimTextEdit *editor) : QWidget(editor), text_edit(editor) {
+}
+
+QSize LineNumberArea::sizeHint() const {
+    return QSize(text_edit->line_number_area_width(), 0);
+}
+
+void LineNumberArea::paintEvent(QPaintEvent *event) {
+    text_edit->line_number_area_paint_event(event);
+}
+
 VimTextEdit::VimTextEdit(QWidget *parent) : QTextEdit(parent) {
     editor = new VimEditor(this);
+    line_number_area = new LineNumberArea(this);
+    line_number_area->hide();
+
+    QObject::connect(document(), &QTextDocument::blockCountChanged, this, [this]() {
+        update_line_number_area_width();
+        update_line_number_area();
+    });
+    QObject::connect(verticalScrollBar(), &QScrollBar::valueChanged, this, [this]() {
+        update_line_number_area();
+    });
+    QObject::connect(this, &QTextEdit::textChanged, this, [this]() {
+        update_line_number_area();
+    });
+    QObject::connect(this, &QTextEdit::cursorPositionChanged, this, [this]() {
+        update_line_number_area();
+    });
+    update_line_number_area_width();
 }
 
 void VimTextEdit::keyPressEvent(QKeyEvent *event) {
@@ -2733,6 +2764,7 @@ void VimTextEdit::resizeEvent(QResizeEvent *event) {
     editor->command_line_edit->resize(event->size().width(), editor->command_line_edit->height());
     editor->command_line_edit->move(0, height() - editor->command_line_edit->height());
     QTextEdit::resizeEvent(event);
+    update_line_number_area();
 }
 
 
@@ -2750,6 +2782,85 @@ void VimTextEdit::set_vim_enabled(bool enabled){
 
 bool VimTextEdit::get_vim_enabled(){
     return vim_enabled;
+}
+
+void VimTextEdit::set_line_numbers_visible(bool visible){
+    if (line_numbers_visible == visible){
+        return;
+    }
+
+    line_numbers_visible = visible;
+    line_number_area->setVisible(visible);
+    update_line_number_area_width();
+    update_line_number_area();
+}
+
+bool VimTextEdit::get_line_numbers_visible() const{
+    return line_numbers_visible;
+}
+
+int VimTextEdit::line_number_area_width() const{
+    if (!line_numbers_visible){
+        return 0;
+    }
+
+    int digits = 1;
+    int max_line = std::max(1, document()->blockCount());
+    while (max_line >= 10) {
+        max_line /= 10;
+        ++digits;
+    }
+
+    return 8 + fontMetrics().horizontalAdvance(QLatin1Char('9')) * digits;
+}
+
+void VimTextEdit::update_line_number_area_width(){
+    setViewportMargins(line_number_area_width(), 0, 0, 0);
+}
+
+void VimTextEdit::update_line_number_area(){
+    if (!line_number_area){
+        return;
+    }
+
+    QRect cr = contentsRect();
+    line_number_area->setGeometry(QRect(cr.left(), cr.top(), line_number_area_width(), cr.height()));
+    if (line_numbers_visible){
+        line_number_area->update();
+    }
+}
+
+void VimTextEdit::line_number_area_paint_event(QPaintEvent *event){
+    if (!line_numbers_visible){
+        return;
+    }
+
+    QPainter painter(line_number_area);
+    painter.fillRect(event->rect(), palette().color(QPalette::AlternateBase));
+    painter.setPen(palette().color(QPalette::Mid));
+
+    QTextBlock block = document()->firstBlock();
+    int block_number = 1;
+    QAbstractTextDocumentLayout *layout = document()->documentLayout();
+    QPointF offset(-horizontalScrollBar()->value(), -verticalScrollBar()->value());
+
+    while (block.isValid()) {
+        QRectF block_rect = layout->blockBoundingRect(block).translated(offset);
+        int top = qRound(block_rect.top());
+        int bottom = qRound(block_rect.bottom());
+
+        if (bottom >= event->rect().top() && top <= event->rect().bottom()) {
+            painter.drawText(0, top, line_number_area->width() - 4, fontMetrics().height(),
+                             Qt::AlignRight, QString::number(block_number));
+        }
+
+        if (top > event->rect().bottom()) {
+            break;
+        }
+
+        block = block.next();
+        ++block_number;
+    }
 }
 
 void VimEditor::goto_line(int line_number){

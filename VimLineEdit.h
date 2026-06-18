@@ -13,6 +13,8 @@
 #include <QTextCursor>
 
 namespace QVimEditor {
+class VimTextEdit;
+
 QString swap_case(QString input);
 
 enum class VimLineEditCommand {
@@ -403,9 +405,28 @@ signals:
     void writeCommand();
 };
 
+class LineNumberArea : public QWidget {
+  public:
+    explicit LineNumberArea(VimTextEdit *editor);
+    QSize sizeHint() const override;
+
+  protected:
+    void paintEvent(QPaintEvent *event) override;
+
+  private:
+    VimTextEdit *text_edit;
+};
+
 class VimTextEdit : public QTextEdit {
     Q_OBJECT
     bool vim_enabled = true;
+    bool line_numbers_visible = false;
+    LineNumberArea *line_number_area = nullptr;
+
+    int line_number_area_width() const;
+    void update_line_number_area_width();
+    void update_line_number_area();
+    void line_number_area_paint_event(QPaintEvent *event);
 
   public:
     VimEditor *editor = nullptr;
@@ -414,8 +435,12 @@ class VimTextEdit : public QTextEdit {
     void resizeEvent(QResizeEvent *event) override;
     void set_vim_enabled(bool enabled);
     bool get_vim_enabled();
+    void set_line_numbers_visible(bool visible);
+    bool get_line_numbers_visible() const;
     void focusInEvent(QFocusEvent* event) override;
     void focusOutEvent(QFocusEvent* event) override;
+
+    friend class LineNumberArea;
 
 signals:
     void quitCommand();
