@@ -119,6 +119,7 @@ enum class SurroundingKind {
     Parentheses,
     Brackets,
     Braces,
+    AngleBrackets,
     SingleQuotes,
     DoubleQuotes,
     Backticks,

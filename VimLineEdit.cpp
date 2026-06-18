@@ -238,6 +238,9 @@ bool VimEditor::key_press_event(QKeyEvent *event) {
                 case Qt::Key_BracketLeft:
                     action_waiting_for_motion->surrounding_kind = SurroundingKind::Brackets;
                     break;
+                case Qt::Key_Less:
+                    action_waiting_for_motion->surrounding_kind = SurroundingKind::AngleBrackets;
+                    break;
                 case Qt::Key_QuoteLeft:
                     action_waiting_for_motion->surrounding_kind = SurroundingKind::SingleQuotes;
                     break;
@@ -1746,6 +1749,10 @@ bool VimEditor::handle_surrounding_motion_action() {
             else if (action_waiting_for_motion->surrounding_kind == SurroundingKind::Braces) {
                 begin_symbol = '{';
                 end_symbol = '}';
+            }
+            else if (action_waiting_for_motion->surrounding_kind == SurroundingKind::AngleBrackets) {
+                begin_symbol = '<';
+                end_symbol = '>';
             }
             else if (action_waiting_for_motion->surrounding_kind == SurroundingKind::DoubleQuotes) {
                 begin_symbol = '"';
