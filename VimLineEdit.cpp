@@ -890,7 +890,6 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
             adapter->set_extra_selections(QList<QTextEdit::ExtraSelection>());
         }
 
-        push_history(current_state);
         VimMode previous_mode = current_mode;
         set_mode(VimMode::Normal);
 
