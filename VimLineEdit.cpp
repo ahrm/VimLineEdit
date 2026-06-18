@@ -2836,7 +2836,7 @@ void VimTextEdit::line_number_area_paint_event(QPaintEvent *event){
     }
 
     QPainter painter(line_number_area);
-    painter.fillRect(event->rect(), palette().color(QPalette::AlternateBase));
+    painter.fillRect(event->rect(), palette().color(QPalette::Base));
     painter.setPen(palette().color(QPalette::Mid));
 
     QTextBlock block = document()->firstBlock();
