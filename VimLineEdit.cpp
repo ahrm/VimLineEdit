@@ -2579,7 +2579,15 @@ void QLineEditAdapter::set_extra_selections(const QList<QTextEdit::ExtraSelectio
 }
 
 void QTextEditAdapter::set_text(QString text) {
+    QScrollBar *vertical_scroll_bar = text_edit->verticalScrollBar();
+    QScrollBar *horizontal_scroll_bar = text_edit->horizontalScrollBar();
+    int vertical_scroll_value = vertical_scroll_bar->value();
+    int horizontal_scroll_value = horizontal_scroll_bar->value();
+
     text_edit->setPlainText(text);
+
+    vertical_scroll_bar->setValue(vertical_scroll_value);
+    horizontal_scroll_bar->setValue(horizontal_scroll_value);
 }
 
 void QLineEditAdapter::set_text(QString text) {
