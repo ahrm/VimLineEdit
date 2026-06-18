@@ -1775,21 +1775,36 @@ bool VimEditor::handle_surrounding_motion_action() {
             int end = cursor_pos;
             bool found_begin = false;
             bool found_end = false;
+            int begin_to_find = 1;
+            int end_to_find = 1;
+
             // Find the beginning of the surrounding
             while (start > 0) {
                 if (current_text[start - 1] == begin_symbol) {
-                    found_begin = true;
-                    start--;
-                    break;
+                    begin_to_find--;
+                    if (begin_to_find == 0) {
+                        found_begin = true;
+                        start--;
+                        break;
+                    }
+                }
+                if (current_text[start - 1] == end_symbol) {
+                    begin_to_find++;
                 }
                 start--;
             }
             // Find the end of the surrounding
             while (end < current_text.length()) {
                 if (current_text[end] == end_symbol) {
-                    found_end = true;
-                    end++;
-                    break;
+                    end_to_find--;
+                    if (end_to_find == 0) {
+                        found_end = true;
+                        end++;
+                        break;
+                    }
+                }
+                if (current_text[end] == begin_symbol) {
+                    end_to_find++;
                 }
                 end++;
             }
