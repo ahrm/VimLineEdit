@@ -64,7 +64,7 @@ VimEditor::VimEditor(QWidget *editor_widget) : editor_widget(editor_widget) {
 
     QObject::connect(command_line_edit, &EscapeLineEdit::returnPressed, [&](){
         QString text = command_line_edit->text();
-        perform_pending_text_command_with_text(text);
+        perform_pending_text_command_with_text(text.mid(1));
         hide_command_line_edit();
 
     });
@@ -74,7 +74,13 @@ VimEditor::VimEditor(QWidget *editor_widget) : editor_widget(editor_widget) {
     });
 
     QObject::connect(command_line_edit, &EscapeLineEdit::textChanged, [&](const QString& new_text){
-        highlight_matches(new_text);
+        if (new_text.size() == 0){
+            // close the command line if the user deletes all text (e.g. by pressing backspace)
+            hide_command_line_edit();
+        }
+        else{
+            highlight_matches(new_text.mid(1));
+        }
     });
 
     set_style_for_mode(current_mode);
@@ -508,6 +514,19 @@ std::optional<VimLineEditCommand> VimEditor::handle_key_event(QString event_text
     // if no matching key chord is found, reset current_node
     current_node = nullptr;
     return {};
+}
+
+QString get_initial_command_text(VimLineEditCommand cmd){
+    switch (cmd) {
+        case VimLineEditCommand::CommandCommand:
+            return ":";
+        case VimLineEditCommand::SearchCommand:
+            return "/";
+        case VimLineEditCommand::ReverseSearchCommand:
+            return "?";
+        default:
+            return "";
+    }
 }
 
 QString to_string(VimLineEditCommand cmd) {
@@ -1236,7 +1255,7 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
     case VimLineEditCommand::ReverseSearchCommand:
     case VimLineEditCommand::CommandCommand: {
         pending_text_command = cmd;
-        show_command_line_edit(to_string(cmd));
+        show_command_line_edit(get_initial_command_text(cmd));
         break;
     }
     case VimLineEditCommand::DecrementNextNumberOnCurrentLine:
@@ -2142,12 +2161,12 @@ QColor get_darker_color(QColor color){
     return color.darker(150);
 }
 
-void VimEditor::show_command_line_edit(QString placeholder_text){
+void VimEditor::show_command_line_edit(QString initial_command_text, QString placeholder_text){
     // get editor widget's background color
     QColor background_color = get_darker_color(editor_widget->palette().color(QPalette::Base));
     QColor text_color = editor_widget->palette().color(QPalette::Text);
 
-    command_line_edit->setText("");
+    command_line_edit->setText(initial_command_text);
     command_line_edit->setPlaceholderText(placeholder_text);
     command_line_edit->show();
     command_line_edit->raise();
