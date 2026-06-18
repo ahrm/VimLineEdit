@@ -2150,6 +2150,7 @@ void VimEditor::show_command_line_edit(QString placeholder_text){
     command_line_edit->setText("");
     command_line_edit->setPlaceholderText(placeholder_text);
     command_line_edit->show();
+    command_line_edit->raise();
     command_line_edit->setFocus();
     command_line_edit->setStyleSheet(QString("QLineEdit { background-color: %1; color: %2; }")
                                      .arg(background_color.name(), text_color.name()));
