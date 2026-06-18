@@ -13,7 +13,6 @@ set(CMAKE_AUTOUIC ON)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-set(CMAKE_PREFIX_PATH "/Volumes/my_external_ssd/qt69/")
 find_package(Qt6 COMPONENTS Widgets REQUIRED)
 
 add_executable(vim_lineedit
