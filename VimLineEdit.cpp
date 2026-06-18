@@ -2843,11 +2843,17 @@ void VimTextEdit::line_number_area_paint_event(QPaintEvent *event){
     QAbstractTextDocumentLayout *layout = document()->documentLayout();
     QPointF offset(-horizontalScrollBar()->value(), -verticalScrollBar()->value());
 
+    QColor highlight_color = get_darker_color(palette().color(QPalette::Window));
+
     while (block.isValid()) {
         QRectF block_rect = layout->blockBoundingRect(block).translated(offset);
         int top = qRound(block_rect.top());
         int bottom = qRound(block_rect.bottom());
 
+        // highlight the focused line number
+        if (textCursor().blockNumber() == block_number - 1) {
+            painter.fillRect(0, top, line_number_area->width(), fontMetrics().height(), highlight_color);
+        }
         if (bottom >= event->rect().top() && top <= event->rect().bottom()) {
             painter.drawText(0, top, line_number_area->width() - 4, fontMetrics().height(),
                              Qt::AlignRight, QString::number(block_number));
