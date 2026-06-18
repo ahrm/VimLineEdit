@@ -2150,6 +2150,7 @@ void VimEditor::show_command_line_edit(QString placeholder_text){
     command_line_edit->setText("");
     command_line_edit->setPlaceholderText(placeholder_text);
     command_line_edit->show();
+    command_line_edit->raise();
     command_line_edit->setFocus();
     command_line_edit->setStyleSheet(QString("QLineEdit { background-color: %1; color: %2; }")
                                      .arg(background_color.name(), text_color.name()));
@@ -2844,7 +2845,6 @@ void VimTextEdit::line_number_area_paint_event(QPaintEvent *event){
     }
 
     QPainter painter(line_number_area);
-    painter.fillRect(event->rect(), palette().color(QPalette::AlternateBase));
     painter.setPen(palette().color(QPalette::Mid));
 
     QTextBlock block = document()->firstBlock();
@@ -2852,11 +2852,17 @@ void VimTextEdit::line_number_area_paint_event(QPaintEvent *event){
     QAbstractTextDocumentLayout *layout = document()->documentLayout();
     QPointF offset(-horizontalScrollBar()->value(), -verticalScrollBar()->value());
 
+    QColor highlight_color = get_darker_color(palette().color(QPalette::Window));
+
     while (block.isValid()) {
         QRectF block_rect = layout->blockBoundingRect(block).translated(offset);
         int top = qRound(block_rect.top());
         int bottom = qRound(block_rect.bottom());
 
+        // highlight the focused line number
+        if (textCursor().blockNumber() == block_number - 1) {
+            painter.fillRect(0, top, line_number_area->width(), fontMetrics().height(), highlight_color);
+        }
         if (bottom >= event->rect().top() && top <= event->rect().bottom()) {
             painter.drawText(0, top, line_number_area->width() - 4, fontMetrics().height(),
                              Qt::AlignRight, QString::number(block_number));
