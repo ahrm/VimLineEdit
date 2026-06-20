@@ -448,6 +448,8 @@ void VimEditor::add_vim_keybindings() {
         KeyBinding{{KeyChord{"{", {}}}, VimLineEditCommand::MoveToThePreviousParagraph},
         KeyBinding{{KeyChord{"Z", {}}, KeyChord{"Z", {}}},
                    VimLineEditCommand::SaveAndQuit},
+        KeyBinding{{KeyChord{"z", {}}, KeyChord{"z", {}}},
+                   VimLineEditCommand::CenterOnCursor},
     };
 
     for (const auto &binding : key_bindings) {
@@ -677,6 +679,8 @@ QString to_string(VimLineEditCommand cmd) {
         return "MoveToThePreviousParagraph";
     case VimLineEditCommand::SaveAndQuit:
         return "SaveAndQuit";
+    case VimLineEditCommand::CenterOnCursor:
+        return "CenterOnCursor";
     default:
         return "Unknown";
     }
@@ -900,6 +904,10 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
     case VimLineEditCommand::SaveAndQuit:{
         emit_save();
         emit_quit();
+        break;
+    }
+    case VimLineEditCommand::CenterOnCursor:{
+        center_on_cursor();
         break;
     }
     case VimLineEditCommand::EnterNormalMode: {
@@ -2900,6 +2908,20 @@ void VimTextEdit::line_number_area_paint_event(QPaintEvent *event){
 void VimEditor::goto_line(int line_number){
     int pos = get_ith_line_start_position(line_number);
     adapter->set_cursor_position(pos);
+}
+
+void VimEditor::center_on_cursor(){
+    // try to center the view on the cursor position
+    QTextEdit* text_edit = dynamic_cast<QTextEdit*>(editor_widget);
+    if (text_edit) {
+        QScrollBar *v_bar = text_edit->verticalScrollBar();
+        if (v_bar) {
+            int cursor_y = text_edit->cursorRect().top();
+            int viewport_h = text_edit->viewport()->height();
+            int diff = cursor_y - viewport_h / 2;
+            v_bar->setValue(v_bar->value() + diff);
+        }
+    }
 }
 
 void VimEditor::goto_begin(){

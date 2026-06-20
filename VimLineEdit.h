@@ -91,6 +91,7 @@ enum class VimLineEditCommand {
     MoveToThePreviousParagraph,
     SaveAndQuit,
     SelectPasteRegister,
+    CenterOnCursor,
 };
 
 enum class ActionWaitingForMotionKind {
@@ -335,6 +336,7 @@ class VimEditor {
     int calculate_find(FindState find_state, bool reverse = false) const;
     void set_mode(VimMode mode);
     void goto_line(int line_number);
+    void center_on_cursor();
     void goto_begin();
     void goto_end();
 
