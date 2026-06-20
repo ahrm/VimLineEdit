@@ -444,6 +444,7 @@ class VimTextEdit : public QTextEdit {
     bool get_line_numbers_visible() const;
     void focusInEvent(QFocusEvent* event) override;
     void focusOutEvent(QFocusEvent* event) override;
+    virtual void custom_current_line_painter(int line_number, QString line_text, QPainter *painter, const QRect &rect);
 
     friend class LineNumberArea;
 

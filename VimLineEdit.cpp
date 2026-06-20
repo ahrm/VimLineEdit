@@ -3029,9 +3029,18 @@ void VimTextEdit::line_number_area_paint_event(QPaintEvent *event){
             break;
         }
 
+        if (textCursor().blockNumber() == block_number - 1) {
+            QString current_line_text = block.text();
+            custom_current_line_painter(block_number, current_line_text, &painter, QRect(0, top, line_number_area->width(), fontMetrics().height()));
+        }
+
         block = block.next();
         ++block_number;
     }
+}
+
+void VimTextEdit::custom_current_line_painter(int line_number, QString line_text, QPainter *painter, const QRect &rect){
+
 }
 
 void VimEditor::goto_line(int line_number){
