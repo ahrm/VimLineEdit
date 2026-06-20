@@ -873,7 +873,7 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
             new_pos = current_state.text.length();
         }
         else {
-            new_pos = next_paragraph_start + 2;
+            new_pos = next_paragraph_start + 1;
         }
         break;
     }
@@ -883,7 +883,7 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
             new_pos = 0;
         }
         else {
-            new_pos = previous_paragraph_end + 2;
+            new_pos = previous_paragraph_end + 1;
         }
         break;
     }
