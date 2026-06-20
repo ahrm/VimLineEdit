@@ -425,6 +425,8 @@ void VimEditor::add_vim_keybindings() {
         KeyBinding{{KeyChord{"O", {}}}, VimLineEditCommand::InsertLineAbove},
         KeyBinding{{KeyChord{"g", {}}, KeyChord{"k", {}}}, VimLineEditCommand::MoveUpOnScreen},
         KeyBinding{{KeyChord{"g", {}}, KeyChord{"j", {}}}, VimLineEditCommand::MoveDownOnScreen},
+        KeyBinding{{KeyChord{"g", {}}, KeyChord{Qt::Key_A, CONTROL}}, VimLineEditCommand::ProgressiveIncrement},
+        KeyBinding{{KeyChord{"g", {}}, KeyChord{Qt::Key_X, CONTROL}}, VimLineEditCommand::ProgressiveDecrement},
         KeyBinding{{KeyChord{"0", {}}}, VimLineEditCommand::MoveToBeginningOfLine},
         KeyBinding{{KeyChord{"_", {}}}, VimLineEditCommand::MoveToBeginningOfLine},
         KeyBinding{{KeyChord{"^", {}}}, VimLineEditCommand::MoveToBeginningOfLine},
@@ -649,6 +651,10 @@ QString to_string(VimLineEditCommand cmd) {
         return "IncrementNextNumberOnCurrentLine";
     case VimLineEditCommand::DecrementNextNumberOnCurrentLine:
         return "DecrementNextNumberOnCurrentLine";
+    case VimLineEditCommand::ProgressiveIncrement:
+        return "ProgressiveIncrement";
+    case VimLineEditCommand::ProgressiveDecrement:
+        return "ProgressiveDecrement";
     case VimLineEditCommand::InsertLastInsertModeText:
         return "InsertLastInsertModeText";
     case VimLineEditCommand::SetMark:
@@ -877,7 +883,7 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
             new_pos = current_state.text.length();
         }
         else {
-            new_pos = next_paragraph_start + 2;
+            new_pos = next_paragraph_start + 1;
         }
         break;
     }
@@ -887,7 +893,7 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
             new_pos = 0;
         }
         else {
-            new_pos = previous_paragraph_end + 2;
+            new_pos = previous_paragraph_end + 1;
         }
         break;
     }
@@ -1269,7 +1275,13 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
     case VimLineEditCommand::DecrementNextNumberOnCurrentLine:
     case VimLineEditCommand::IncrementNextNumberOnCurrentLine: {
         push_history(current_state);
-        handle_number_increment_decrement(cmd == VimLineEditCommand::IncrementNextNumberOnCurrentLine);
+        handle_number_increment_decrement(cmd == VimLineEditCommand::IncrementNextNumberOnCurrentLine, num_repeats);
+        break;
+    }
+    case VimLineEditCommand::ProgressiveDecrement:
+    case VimLineEditCommand::ProgressiveIncrement: {
+        push_history(current_state);
+        handle_number_increment_decrement(cmd == VimLineEditCommand::ProgressiveIncrement, num_repeats, true);
         break;
     }
     case VimLineEditCommand::SwapCaseCharacterUnderCursor: {
@@ -2378,65 +2390,182 @@ std::optional<LastDeletedTextState> VimEditor::get_last_deleted_text(std::option
     return last_deleted_text_;
 }
 
-void VimEditor::handle_number_increment_decrement(bool increment) {
+void VimEditor::handle_number_increment_decrement(bool increment, int count, bool progressive) {
     QString current_text = adapter->get_text();
     int cursor_pos = get_cursor_position();
 
-    // Get current line boundaries
-    int line_start = get_line_start_position(cursor_pos);
-    int line_end = get_line_end_position(cursor_pos);
-    
-    // Extract current line
-    QString line = current_text.mid(line_start, line_end - line_start);
-    
-    // Find the next number on the line starting from cursor position
-    QRegularExpression number_regex("(-?\\d+)");
-    QRegularExpressionMatchIterator matches = number_regex.globalMatch(line);
-    
-    int relative_cursor_pos = cursor_pos - line_start + 1;
-    int number_start = -1;
-    int number_end = -1;
-    QString number_str;
-    
-    // Find the first number at or after the cursor position
-    while (matches.hasNext()) {
-        QRegularExpressionMatch match = matches.next();
-        if (match.capturedEnd() >= relative_cursor_pos) {
-            number_start = match.capturedStart();
-            number_end = match.capturedEnd();
-            number_str = match.captured(1);
-            break;
+    bool has_selection = false;
+    int begin = -1, end = -1;
+    if (current_mode == VimMode::Visual || current_mode == VimMode::VisualLine) {
+        get_current_selection(begin, end);
+        if (begin != -1 && end != -1 && begin < end) {
+            has_selection = true;
         }
     }
-    
-    // If no number found after cursor, find the first number on the line
-    if (number_start == -1) {
-        matches = number_regex.globalMatch(line);
-        if (matches.hasNext()) {
+
+    if (has_selection) {
+        // Build all lines ranges
+        struct Line {
+            int start;
+            int end;
+        };
+        std::vector<Line> all_lines;
+        int text_len = current_text.length();
+        int p = 0;
+        while (p <= text_len) {
+            int l_start = p;
+            while (p < text_len && current_text[p] != '\n') {
+                p++;
+            }
+            all_lines.push_back({l_start, p});
+            p++; // skip '\n'
+        }
+
+        auto get_line_index_of_pos = [&](int pos) -> int {
+            for (size_t i = 0; i < all_lines.size(); ++i) {
+                int line_limit = (i + 1 < all_lines.size()) ? all_lines[i + 1].start : all_lines[i].end + 1;
+                if (pos >= all_lines[i].start && pos < line_limit) {
+                    return static_cast<int>(i);
+                }
+            }
+            return static_cast<int>(all_lines.size() - 1);
+        };
+
+        int start_line_idx = get_line_index_of_pos(begin);
+        int end_line_idx = get_line_index_of_pos(std::max(begin, end - 1));
+        if (start_line_idx > end_line_idx) {
+            std::swap(start_line_idx, end_line_idx);
+        }
+
+        std::vector<int> selected_line_indices;
+        for (int i = start_line_idx; i <= end_line_idx; ++i) {
+            selected_line_indices.push_back(i);
+        }
+
+        int new_cursor_pos = begin;
+
+        // Process from bottom to top so length changes don't shift earlier line boundaries
+        for (int j = static_cast<int>(selected_line_indices.size()) - 1; j >= 0; --j) {
+            int i = selected_line_indices[j];
+            int L_start = all_lines[i].start;
+            int L_end = all_lines[i].end;
+
+            int sel_start = std::max(L_start, begin);
+            int sel_end = std::min(L_end, end);
+            int relative_sel_start = sel_start - L_start;
+            int relative_sel_end = sel_end - L_start;
+
+            QString line_text = current_text.mid(L_start, L_end - L_start);
+            QRegularExpression number_regex("(-?\\d+)");
+            QRegularExpressionMatchIterator matches = number_regex.globalMatch(line_text);
+            
+            int number_start = -1;
+            int number_end = -1;
+            QString number_str;
+            while (matches.hasNext()) {
+                QRegularExpressionMatch match = matches.next();
+                int m_start = match.capturedStart();
+                int m_end = match.capturedEnd();
+                if (std::max(m_start, relative_sel_start) < std::min(m_end, relative_sel_end)) {
+                    number_start = m_start;
+                    number_end = m_end;
+                    number_str = match.captured(1);
+                    break;
+                }
+            }
+
+            if (number_start != -1) {
+                bool ok;
+                int number = number_str.toInt(&ok);
+                if (ok) {
+                    int change = count;
+                    if (progressive) {
+                        change = (j + 1) * count;
+                    }
+                    int new_number = increment ? number + change : number - change;
+                    QString new_number_str = QString::number(new_number);
+
+                    int absolute_start = L_start + number_start;
+                    int absolute_end = L_start + number_end;
+
+                    insert_text(new_number_str, absolute_start, absolute_end);
+
+                    new_cursor_pos = absolute_start + new_number_str.length() - 1;
+                }
+            }
+        }
+
+        // Return to normal mode, clear highlights and position cursor
+        if (visual_line_selection_begin != -1) {
+            adapter->set_extra_selections(QList<QTextEdit::ExtraSelection>());
+            visual_line_selection_begin = -1;
+            visual_line_selection_end = -1;
+        }
+        if (current_mode == VimMode::Visual) {
+            adapter->set_extra_selections(QList<QTextEdit::ExtraSelection>());
+        }
+        set_mode(VimMode::Normal);
+        set_cursor_position(new_cursor_pos);
+
+    } else {
+        // Normal Mode single-line increment/decrement logic
+        // Get current line boundaries
+        int line_start = get_line_start_position(cursor_pos);
+        int line_end = get_line_end_position(cursor_pos);
+        
+        // Extract current line
+        QString line = current_text.mid(line_start, line_end - line_start);
+        
+        // Find the next number on the line starting from cursor position
+        QRegularExpression number_regex("(-?\\d+)");
+        QRegularExpressionMatchIterator matches = number_regex.globalMatch(line);
+        
+        int relative_cursor_pos = cursor_pos - line_start + 1;
+        int number_start = -1;
+        int number_end = -1;
+        QString number_str;
+        
+        // Find the first number at or after the cursor position
+        while (matches.hasNext()) {
             QRegularExpressionMatch match = matches.next();
-            number_start = match.capturedStart();
-            number_end = match.capturedEnd();
-            number_str = match.captured(1);
+            if (match.capturedEnd() >= relative_cursor_pos) {
+                number_start = match.capturedStart();
+                number_end = match.capturedEnd();
+                number_str = match.captured(1);
+                break;
+            }
         }
-    }
-    
-    // If we found a number, modify it
-    if (number_start != -1) {
-        bool ok;
-        int number = number_str.toInt(&ok);
-        if (ok) {
-            int new_number = increment ? number + 1 : number - 1;
-            QString new_number_str = QString::number(new_number);
-            
-            // Replace the number in the text
-            int absolute_start = line_start + number_start;
-            int absolute_end = line_start + number_end;
-            
-            insert_text(new_number_str, absolute_start, absolute_end);
-            
-            // Position cursor at the end of the modified number
-            int new_cursor_pos = absolute_start + new_number_str.length() - 1;
-            set_cursor_position(new_cursor_pos);
+        
+        // If no number found after cursor, find the first number on the line
+        if (number_start == -1) {
+            matches = number_regex.globalMatch(line);
+            if (matches.hasNext()) {
+                QRegularExpressionMatch match = matches.next();
+                number_start = match.capturedStart();
+                number_end = match.capturedEnd();
+                number_str = match.captured(1);
+            }
+        }
+        
+        // If we found a number, modify it
+        if (number_start != -1) {
+            bool ok;
+            int number = number_str.toInt(&ok);
+            if (ok) {
+                int change = count;
+                int new_number = increment ? number + change : number - change;
+                QString new_number_str = QString::number(new_number);
+                
+                // Replace the number in the text
+                int absolute_start = line_start + number_start;
+                int absolute_end = line_start + number_end;
+                
+                insert_text(new_number_str, absolute_start, absolute_end);
+                
+                // Position cursor at the end of the modified number
+                int new_cursor_pos = absolute_start + new_number_str.length() - 1;
+                set_cursor_position(new_cursor_pos);
+            }
         }
     }
 }

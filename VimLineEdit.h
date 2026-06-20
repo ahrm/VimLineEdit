@@ -76,6 +76,8 @@ enum class VimLineEditCommand {
     DeletePreviousWord,
     IncrementNextNumberOnCurrentLine,
     DecrementNextNumberOnCurrentLine,
+    ProgressiveIncrement,
+    ProgressiveDecrement,
     InsertLastInsertModeText,
     SetMark,
     GotoMark,
@@ -377,7 +379,7 @@ class VimEditor {
     void set_last_deleted_text(QString text, std::optional<char> reg, bool is_line = false);
     std::optional<LastDeletedTextState> get_last_deleted_text(std::optional<char> reg);
 
-    void handle_number_increment_decrement(bool increment);
+    void handle_number_increment_decrement(bool increment, int count = 1, bool progressive = false);
     void remove_text(int begin, int num);
     void insert_text(QString text, int left_index, int right_index = -1);
     bool requires_symbol(VimLineEditCommand cmd);
