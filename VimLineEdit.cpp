@@ -3081,4 +3081,13 @@ void VimTextEdit::focusOutEvent(QFocusEvent* event){
     return QTextEdit::focusOutEvent(event);
 }
 
+void VimEditor::push_current_history_state() {
+
+    HistoryState state;
+    state.text = adapter->get_text();
+    state.cursor_position = get_cursor_position();
+    history.states.push_back(state);
+    history.current_index++;
+}
+
 }

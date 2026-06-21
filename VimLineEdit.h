@@ -94,6 +94,7 @@ enum class VimLineEditCommand {
     SaveAndQuit,
     SelectPasteRegister,
     CenterOnCursor,
+    AutoComplete,
 };
 
 enum class ActionWaitingForMotionKind {
@@ -341,6 +342,7 @@ class VimEditor {
     void center_on_cursor();
     void goto_begin();
     void goto_end();
+    void push_current_history_state();
 
     // void resizeEvent(QResizeEvent* event);
 
