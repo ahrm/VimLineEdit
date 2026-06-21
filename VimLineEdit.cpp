@@ -3214,6 +3214,9 @@ void VimTextEdit::show_autocomplete_suggestions(const QStringList &suggestions){
         popup.setActiveAction(actions.first());
     }
 
+    QColor highlight_color = palette().color(QPalette::Highlight);
+    popup.setStyleSheet(QString("QMenu::item:selected { background-color: %1; }").arg(highlight_color.name()));
+
     QRect cursor_rect = cursorRect();
     showing_suggestion_menu = true;
     popup.exec(mapToGlobal(cursor_rect.bottomLeft()));
