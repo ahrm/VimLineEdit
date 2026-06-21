@@ -101,8 +101,11 @@ void VimEditor::highlight_matches(QString pattern){
 
 
     QTextCharFormat search_highlight_format;
-    search_highlight_format.setBackground(Qt::yellow);
-    search_highlight_format.setForeground(Qt::black);
+    QColor highlight_color = editor_widget->palette().color(QPalette::HighlightedText);
+    QColor inverted_highlight_color = QColor(255 - highlight_color.red(), 255 - highlight_color.green(), 255 - highlight_color.blue());
+
+    search_highlight_format.setBackground(highlight_color);
+    search_highlight_format.setForeground(inverted_highlight_color);
 
     // identifier to distinguish search highlights from other highlights
     search_highlight_format.setProperty(QTextFormat::UserProperty, SEARCH_HIGHLIGHT_PROPERTY_INDEX);
