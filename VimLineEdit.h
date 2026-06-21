@@ -95,6 +95,7 @@ enum class VimLineEditCommand {
     SelectPasteRegister,
     CenterOnCursor,
     AutoComplete,
+    ViewDocumentation,
 };
 
 enum class ActionWaitingForMotionKind {
@@ -388,6 +389,7 @@ class VimEditor {
     QString get_current_selection(int &begin, int &end);
     QString get_previous_word();
     void handle_text_command(QString text);
+    QString get_word_under_cursor();
     int get_cursor_position() const;
     void emit_save();
     void emit_quit();
@@ -447,6 +449,7 @@ class VimTextEdit : public QTextEdit {
     void focusInEvent(QFocusEvent* event) override;
     void focusOutEvent(QFocusEvent* event) override;
     void show_autocomplete_suggestions(const QStringList &suggestions);
+    virtual void show_documentation(const QString &word);
     virtual void custom_current_line_painter(int line_number, QString line_text, QPainter *painter, const QRect &rect);
     virtual QStringList get_autocomplete_suggestions(const QString &current_word);
 

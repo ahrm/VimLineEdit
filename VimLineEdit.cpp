@@ -456,6 +456,7 @@ void VimEditor::add_vim_keybindings() {
                    VimLineEditCommand::SaveAndQuit},
         KeyBinding{{KeyChord{"z", {}}, KeyChord{"z", {}}},
                    VimLineEditCommand::CenterOnCursor},
+        KeyBinding{{KeyChord{"K", {}}}, VimLineEditCommand::ViewDocumentation},
     };
 
     for (const auto &binding : key_bindings) {
@@ -694,6 +695,8 @@ QString to_string(VimLineEditCommand cmd) {
         return "CenterOnCursor";
     case VimLineEditCommand::AutoComplete:
         return "AutoComplete";
+    case VimLineEditCommand::ViewDocumentation:
+        return "ViewDocumentation";
     default:
         return "Unknown";
     }
@@ -929,6 +932,14 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
             QString previous_word = get_previous_word();
             QStringList suggestions = text_edit->get_autocomplete_suggestions(previous_word);
             text_edit->show_autocomplete_suggestions(suggestions);
+        }
+        break;
+    }
+    case VimLineEditCommand::ViewDocumentation:{
+        VimTextEdit* text_edit = dynamic_cast<VimTextEdit*>(editor_widget);
+        if (text_edit){
+            QString previous_word = get_word_under_cursor();
+            text_edit->show_documentation(previous_word);
         }
         break;
     }
@@ -3108,6 +3119,44 @@ void VimEditor::push_current_history_state() {
     history.current_index++;
 }
 
+QString VimEditor::get_word_under_cursor(){
+    // get the word under the cursor
+    QString text = adapter->get_text();
+    int cursor_pos = get_cursor_position();
+
+    if (text.isEmpty()){
+        return "";
+    }
+
+    if (cursor_pos >= text.length()){
+        cursor_pos = text.length() - 1;
+    }
+
+    if (text[cursor_pos].isSpace()){
+        return "";
+    }
+
+    int pos = cursor_pos;
+    while (pos >= 0 && !text[pos].isSpace()){
+        pos--;
+    }
+
+    int word_begin = pos + 1;
+    if (pos == 0 && !text[0].isSpace()){
+        word_begin = 0;
+    }
+
+    pos = cursor_pos;
+    while (pos < text.length() && !text[pos].isSpace()){
+        pos++;
+    }
+
+    int word_end = pos;
+
+    return text.mid(word_begin, word_end - word_begin);
+
+}
+
 QString VimEditor::get_previous_word(){
     // get the word before the cursor
     QString text = adapter->get_text();
@@ -3181,6 +3230,9 @@ private:
 
 QStringList VimTextEdit::get_autocomplete_suggestions(const QString &current_word){
     return {};
+}
+
+void VimTextEdit::show_documentation(const QString &word){
 }
 
 
