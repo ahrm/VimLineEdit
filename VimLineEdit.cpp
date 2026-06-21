@@ -3118,6 +3118,9 @@ void VimEditor::push_current_history_state() {
     history.states.push_back(state);
     history.current_index++;
 }
+bool is_separator(QChar ch){
+    return ch.isSpace() || ch == ';' || ch == '[' || ch == ']' || ch == '{' || ch == '}' || ch == '(' || ch == ')';
+}
 
 QString VimEditor::get_word_under_cursor(){
     // get the word under the cursor
@@ -3132,22 +3135,22 @@ QString VimEditor::get_word_under_cursor(){
         cursor_pos = text.length() - 1;
     }
 
-    if (text[cursor_pos].isSpace()){
+    if (is_separator(text[cursor_pos])){
         return "";
     }
 
     int pos = cursor_pos;
-    while (pos >= 0 && !text[pos].isSpace()){
+    while (pos >= 0 && !is_separator(text[pos])){
         pos--;
     }
 
     int word_begin = pos + 1;
-    if (pos == 0 && !text[0].isSpace()){
+    if (pos == 0 && !is_separator(text[0])){
         word_begin = 0;
     }
 
     pos = cursor_pos;
-    while (pos < text.length() && !text[pos].isSpace()){
+    while (pos < text.length() && !is_separator(text[pos])){
         pos++;
     }
 
@@ -3167,12 +3170,12 @@ QString VimEditor::get_previous_word(){
     }
     int pos = cursor_pos - 1;
     // skip any whitespace before the word
-    while (pos >= 0 && !text[pos].isSpace()){
+    while (pos >= 0 && !is_separator(text[pos])){
         pos--;
     }
 
     int word_begin = pos + 1;
-    if (pos == 0 && !text[0].isSpace()){
+    if (pos == 0 && !is_separator(text[0])){
         word_begin = 0;
     }
 
