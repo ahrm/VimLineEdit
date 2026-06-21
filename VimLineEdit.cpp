@@ -21,6 +21,7 @@
 #include <vector>
 #include <QClipboard>
 #include <QApplication>
+#include <QMenu>
 
 namespace QVimEditor{
 const int SEARCH_HIGHLIGHT_PROPERTY_INDEX = 31;
@@ -472,6 +473,7 @@ void VimEditor::add_vim_keybindings() {
     std::vector<KeyBinding> insert_mode_keybindings = {
         KeyBinding{{KeyChord{Qt::Key_W, CONTROL}}, VimLineEditCommand::DeletePreviousWord},
         KeyBinding{{KeyChord{Qt::Key_A, CONTROL}}, VimLineEditCommand::InsertLastInsertModeText},
+        KeyBinding{{KeyChord{Qt::Key_X, CONTROL}, KeyChord{Qt::Key_N, CONTROL}}, VimLineEditCommand::AutoComplete}
     };
 
     for (const auto &binding : insert_mode_keybindings) {
@@ -687,6 +689,8 @@ QString to_string(VimLineEditCommand cmd) {
         return "SaveAndQuit";
     case VimLineEditCommand::CenterOnCursor:
         return "CenterOnCursor";
+    case VimLineEditCommand::AutoComplete:
+        return "AutoComplete";
     default:
         return "Unknown";
     }
@@ -914,6 +918,15 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
     }
     case VimLineEditCommand::CenterOnCursor:{
         center_on_cursor();
+        break;
+    }
+    case VimLineEditCommand::AutoComplete:{
+        VimTextEdit* text_edit = dynamic_cast<VimTextEdit*>(editor_widget);
+        if (text_edit){
+            QString previous_word = get_previous_word();
+            QStringList suggestions = text_edit->get_autocomplete_suggestions(previous_word);
+            text_edit->show_autocomplete_suggestions(suggestions);
+        }
         break;
     }
     case VimLineEditCommand::EnterNormalMode: {
@@ -3088,6 +3101,119 @@ void VimEditor::push_current_history_state() {
     state.cursor_position = get_cursor_position();
     history.states.push_back(state);
     history.current_index++;
+}
+
+QString VimEditor::get_previous_word(){
+    // get the word before the cursor
+    QString text = adapter->get_text();
+    int cursor_pos = get_cursor_position();
+
+    if (cursor_pos == 0){
+        return "";
+    }
+    int pos = cursor_pos - 1;
+    // skip any whitespace before the word
+    while (pos >= 0 && !text[pos].isSpace()){
+        pos--;
+    }
+
+    int word_begin = pos + 1;
+    if (pos == 0 && !text[0].isSpace()){
+        word_begin = 0;
+    }
+
+    int word_end = cursor_pos;
+
+    return text.mid(word_begin, word_end - word_begin);
+
+}
+
+class SuggestionMenu : public QMenu {
+public:
+    explicit SuggestionMenu(QWidget *parent = nullptr) : QMenu(parent) {}
+
+protected:
+    void keyPressEvent(QKeyEvent *event) override {
+        bool is_navigation_modifier = event->modifiers().testFlag(Qt::ControlModifier) || event->modifiers().testFlag(Qt::MetaModifier);
+        if (is_navigation_modifier) {
+            if (event->key() == Qt::Key_N) {
+                move_selection(1);
+                event->accept();
+                return;
+            }
+            if (event->key() == Qt::Key_P) {
+                move_selection(-1);
+                event->accept();
+                return;
+            }
+        }
+
+        QMenu::keyPressEvent(event);
+    }
+
+private:
+    void move_selection(int delta) {
+        QList<QAction *> actions = this->actions();
+        if (actions.isEmpty()) {
+            return;
+        }
+
+        int current_index = actions.indexOf(activeAction());
+        if (current_index < 0) {
+            current_index = 0;
+        }
+
+        int next_index = current_index + delta;
+        if (next_index >= static_cast<int>(actions.size())) {
+            next_index = 0;
+        }
+        else if (next_index < 0) {
+            next_index = static_cast<int>(actions.size()) - 1;
+        }
+        setActiveAction(actions[next_index]);
+    }
+};
+
+QStringList VimTextEdit::get_autocomplete_suggestions(const QString &current_word){
+    return {};
+}
+
+
+void VimTextEdit::show_autocomplete_suggestions(const QStringList &suggestions){
+    if (suggestions.isEmpty()) {
+        return;
+    }
+
+    SuggestionMenu popup(this);
+    QList<QAction *> actions;
+    actions.reserve(suggestions.size());
+    for (const QString &suggestion : suggestions) {
+        QAction *action = popup.addAction(suggestion);
+        actions.append(action);
+        connect(action, &QAction::triggered, this, [this, suggestion]() {
+            QTextCursor cursor = textCursor();
+            int cursor_pos = cursor.position();
+            QString text = toPlainText();
+            int start = cursor_pos;
+
+            while (start > 0 && (text[start - 1].isLetterOrNumber() || text[start - 1] == '_')) {
+                --start;
+            }
+
+            QTextCursor replacement_cursor = textCursor();
+            replacement_cursor.setPosition(start);
+            replacement_cursor.setPosition(cursor_pos, QTextCursor::KeepAnchor);
+            replacement_cursor.insertText(suggestion);
+            setTextCursor(replacement_cursor);
+        });
+    }
+
+    if (!actions.isEmpty()) {
+        popup.setActiveAction(actions.first());
+    }
+
+    QRect cursor_rect = cursorRect();
+    popup.exec(mapToGlobal(cursor_rect.bottomLeft()));
 }
 
 }

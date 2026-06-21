@@ -366,9 +366,7 @@ class VimEditor {
     void redo();
 
     void set_cursor_position(int pos);
-    void set_cursor_position_with_selection(int pos);
-    void set_cursor_position_with_line_selection(int pos);
-
+    void set_cursor_position_with_selection(int pos); void set_cursor_position_with_line_selection(int pos);
     int get_line_start_position(int cursor_pos);
     int get_line_end_position(int cursor_pos);
     int get_ith_line_start_position(int i);
@@ -388,6 +386,7 @@ class VimEditor {
     void add_event_to_current_macro(QKeyEvent *event);
     void set_visual_selection(int begin, int length);
     QString get_current_selection(int &begin, int &end);
+    QString get_previous_word();
     void handle_text_command(QString text);
     int get_cursor_position() const;
     void emit_save();
@@ -446,7 +445,9 @@ class VimTextEdit : public QTextEdit {
     bool get_line_numbers_visible() const;
     void focusInEvent(QFocusEvent* event) override;
     void focusOutEvent(QFocusEvent* event) override;
+    void show_autocomplete_suggestions(const QStringList &suggestions);
     virtual void custom_current_line_painter(int line_number, QString line_text, QPainter *painter, const QRect &rect);
+    virtual QStringList get_autocomplete_suggestions(const QString &current_word);
 
     friend class LineNumberArea;
 
