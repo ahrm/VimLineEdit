@@ -428,6 +428,7 @@ class VimTextEdit : public QTextEdit {
     bool vim_enabled = true;
     bool line_numbers_visible = false;
     LineNumberArea *line_number_area = nullptr;
+    bool showing_suggestion_menu = false;
 
     int line_number_area_width() const;
     void update_line_number_area_width();

@@ -3089,7 +3089,9 @@ void VimTextEdit::focusInEvent(QFocusEvent* event){
 }
 void VimTextEdit::focusOutEvent(QFocusEvent* event){
     if (focusWidget() != editor->command_line_edit){
-        emit focusLost();
+        if (!showing_suggestion_menu){
+            emit focusLost();
+        }
     }
     return QTextEdit::focusOutEvent(event);
 }
@@ -3213,7 +3215,9 @@ void VimTextEdit::show_autocomplete_suggestions(const QStringList &suggestions){
     }
 
     QRect cursor_rect = cursorRect();
+    showing_suggestion_menu = true;
     popup.exec(mapToGlobal(cursor_rect.bottomLeft()));
+    showing_suggestion_menu = false;
 }
 
 }
