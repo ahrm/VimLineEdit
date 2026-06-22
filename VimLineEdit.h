@@ -96,6 +96,7 @@ enum class VimLineEditCommand {
     CenterOnCursor,
     AutoComplete,
     ViewDocumentation,
+    OpenFile,
 };
 
 enum class ActionWaitingForMotionKind {
@@ -393,6 +394,7 @@ class VimEditor {
     int get_cursor_position() const;
     void emit_save();
     void emit_quit();
+    void emit_open_file();
 
 };
 
@@ -459,6 +461,7 @@ signals:
     void quitCommand();
     void forceQuitCommand();
     void writeCommand();
+    void openFile();
     void focusGained();
     void focusLost();
     void normalEnterPressed();

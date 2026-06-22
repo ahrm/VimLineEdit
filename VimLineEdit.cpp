@@ -385,6 +385,8 @@ void VimEditor::add_vim_keybindings() {
     std::vector<KeyBinding> key_bindings = {
         KeyBinding{{KeyChord{"g", {}}, KeyChord{"g", {}}},
                    VimLineEditCommand::GotoBegin},
+        KeyBinding{{KeyChord{"g", {}}, KeyChord{"f", {}}},
+                   VimLineEditCommand::OpenFile},
         KeyBinding{{KeyChord{"G", {}}}, VimLineEditCommand::GotoEnd},
         KeyBinding{{KeyChord{Qt::Key_Escape, {}}}, VimLineEditCommand::EnterNormalMode},
         KeyBinding{{KeyChord{"i", {}}}, VimLineEditCommand::EnterInsertMode},
@@ -697,6 +699,8 @@ QString to_string(VimLineEditCommand cmd) {
         return "AutoComplete";
     case VimLineEditCommand::ViewDocumentation:
         return "ViewDocumentation";
+    case VimLineEditCommand::OpenFile:
+        return "OpenFile";
     default:
         return "Unknown";
     }
@@ -941,6 +945,10 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
             QString previous_word = get_word_under_cursor();
             text_edit->show_documentation(previous_word);
         }
+        break;
+    }
+    case VimLineEditCommand::OpenFile:{
+        emit_open_file();
         break;
     }
     case VimLineEditCommand::EnterNormalMode: {
@@ -2689,6 +2697,14 @@ void VimEditor::emit_save(){
         emit text_edit->writeCommand();
     }
 }
+
+void VimEditor::emit_open_file(){
+    VimTextEdit* text_edit = dynamic_cast<VimTextEdit*>(editor_widget);
+    if (text_edit) {
+        emit text_edit->openFile();
+    }
+}
+
 
 void VimEditor::emit_quit(){
     VimLineEdit* line_edit = dynamic_cast<VimLineEdit*>(editor_widget);
