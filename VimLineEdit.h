@@ -97,6 +97,7 @@ enum class VimLineEditCommand {
     AutoComplete,
     ViewDocumentation,
     OpenFile,
+    OpenConfig,
 };
 
 enum class ActionWaitingForMotionKind {
@@ -395,6 +396,7 @@ class VimEditor {
     void emit_save();
     void emit_quit();
     void emit_open_file();
+    void emit_open_config();
 
 };
 
@@ -465,6 +467,7 @@ signals:
     void focusGained();
     void focusLost();
     void normalEnterPressed();
+    void openConfig(QString value);
 };
 } // namespace QVimEditor
 
