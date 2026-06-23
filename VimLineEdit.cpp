@@ -387,7 +387,7 @@ void VimEditor::add_vim_keybindings() {
                    VimLineEditCommand::GotoBegin},
         KeyBinding{{KeyChord{"g", {}}, KeyChord{"f", {}}},
                    VimLineEditCommand::OpenFile},
-        KeyBinding{{KeyChord{"g", {}}, KeyChord{"x", {}}},
+        KeyBinding{{KeyChord{"g", {}}, KeyChord{"d", {}}},
                    VimLineEditCommand::OpenConfig},
         KeyBinding{{KeyChord{"G", {}}}, VimLineEditCommand::GotoEnd},
         KeyBinding{{KeyChord{Qt::Key_Escape, {}}}, VimLineEditCommand::EnterNormalMode},
