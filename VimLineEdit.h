@@ -98,6 +98,8 @@ enum class VimLineEditCommand {
     ViewDocumentation,
     OpenFile,
     OpenConfig,
+    JumpForward,
+    JumpBackward,
 };
 
 enum class ActionWaitingForMotionKind {
@@ -323,6 +325,8 @@ class VimEditor {
     History history;
     int visual_line_selection_begin = -1;
     int visual_line_selection_end = -1;
+    std::vector<int> jumps;
+    int jump_index = 0;
 
     void set_style_for_mode(VimMode mode);
     QWidget* editor_widget = nullptr;
@@ -363,6 +367,7 @@ class VimEditor {
 
     void delete_char(bool is_single);
     bool handle_surrounding_motion_action();
+    void add_jump(int pos);
 
     void push_history(HistoryState state);
     void undo();

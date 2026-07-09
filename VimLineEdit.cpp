@@ -461,6 +461,8 @@ void VimEditor::add_vim_keybindings() {
         KeyBinding{{KeyChord{"z", {}}, KeyChord{"z", {}}},
                    VimLineEditCommand::CenterOnCursor},
         KeyBinding{{KeyChord{"K", {}}}, VimLineEditCommand::ViewDocumentation},
+        KeyBinding{{KeyChord{Qt::Key_I, CONTROL}}, VimLineEditCommand::JumpForward},
+        KeyBinding{{KeyChord{Qt::Key_O, CONTROL}}, VimLineEditCommand::JumpBackward},
     };
 
     for (const auto &binding : key_bindings) {
@@ -705,8 +707,26 @@ QString to_string(VimLineEditCommand cmd) {
         return "OpenFile";
     case VimLineEditCommand::OpenConfig:
         return "OpenConfig";
+    case VimLineEditCommand::JumpForward:
+        return "JumpForward";
+    case VimLineEditCommand::JumpBackward:
+        return "JumpBackward";
     default:
         return "Unknown";
+    }
+}
+
+bool is_jump_command(VimLineEditCommand cmd) {
+    switch (cmd) {
+    case VimLineEditCommand::GotoBegin:
+    case VimLineEditCommand::GotoEnd:
+    case VimLineEditCommand::GotoMatchingBracket:
+    case VimLineEditCommand::MoveToTheNextParagraph:
+    case VimLineEditCommand::MoveToThePreviousParagraph:
+    case VimLineEditCommand::GotoMark:
+        return true;
+    default:
+        return false;
     }
 }
 
@@ -1419,6 +1439,38 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
         }
         break;
     }
+    case VimLineEditCommand::JumpForward: {
+        if (jump_index >= 0 && jump_index < static_cast<int>(jumps.size()) - 1) {
+            jump_index++;
+            new_pos = jumps[jump_index];
+        }
+        break;
+    }
+    case VimLineEditCommand::JumpBackward: {
+        if (jump_index == static_cast<int>(jumps.size())) {
+            int current_pos = get_cursor_position();
+            bool pushed = false;
+            if (jumps.empty() || jumps.back() != current_pos) {
+                jumps.push_back(current_pos);
+                pushed = true;
+            }
+            int target_index = static_cast<int>(jumps.size()) - 2;
+            if (target_index >= 0) {
+                jump_index = target_index;
+                new_pos = jumps[jump_index];
+            } else {
+                if (pushed) {
+                    jumps.pop_back();
+                }
+            }
+        } else {
+            if (jump_index > 0) {
+                jump_index--;
+                new_pos = jumps[jump_index];
+            }
+        }
+        break;
+    }
     // Add more cases for other commands as needed
     default:
         break;
@@ -1483,6 +1535,9 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
     }
 
     if (new_pos != -1) {
+        if (is_jump_command(cmd) && new_pos != old_pos && !action_waiting_for_motion.has_value()) {
+            add_jump(old_pos);
+        }
         if (action_waiting_for_motion.has_value() && action_waiting_for_motion->kind != ActionWaitingForMotionKind::Visual) {
             handle_action_waiting_for_motion(old_pos, new_pos, delete_pos_offset);
         }
@@ -2356,6 +2411,9 @@ void VimEditor::handle_search(bool reverse){
 
     
     if (target_index != -1) {
+        if (target_index != current_pos && !action_waiting_for_motion.has_value()) {
+            add_jump(current_pos);
+        }
         set_cursor_position(target_index);
     }
 
@@ -3151,6 +3209,18 @@ void VimEditor::push_current_history_state() {
     state.cursor_position = get_cursor_position();
     history.states.push_back(state);
     history.current_index++;
+}
+void VimEditor::add_jump(int pos) {
+    if (jump_index >= 0 && jump_index < static_cast<int>(jumps.size()) - 1) {
+        jumps.erase(jumps.begin() + jump_index + 1, jumps.end());
+    }
+    if (jumps.empty() || jumps.back() != pos) {
+        jumps.push_back(pos);
+        if (jumps.size() > 100) {
+            jumps.erase(jumps.begin());
+        }
+    }
+    jump_index = static_cast<int>(jumps.size());
 }
 bool is_separator(QChar ch){
     return ch.isSpace() || ch == ';' || ch == '[' || ch == ']' || ch == '{' || ch == '}' || ch == '(' || ch == ')';
