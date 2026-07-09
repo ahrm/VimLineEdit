@@ -1615,9 +1615,9 @@ int VimEditor::calculate_move_word_forward(bool with_symbols) const {
             }
         }
         else {
-            bool is_letter = t[next_pos].isLetterOrNumber();
+            bool is_word = t[next_pos].isLetterOrNumber() || t[next_pos] == '_';
             while (next_pos < len && !t[next_pos].isSpace() &&
-                   t[next_pos].isLetterOrNumber() == is_letter) {
+                   (t[next_pos].isLetterOrNumber() || t[next_pos] == '_') == is_word) {
                 next_pos++;
             }
         }
@@ -1673,9 +1673,9 @@ int VimEditor::calculate_move_to_end_of_word(bool with_symbols) const {
         }
     }
     else {
-        bool is_letter = t[next_pos].isLetterOrNumber();
+        bool is_word = t[next_pos].isLetterOrNumber() || t[next_pos] == '_';
         while (next_pos < len - 1 && !t[next_pos + 1].isSpace() &&
-               t[next_pos + 1].isLetterOrNumber() == is_letter) {
+               (t[next_pos + 1].isLetterOrNumber() || t[next_pos + 1] == '_') == is_word) {
             next_pos++;
         }
     }
@@ -1703,9 +1703,9 @@ int VimEditor::calculate_move_word_backward(bool with_symbols) const {
         }
     }
     else {
-        bool is_letter = t[prev_pos].isLetterOrNumber();
+        bool is_word = t[prev_pos].isLetterOrNumber() || t[prev_pos] == '_';
         while (prev_pos > 0 && !t[prev_pos - 1].isSpace() &&
-               t[prev_pos - 1].isLetterOrNumber() == is_letter) {
+               (t[prev_pos - 1].isLetterOrNumber() || t[prev_pos - 1] == '_') == is_word) {
             prev_pos--;
         }
     }
