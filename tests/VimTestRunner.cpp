@@ -77,6 +77,22 @@ void simulate_keystrokes(QVimEditor::VimTextEdit *lineEdit, const QByteArray &ke
             modifiers |= Qt::ControlModifier;
             #endif
         }
+        else if ((int)c.unicode() == 0xf) {
+            key = Qt::Key_O;
+            #ifdef Q_OS_MACOS
+            modifiers |= Qt::MetaModifier;
+            #else
+            modifiers |= Qt::ControlModifier;
+            #endif
+        }
+        else if ((int)c.unicode() == 0x9) {
+            key = Qt::Key_I;
+            #ifdef Q_OS_MACOS
+            modifiers |= Qt::MetaModifier;
+            #else
+            modifiers |= Qt::ControlModifier;
+            #endif
+        }
 
         // Add more key mappings as needed
 
@@ -132,6 +148,12 @@ QString keystrokes_to_human_readable_string(QString keystrokes) {
         }
         else if ((int)c.unicode() == 0x18) {
             result += "<C-x>";
+        }
+        else if ((int)c.unicode() == 0xf) {
+            result += "<C-o>";
+        }
+        else if ((int)c.unicode() == 0x9) {
+            result += "<C-i>";
         }
         else if (c == ' ') {
             result += "<Space>";
