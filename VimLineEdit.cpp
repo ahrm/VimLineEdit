@@ -331,7 +331,22 @@ bool VimEditor::key_press_event(QKeyEvent *event) {
     return true;
 }
 
+void VimEditor::update_cursor_style() {
+    set_style_for_mode(current_mode);
+}
+
 void VimEditor::set_style_for_mode(VimMode mode) {
+    bool is_vim_enabled = true;
+    if (auto* line_edit = dynamic_cast<VimLineEdit*>(editor_widget)) {
+        is_vim_enabled = line_edit->get_vim_enabled();
+    } else if (auto* text_edit = dynamic_cast<VimTextEdit*>(editor_widget)) {
+        is_vim_enabled = text_edit->get_vim_enabled();
+    }
+
+    if (!is_vim_enabled) {
+        mode = VimMode::Insert;
+    }
+
     if (mode == VimMode::Normal) {
         // setStyleSheet("background-color: lightgray;");
         int font_width = adapter->get_font_metrics().horizontalAdvance(" ");
@@ -3053,7 +3068,13 @@ void VimTextEdit::resizeEvent(QResizeEvent *event) {
 
 
 void VimLineEdit::set_vim_enabled(bool enabled){
+    if (vim_enabled == enabled) {
+        return;
+    }
     vim_enabled = enabled;
+    if (editor) {
+        editor->update_cursor_style();
+    }
 }
 
 bool VimLineEdit::get_vim_enabled(){
@@ -3061,7 +3082,13 @@ bool VimLineEdit::get_vim_enabled(){
 }
 
 void VimTextEdit::set_vim_enabled(bool enabled){
+    if (vim_enabled == enabled) {
+        return;
+    }
     vim_enabled = enabled;
+    if (editor) {
+        editor->update_cursor_style();
+    }
 }
 
 bool VimTextEdit::get_vim_enabled(){

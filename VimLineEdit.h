@@ -335,6 +335,7 @@ class VimEditor {
     EscapeLineEdit *command_line_edit;
     TextInputAdapter *adapter = nullptr;
     explicit VimEditor(QWidget *editor_widget);
+    void update_cursor_style();
 
     bool key_press_event(QKeyEvent *event);
 
