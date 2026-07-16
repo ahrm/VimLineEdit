@@ -2013,12 +2013,11 @@ void VimEditor::set_cursor_position_with_selection(int pos) {
 }
 
 void VimEditor::set_cursor_position_with_line_selection(int pos) {
-    if (!dynamic_cast<QTextEditAdapter*>(adapter)){
+    bool is_text_edit = dynamic_cast<QTextEditAdapter*>(adapter) != nullptr;
+    bool is_line_edit = dynamic_cast<QLineEditAdapter*>(adapter) != nullptr;
+    if (!is_text_edit && !is_line_edit) {
         return;
     }
-    QTextEditAdapter *text_adapter = static_cast<QTextEditAdapter*>(adapter);
-    QTextCursor cursor = text_adapter->text_edit->textCursor();
-    int current_cursor_pos = get_cursor_position();
     
     // Get line boundaries for both anchor and current position
     int anchor_line_start = get_line_start_position(visual_mode_anchor);
@@ -2044,22 +2043,34 @@ void VimEditor::set_cursor_position_with_line_selection(int pos) {
         selection_end++;
     }
     
-    cursor.setPosition(selection_start, QTextCursor::MoveAnchor);
-    cursor.setPosition(selection_end, QTextCursor::KeepAnchor);
     visual_line_selection_begin = selection_start;
     visual_line_selection_end = selection_end;
 
+    if (is_text_edit) {
+        QTextEditAdapter *text_adapter = static_cast<QTextEditAdapter*>(adapter);
+        QTextCursor cursor = text_adapter->text_edit->textCursor();
+        cursor.setPosition(selection_start, QTextCursor::MoveAnchor);
+        cursor.setPosition(selection_end, QTextCursor::KeepAnchor);
 
-    QTextEdit::ExtraSelection selection;
-    selection.cursor = cursor;
+        QTextEdit::ExtraSelection selection;
+        selection.cursor = cursor;
 
-    QColor selection_foreground_color = text_adapter->text_edit->palette().color(QPalette::Text);
-    QColor selection_background_color = text_adapter->text_edit->palette().color(QPalette::Highlight);
-    selection.format.setBackground(selection_background_color);
-    selection.format.setForeground(selection_foreground_color);
+        QColor selection_foreground_color = text_adapter->text_edit->palette().color(QPalette::Text);
+        QColor selection_background_color = text_adapter->text_edit->palette().color(QPalette::Highlight);
+        selection.format.setBackground(selection_background_color);
+        selection.format.setForeground(selection_foreground_color);
 
-    adapter->set_extra_selections({selection});
-    set_cursor_position(pos);
+        adapter->set_extra_selections({selection});
+        set_cursor_position(pos);
+    }
+    else if (is_line_edit) {
+        QLineEditAdapter *line_adapter = static_cast<QLineEditAdapter*>(adapter);
+        if (visual_mode_anchor <= pos) {
+            line_adapter->line_edit->setSelection(selection_start, selection_end - selection_start);
+        } else {
+            line_adapter->line_edit->setSelection(selection_end, selection_start - selection_end);
+        }
+    }
 }
 
 int VimEditor::get_line_start_position(int cursor_pos) {
