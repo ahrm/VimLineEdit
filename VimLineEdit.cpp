@@ -1519,6 +1519,9 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
         if (current_mode == VimMode::VisualLine) {
             int start = visual_line_selection_begin;
             int end = visual_line_selection_end;
+            if ((start == -1) || (end == -1)) {
+                return;
+            }
             int offset = (end == current_state.text.size()) ? 1 : 0;
             if (current_state.text[end-1] == '\n') {
                 offset = 0;
