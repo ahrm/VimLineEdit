@@ -67,18 +67,18 @@ VimEditor::VimEditor(QWidget *editor_widget) : editor_widget(editor_widget) {
         initial_search_scroll_value = std::nullopt;
         QString text = command_line_edit->text();
         perform_pending_text_command_with_text(text.mid(1));
-        hide_command_line_edit();
+        hide_command_line_edit(false);
 
     });
 
     QObject::connect(command_line_edit, &EscapeLineEdit::escapePressed, [&](){
-        hide_command_line_edit();
+        hide_command_line_edit(true);
     });
 
     QObject::connect(command_line_edit, &EscapeLineEdit::textChanged, [&](const QString& new_text){
         if (new_text.size() == 0){
             // close the command line if the user deletes all text (e.g. by pressing backspace)
-            hide_command_line_edit();
+            hide_command_line_edit(true);
         }
         else{
             highlight_matches(new_text.mid(1));
@@ -2401,13 +2401,16 @@ void VimEditor::show_command_line_edit(QString initial_command_text, QString pla
                                      .arg(background_color.name(), text_color.name()));
 }
 
-void VimEditor::hide_command_line_edit(){
+void VimEditor::hide_command_line_edit(bool was_escaped){
     if (initial_search_scroll_value.has_value()) {
         QTextEditAdapter *text_adapter = dynamic_cast<QTextEditAdapter*>(adapter);
         if (text_adapter && text_adapter->text_edit) {
             text_adapter->text_edit->verticalScrollBar()->setValue(initial_search_scroll_value.value());
         }
         initial_search_scroll_value = std::nullopt;
+        if (was_escaped) {
+            adapter->set_extra_selections(QList<QTextEdit::ExtraSelection>());
+        }
     }
 
     command_line_edit->setText("");
