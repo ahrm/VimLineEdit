@@ -3339,6 +3339,7 @@ void VimLineEdit::resizeEvent(QResizeEvent *event) {
 }
 
 LineNumberArea::LineNumberArea(VimTextEdit *editor) : QWidget(editor), text_edit(editor) {
+    setStyleSheet("background-color: transparent;");
 }
 
 QSize LineNumberArea::sizeHint() const {
