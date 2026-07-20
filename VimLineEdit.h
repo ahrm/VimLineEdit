@@ -322,6 +322,7 @@ class VimEditor {
 
     std::optional<FindState> last_find_state = {};
     std::optional<SearchState> last_search_state = {};
+    std::optional<int> initial_search_scroll_value = {};
     History history;
     int visual_line_selection_begin = -1;
     int visual_line_selection_end = -1;
@@ -385,6 +386,7 @@ class VimEditor {
     void handle_action_waiting_for_motion(int old_pos, int new_pos, int delete_pos_offset);
     void handle_search(bool reverse = false);
     void highlight_matches(QString pattern);
+    void scroll_to_first_match(const QString &new_text);
     void set_last_deleted_text(QString text, std::optional<char> reg, bool is_line = false);
     std::optional<LastDeletedTextState> get_last_deleted_text(std::optional<char> reg);
 

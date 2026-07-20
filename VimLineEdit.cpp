@@ -64,6 +64,7 @@ VimEditor::VimEditor(QWidget *editor_widget) : editor_widget(editor_widget) {
     command_line_edit->setStyleSheet("background-color: #222222;");
 
     QObject::connect(command_line_edit, &EscapeLineEdit::returnPressed, [&](){
+        initial_search_scroll_value = std::nullopt;
         QString text = command_line_edit->text();
         perform_pending_text_command_with_text(text.mid(1));
         hide_command_line_edit();
@@ -81,6 +82,7 @@ VimEditor::VimEditor(QWidget *editor_widget) : editor_widget(editor_widget) {
         }
         else{
             highlight_matches(new_text.mid(1));
+            scroll_to_first_match(new_text);
         }
     });
 
@@ -153,6 +155,64 @@ void VimEditor::highlight_matches(QString pattern){
 
     adapter->set_extra_selections(selections);
 
+}
+
+void VimEditor::scroll_to_first_match(const QString &new_text) {
+    QTextEditAdapter *text_adapter = dynamic_cast<QTextEditAdapter*>(adapter);
+    if (text_adapter == nullptr || text_adapter->text_edit == nullptr) {
+        return;
+    }
+
+    QString pattern = new_text.mid(1);
+    if (pattern.isEmpty()) {
+        if (initial_search_scroll_value.has_value()) {
+            text_adapter->text_edit->verticalScrollBar()->setValue(initial_search_scroll_value.value());
+        }
+        return;
+    }
+
+    QString current_text = text_adapter->get_text();
+    int current_pos = get_cursor_position();
+    int target_index = -1;
+
+    bool is_reverse = (pending_text_command.has_value() && pending_text_command.value() == VimLineEditCommand::ReverseSearchCommand) || new_text.startsWith('?');
+
+    if (is_reverse) {
+        int from = 0;
+        int last_before = -1;
+        int last_any = -1;
+        while (from < current_text.length()) {
+            int idx = current_text.indexOf(pattern, from);
+            if (idx == -1) break;
+            last_any = idx;
+            if (idx < current_pos) {
+                last_before = idx;
+            }
+            from = idx + 1;
+        }
+        target_index = (last_before != -1) ? last_before : last_any;
+    } else {
+        target_index = current_text.indexOf(pattern, current_pos);
+        if (target_index == -1) {
+            target_index = current_text.indexOf(pattern, 0);
+        }
+    }
+
+    if (target_index != -1) {
+        QTextCursor cursor(text_adapter->text_edit->document());
+        cursor.setPosition(target_index);
+        QRect cursor_rect = text_adapter->text_edit->cursorRect(cursor);
+        QRect viewport_rect = text_adapter->text_edit->viewport()->rect();
+        if (!viewport_rect.contains(cursor_rect)) {
+            int current_scroll = text_adapter->text_edit->verticalScrollBar()->value();
+            int target_scroll = current_scroll + cursor_rect.top() - viewport_rect.height() / 2;
+            text_adapter->text_edit->verticalScrollBar()->setValue(target_scroll);
+        }
+    } else {
+        if (initial_search_scroll_value.has_value()) {
+            text_adapter->text_edit->verticalScrollBar()->setValue(initial_search_scroll_value.value());
+        }
+    }
 }
 
 bool VimEditor::key_press_event(QKeyEvent *event) {
@@ -2321,6 +2381,13 @@ QColor get_darker_color(QColor color){
 }
 
 void VimEditor::show_command_line_edit(QString initial_command_text, QString placeholder_text){
+    QTextEditAdapter *text_adapter = dynamic_cast<QTextEditAdapter*>(adapter);
+    if (text_adapter && text_adapter->text_edit) {
+        initial_search_scroll_value = text_adapter->text_edit->verticalScrollBar()->value();
+    } else {
+        initial_search_scroll_value = std::nullopt;
+    }
+
     // get editor widget's background color
     QColor background_color = get_darker_color(editor_widget->palette().color(QPalette::Base));
     QColor text_color = editor_widget->palette().color(QPalette::Text);
@@ -2335,6 +2402,14 @@ void VimEditor::show_command_line_edit(QString initial_command_text, QString pla
 }
 
 void VimEditor::hide_command_line_edit(){
+    if (initial_search_scroll_value.has_value()) {
+        QTextEditAdapter *text_adapter = dynamic_cast<QTextEditAdapter*>(adapter);
+        if (text_adapter && text_adapter->text_edit) {
+            text_adapter->text_edit->verticalScrollBar()->setValue(initial_search_scroll_value.value());
+        }
+        initial_search_scroll_value = std::nullopt;
+    }
+
     command_line_edit->setText("");
     command_line_edit->hide();
     adapter->set_focus();
