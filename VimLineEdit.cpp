@@ -465,6 +465,7 @@ void InputTreeNode::add_keybinding(const std::vector<KeyChord> &key_chords, int 
 
 void VimEditor::add_vim_keybindings() {
     KeyboardModifierState CONTROL = KeyboardModifierState{false, true, false, false};
+    KeyboardModifierState COMMAND = KeyboardModifierState{false, false, true, false};
 
     // KeyboardModifierState SHIFT = KeyboardModifierState{true, false, false, false};
     // KeyboardModifierState NOMOD = KeyboardModifierState{false, false, false, false};
@@ -549,7 +550,10 @@ void VimEditor::add_vim_keybindings() {
                    VimLineEditCommand::CenterOnCursor},
         KeyBinding{{KeyChord{"K", {}}}, VimLineEditCommand::ViewDocumentation},
         KeyBinding{{KeyChord{Qt::Key_I, CONTROL}}, VimLineEditCommand::JumpForward},
-        KeyBinding{{KeyChord{Qt::Key_O, CONTROL}}, VimLineEditCommand::JumpBackward},
+        // KeyBinding{{KeyChord{Qt::Key_O, CONTROL}}, VimLineEditCommand::JumpBackward},
+#ifdef Q_OS_MACOS
+        KeyBinding{{KeyChord{Qt::Key_Slash, COMMAND}}, VimLineEditCommand::ToggleComment},
+#endif
     };
 
     for (const auto &binding : key_bindings) {
@@ -798,6 +802,8 @@ QString to_string(VimLineEditCommand cmd) {
         return "JumpForward";
     case VimLineEditCommand::JumpBackward:
         return "JumpBackward";
+    case VimLineEditCommand::ToggleComment:
+        return "ToggleComment";
     default:
         return "Unknown";
     }
@@ -1556,6 +1562,10 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
                 new_pos = jumps[jump_index];
             }
         }
+        break;
+    }
+    case VimLineEditCommand::ToggleComment: {
+        toggle_comment(current_state, num_repeats, new_pos);
         break;
     }
     // Add more cases for other commands as needed
@@ -2788,6 +2798,153 @@ void VimEditor::handle_number_increment_decrement(bool increment, int count, boo
             }
         }
     }
+}
+
+void VimEditor::toggle_comment(const HistoryState &current_state, int num_repeats, int &new_pos) {
+    push_history(current_state);
+
+    QString current_text = current_state.text;
+    int text_len = current_text.length();
+    int old_pos = get_cursor_position();
+
+    struct Line {
+        int start;
+        int end;
+    };
+    std::vector<Line> all_lines;
+    int p = 0;
+    while (p <= text_len) {
+        int l_start = p;
+        while (p < text_len && current_text[p] != '\n') {
+            p++;
+        }
+        all_lines.push_back({l_start, p});
+        p++; // skip '\n'
+    }
+
+    auto get_line_index_of_pos = [&](int pos) -> int {
+        pos = std::max(0, std::min(pos, text_len));
+        for (size_t i = 0; i < all_lines.size(); ++i) {
+            int line_limit = (i + 1 < all_lines.size()) ? all_lines[i + 1].start : text_len + 1;
+            if (pos >= all_lines[i].start && pos < line_limit) {
+                return static_cast<int>(i);
+            }
+        }
+        return static_cast<int>(all_lines.size() - 1);
+    };
+
+    int start_line_idx = 0;
+    int end_line_idx = 0;
+
+    int sel_begin = -1, sel_end = -1;
+    if (current_mode == VimMode::Visual || current_mode == VimMode::VisualLine) {
+        get_current_selection(sel_begin, sel_end);
+    }
+
+    if (sel_begin != -1 && sel_end != -1 && sel_begin <= sel_end) {
+        if (sel_begin == sel_end) {
+            start_line_idx = get_line_index_of_pos(sel_begin);
+            end_line_idx = start_line_idx;
+        } else {
+            start_line_idx = get_line_index_of_pos(sel_begin);
+            end_line_idx = get_line_index_of_pos(sel_end - 1);
+        }
+    } else {
+        start_line_idx = get_line_index_of_pos(old_pos);
+        end_line_idx = std::min<int>(static_cast<int>(all_lines.size()) - 1, start_line_idx + num_repeats - 1);
+    }
+
+    if (start_line_idx > end_line_idx) {
+        std::swap(start_line_idx, end_line_idx);
+    }
+
+    bool all_commented = true;
+    int non_empty_lines_count = 0;
+
+    for (int i = start_line_idx; i <= end_line_idx; ++i) {
+        QString line_str = current_text.mid(all_lines[i].start, all_lines[i].end - all_lines[i].start);
+        int k = 0;
+        while (k < line_str.length() && (line_str[k] == ' ' || line_str[k] == '\t')) {
+            k++;
+        }
+        if (k < line_str.length()) {
+            non_empty_lines_count++;
+            bool line_is_commented = (line_str[k] == '#');
+            if (!line_is_commented) {
+                all_commented = false;
+                break;
+            }
+        }
+    }
+    if (non_empty_lines_count == 0) {
+        all_commented = false;
+    }
+
+    int cursor_line_idx = get_line_index_of_pos(old_pos);
+    new_pos = old_pos;
+
+    for (int i = end_line_idx; i >= start_line_idx; --i) {
+        int L_start = all_lines[i].start;
+        int L_end = all_lines[i].end;
+        QString line_str = current_text.mid(L_start, L_end - L_start);
+
+        int k = 0;
+        while (k < line_str.length() && (line_str[k] == ' ' || line_str[k] == '\t')) {
+            k++;
+        }
+
+        int delta = 0;
+        if (all_commented) {
+            if (k < line_str.length() && line_str[k] == '#') {
+                int remove_len = 1;
+                if (k + 1 < line_str.length() && line_str[k + 1] == ' ') {
+                    remove_len = 2;
+                }
+                line_str.remove(k, remove_len);
+                delta = -remove_len;
+
+                if (i == cursor_line_idx) {
+                    int comment_offset = L_start + k;
+                    if (old_pos >= comment_offset + remove_len) {
+                        new_pos = old_pos - remove_len;
+                    } else if (old_pos >= comment_offset) {
+                        new_pos = comment_offset;
+                    } else {
+                        new_pos = old_pos;
+                    }
+                }
+            }
+        } else {
+            line_str.insert(k, "# ");
+            delta = 2;
+
+            if (i == cursor_line_idx) {
+                int comment_offset = L_start + k;
+                if (old_pos >= comment_offset) {
+                    new_pos = old_pos + 2;
+                } else {
+                    new_pos = old_pos;
+                }
+            }
+        }
+
+        if (delta != 0) {
+            insert_text(line_str, L_start, L_end);
+            if (i < cursor_line_idx) {
+                new_pos += delta;
+            }
+        }
+    }
+
+    if (visual_line_selection_begin != -1) {
+        adapter->set_extra_selections(QList<QTextEdit::ExtraSelection>());
+        visual_line_selection_begin = -1;
+        visual_line_selection_end = -1;
+    }
+    if (current_mode == VimMode::Visual) {
+        adapter->set_extra_selections(QList<QTextEdit::ExtraSelection>());
+    }
+    set_mode(VimMode::Normal);
 }
 
 void VimEditor::set_mode(VimMode mode){

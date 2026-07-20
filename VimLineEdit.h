@@ -100,6 +100,7 @@ enum class VimLineEditCommand {
     OpenConfig,
     JumpForward,
     JumpBackward,
+    ToggleComment,
 };
 
 enum class ActionWaitingForMotionKind {
@@ -391,6 +392,7 @@ class VimEditor {
     std::optional<LastDeletedTextState> get_last_deleted_text(std::optional<char> reg);
 
     void handle_number_increment_decrement(bool increment, int count = 1, bool progressive = false);
+    void toggle_comment(const HistoryState &current_state, int num_repeats, int &new_pos);
     void remove_text(int begin, int num);
     void insert_text(QString text, int left_index, int right_index = -1);
     bool requires_symbol(VimLineEditCommand cmd);

@@ -24,6 +24,13 @@ int main(int argc, char *argv[])
     main_widget->show();
 
     vim_text_edit.setFocus();
+    vim_text_edit.setText(
+        "line 1\n"
+        "line 2\n"
+        "line 3\n"
+        "line 4\n"
+        "line 5\n"
+    );
 
     QObject::connect(&vim_text_edit, &QVimEditor::VimTextEdit::quitCommand, [&]() {
         a.quit();
