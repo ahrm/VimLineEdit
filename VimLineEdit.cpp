@@ -290,6 +290,18 @@ bool VimEditor::key_press_event(QKeyEvent *event) {
             }
         }
 
+        if (current_node != nullptr || is_key_a_number) {
+            return false;
+        }
+
+        bool has_modifier_shortcut = event->modifiers().testFlag(Qt::ControlModifier) ||
+                                     event->modifiers().testFlag(Qt::MetaModifier) ||
+                                     event->modifiers().testFlag(Qt::AltModifier);
+        if (has_modifier_shortcut) {
+            return true;
+        }
+
+        return false;
     }
     else{
         Qt::KeyboardModifier CONTROL = Qt::ControlModifier;
