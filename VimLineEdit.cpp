@@ -550,7 +550,7 @@ void VimEditor::add_vim_keybindings() {
                    VimLineEditCommand::CenterOnCursor},
         KeyBinding{{KeyChord{"K", {}}}, VimLineEditCommand::ViewDocumentation},
         KeyBinding{{KeyChord{Qt::Key_I, CONTROL}}, VimLineEditCommand::JumpForward},
-        // KeyBinding{{KeyChord{Qt::Key_O, CONTROL}}, VimLineEditCommand::JumpBackward},
+        KeyBinding{{KeyChord{Qt::Key_O, CONTROL}}, VimLineEditCommand::JumpBackward},
 #ifdef Q_OS_MACOS
         KeyBinding{{KeyChord{Qt::Key_Slash, COMMAND}}, VimLineEditCommand::ToggleComment},
 #endif
