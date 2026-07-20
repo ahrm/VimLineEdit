@@ -101,6 +101,7 @@ enum class VimLineEditCommand {
     JumpForward,
     JumpBackward,
     ToggleComment,
+    ReselectVisualMode,
 };
 
 enum class ActionWaitingForMotionKind {
@@ -329,6 +330,9 @@ class VimEditor {
     int visual_line_selection_end = -1;
     std::vector<int> jumps;
     int jump_index = 0;
+    std::optional<VimMode> last_visual_mode = {};
+    int last_visual_anchor = -1;
+    int last_visual_pos = -1;
 
     void set_style_for_mode(VimMode mode);
     QWidget* editor_widget = nullptr;

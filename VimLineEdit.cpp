@@ -473,6 +473,8 @@ void VimEditor::add_vim_keybindings() {
     std::vector<KeyBinding> key_bindings = {
         KeyBinding{{KeyChord{"g", {}}, KeyChord{"g", {}}},
                    VimLineEditCommand::GotoBegin},
+        KeyBinding{{KeyChord{"g", {}}, KeyChord{"v", {}}},
+                   VimLineEditCommand::ReselectVisualMode},
         KeyBinding{{KeyChord{"g", {}}, KeyChord{"f", {}}},
                    VimLineEditCommand::OpenFile},
         KeyBinding{{KeyChord{"g", {}}, KeyChord{"d", {}}},
@@ -804,6 +806,8 @@ QString to_string(VimLineEditCommand cmd) {
         return "JumpBackward";
     case VimLineEditCommand::ToggleComment:
         return "ToggleComment";
+    case VimLineEditCommand::ReselectVisualMode:
+        return "ReselectVisualMode";
     default:
         return "Unknown";
     }
@@ -872,6 +876,12 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
     current_state.cursor_position = old_pos;
     current_state.marks = marks;
     bool should_reset_desired_pos = true;
+
+    if (current_mode == VimMode::Visual || current_mode == VimMode::VisualLine) {
+        last_visual_mode = current_mode;
+        last_visual_anchor = visual_mode_anchor;
+        last_visual_pos = get_cursor_position();
+    }
 
     switch (cmd) {
     case VimLineEditCommand::EnterInsertMode:
@@ -1568,6 +1578,27 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
         toggle_comment(current_state, num_repeats, new_pos);
         break;
     }
+    case VimLineEditCommand::ReselectVisualMode: {
+        if (last_visual_mode.has_value() && last_visual_anchor != -1 && last_visual_pos != -1) {
+            int text_len = adapter->get_text().length();
+            if (text_len > 0) {
+                int anchor = std::max(0, std::min(last_visual_anchor, text_len));
+                int pos = std::max(0, std::min(last_visual_pos, text_len));
+
+                VimMode mode_to_restore = last_visual_mode.value();
+                set_mode(mode_to_restore);
+                visual_mode_anchor = anchor;
+
+                if (mode_to_restore == VimMode::Visual) {
+                    set_cursor_position_with_selection(pos);
+                    action_waiting_for_motion = {ActionWaitingForMotionKind::Visual, SurroundingScope::None, SurroundingKind::None};
+                } else if (mode_to_restore == VimMode::VisualLine) {
+                    set_cursor_position_with_line_selection(pos);
+                }
+            }
+        }
+        break;
+    }
     // Add more cases for other commands as needed
     default:
         break;
@@ -1650,6 +1681,12 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
         else {
             set_cursor_position(new_pos);
         }
+    }
+
+    if (current_mode == VimMode::Visual || current_mode == VimMode::VisualLine) {
+        last_visual_mode = current_mode;
+        last_visual_anchor = visual_mode_anchor;
+        last_visual_pos = get_cursor_position();
     }
 }
 
