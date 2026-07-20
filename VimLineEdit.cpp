@@ -245,7 +245,7 @@ bool VimEditor::key_press_event(QKeyEvent *event) {
         add_event_to_current_macro(event);
     }
 
-    if (current_mode == VimMode::Normal || current_mode == VimMode::Visual || current_mode == VimMode::VisualLine) {
+    if (current_mode == VimMode::Normal || current_mode == VimMode::Visual || current_mode == VimMode::VisualLine || current_mode == VimMode::VisualBlock) {
         // we don't want to handle when we only press a modifier (e.g. Shift, Ctrl, etc.)
         int event_key = event->key();
         bool is_keypress_a_modifier = event_key == Qt::Key_Shift || event_key == Qt::Key_Control ||
@@ -434,7 +434,7 @@ void VimEditor::set_style_for_mode(VimMode mode) {
         adapter->set_cursor_width(1);
         // setStyle(new LineEditStyle(1));
     }
-    else if (mode == VimMode::Visual || mode == VimMode::VisualLine) {
+    else if (mode == VimMode::Visual || mode == VimMode::VisualLine || mode == VimMode::VisualBlock) {
         // setStyleSheet("background-color: pink;");
         int font_width = adapter->get_font_metrics().horizontalAdvance(" ");
         // setCursorWidth(font_width);
@@ -489,6 +489,7 @@ void VimEditor::add_vim_keybindings() {
         KeyBinding{{KeyChord{"A", {}}}, VimLineEditCommand::EnterInsertModeEndLine},
         KeyBinding{{KeyChord{"v", {}}}, VimLineEditCommand::EnterVisualMode},
         KeyBinding{{KeyChord{"V", {}}}, VimLineEditCommand::EnterVisualLineMode},
+        KeyBinding{{KeyChord{Qt::Key_V, CONTROL}}, VimLineEditCommand::EnterVisualBlockMode},
         KeyBinding{{KeyChord{"h", {}}}, VimLineEditCommand::MoveLeft},
         KeyBinding{{KeyChord{"l", {}}}, VimLineEditCommand::MoveRight},
         KeyBinding{{KeyChord{"j", {}}}, VimLineEditCommand::MoveDown},
@@ -591,7 +592,7 @@ std::optional<VimLineEditCommand> VimEditor::handle_key_event(QString event_text
                                                                 Qt::KeyboardModifiers modifiers) {
 
     InputTreeNode* current_mode_root = &normal_mode_input_tree;
-    if (current_mode == VimMode::Visual || current_mode == VimMode::VisualLine) {
+    if (current_mode == VimMode::Visual || current_mode == VimMode::VisualLine || current_mode == VimMode::VisualBlock) {
         current_mode_root = &visual_mode_input_tree;
     }
     if (current_mode == VimMode::Insert) {
@@ -664,6 +665,8 @@ QString to_string(VimLineEditCommand cmd) {
         return "EnterVisualMode";
     case VimLineEditCommand::EnterVisualLineMode:
         return "EnterVisualLineMode";
+    case VimLineEditCommand::EnterVisualBlockMode:
+        return "EnterVisualBlockMode";
     case VimLineEditCommand::MoveLeft:
         return "MoveLeft";
     case VimLineEditCommand::MoveRight:
@@ -879,7 +882,7 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
     current_state.marks = marks;
     bool should_reset_desired_pos = true;
 
-    if (current_mode == VimMode::Visual || current_mode == VimMode::VisualLine) {
+    if (current_mode == VimMode::Visual || current_mode == VimMode::VisualLine || current_mode == VimMode::VisualBlock) {
         last_visual_mode = current_mode;
         last_visual_anchor = visual_mode_anchor;
         last_visual_pos = get_cursor_position();
@@ -915,6 +918,10 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
         new_pos = current_state.text.length();
         break;
     case VimLineEditCommand::Uppercasify: {
+        if (current_mode == VimMode::VisualBlock) {
+            apply_transform_to_visual_block([](const QString &slice) { return slice.toUpper(); });
+            break;
+        }
         int begin, end;
         QString selection = get_current_selection(begin, end);
         if (selection.size() > 0){
@@ -926,6 +933,10 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
 
     }
     case VimLineEditCommand::SwapCaseSelection: {
+        if (current_mode == VimMode::VisualBlock) {
+            apply_transform_to_visual_block([this](const QString &slice) { return swap_case(slice); });
+            break;
+        }
         int begin, end;
         QString selection = get_current_selection(begin, end);
         if (selection.size() > 0){
@@ -937,8 +948,20 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
 
     }
     case VimLineEditCommand::EnterInsertModeBeginLine:
+        if (current_mode == VimMode::VisualBlock) {
+            enter_visual_block_insert_mode(false);
+            break;
+        }
         set_mode(VimMode::Insert);
         new_pos = get_line_start_position(get_cursor_position());
+        break;
+    case VimLineEditCommand::EnterInsertModeEndLine:
+        if (current_mode == VimMode::VisualBlock) {
+            enter_visual_block_insert_mode(true);
+            break;
+        }
+        set_mode(VimMode::Insert);
+        new_pos = get_line_end_position(get_cursor_position());
         break;
     case VimLineEditCommand::RecordMacro:
         if (current_macro.has_value()){
@@ -990,11 +1013,6 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
         }
         break;
     }
-
-    case VimLineEditCommand::EnterInsertModeEndLine:
-        set_mode(VimMode::Insert);
-        new_pos = get_line_end_position(get_cursor_position());
-        break;
     case VimLineEditCommand::GotoBegin:
         if (num_repeats <= 1){
             new_pos = get_line_start_position(0);
@@ -1090,7 +1108,7 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
             visual_line_selection_begin = -1;
             visual_line_selection_end = -1;
         }
-        if (current_mode == VimMode::Visual){
+        if (current_mode == VimMode::Visual || current_mode == VimMode::VisualBlock){
             adapter->set_extra_selections(QList<QTextEdit::ExtraSelection>());
         }
 
@@ -1110,6 +1128,7 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
         // characters Move cursor back by one position unless we're already at
         // the beginning of a line
         if (previous_mode == VimMode::Insert){
+            replicate_visual_block_insert_text();
             bool is_at_beginning_of_line = (new_pos > 0 && current_state.text[new_pos - 1] == '\n');
             if (get_cursor_position() > 0) {
                 if (!is_at_beginning_of_line) {
@@ -1123,20 +1142,42 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
         break;
     }
     case VimLineEditCommand::EnterVisualMode: {
+        if (current_mode == VimMode::Visual) {
+            set_mode(VimMode::Normal);
+            adapter->set_extra_selections({});
+            break;
+        }
         set_mode(VimMode::Visual);
         visual_mode_anchor = get_cursor_position();
         set_visual_selection(visual_mode_anchor, 1);
-
         action_waiting_for_motion = {ActionWaitingForMotionKind::Visual, SurroundingScope::None, SurroundingKind::None};
-
         break;
     }
-    case VimLineEditCommand::EnterVisualLineMode:
+    case VimLineEditCommand::EnterVisualLineMode: {
+        if (current_mode == VimMode::VisualLine) {
+            set_mode(VimMode::Normal);
+            adapter->set_extra_selections({});
+            visual_line_selection_begin = -1;
+            visual_line_selection_end = -1;
+            break;
+        }
         set_mode(VimMode::VisualLine);
         visual_mode_anchor = get_cursor_position();
-        // Immediately select the current line
         set_cursor_position_with_line_selection(get_cursor_position());
         break;
+    }
+    case VimLineEditCommand::EnterVisualBlockMode: {
+        if (current_mode == VimMode::VisualBlock) {
+            set_mode(VimMode::Normal);
+            adapter->set_extra_selections({});
+            break;
+        }
+        set_mode(VimMode::VisualBlock);
+        visual_mode_anchor = get_cursor_position();
+        set_cursor_position_with_block_selection(get_cursor_position());
+        action_waiting_for_motion = {ActionWaitingForMotionKind::Visual, SurroundingScope::None, SurroundingKind::None};
+        break;
+    }
     case VimLineEditCommand::MoveLeft: {
         int old_pos = get_cursor_position();
         new_pos = old_pos - num_repeats;
@@ -1515,7 +1556,7 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
         break;
     }
     case VimLineEditCommand::ToggleVisualCursor: {
-        if (current_mode == VimMode::Visual) {
+        if (current_mode == VimMode::Visual || current_mode == VimMode::VisualBlock) {
             int current_cursor_pos = get_cursor_position();
             int temp = visual_mode_anchor;
             visual_mode_anchor = current_cursor_pos;
@@ -1596,6 +1637,9 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
                     action_waiting_for_motion = {ActionWaitingForMotionKind::Visual, SurroundingScope::None, SurroundingKind::None};
                 } else if (mode_to_restore == VimMode::VisualLine) {
                     set_cursor_position_with_line_selection(pos);
+                } else if (mode_to_restore == VimMode::VisualBlock) {
+                    set_cursor_position_with_block_selection(pos);
+                    action_waiting_for_motion = {ActionWaitingForMotionKind::Visual, SurroundingScope::None, SurroundingKind::None};
                 }
             }
         }
@@ -1618,7 +1662,7 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
     // we should use the selected text as the target of the change/delete
     if (action_waiting_for_motion.has_value() &&
         (action_waiting_for_motion->kind == ActionWaitingForMotionKind::Change || action_waiting_for_motion->kind == ActionWaitingForMotionKind::Delete || action_waiting_for_motion->kind == ActionWaitingForMotionKind::Yank) &&
-        (current_mode == VimMode::Visual || current_mode == VimMode::VisualLine)){
+        (current_mode == VimMode::Visual || current_mode == VimMode::VisualLine || current_mode == VimMode::VisualBlock)){
         int selection_begin, selection_end;
         QString selected_text = get_current_selection(selection_begin, selection_end);
 
@@ -1648,6 +1692,9 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
                 remove_text(start, end - start);
             }
             set_cursor_position(start);
+        }
+        if (current_mode == VimMode::VisualBlock) {
+            handle_visual_block_action(cmd);
         }
 
         if (action_waiting_for_motion->kind == ActionWaitingForMotionKind::Change) {
@@ -1680,12 +1727,15 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
         else if (current_mode == VimMode::VisualLine) {
             set_cursor_position_with_line_selection(new_pos);
         }
+        else if (current_mode == VimMode::VisualBlock) {
+            set_cursor_position_with_block_selection(new_pos);
+        }
         else {
             set_cursor_position(new_pos);
         }
     }
 
-    if (current_mode == VimMode::Visual || current_mode == VimMode::VisualLine) {
+    if (current_mode == VimMode::Visual || current_mode == VimMode::VisualLine || current_mode == VimMode::VisualBlock) {
         last_visual_mode = current_mode;
         last_visual_anchor = visual_mode_anchor;
         last_visual_pos = get_cursor_position();
@@ -2194,6 +2244,193 @@ void VimEditor::set_cursor_position_with_line_selection(int pos) {
     }
 }
 
+void VimEditor::get_line_and_col(int pos, int &line_idx, int &col_idx) const {
+    const QString text = adapter->get_text();
+    int p = std::max(0, std::min<int>(pos, text.length()));
+    line_idx = 0;
+    int line_start = 0;
+    for (int i = 0; i < p; ++i) {
+        if (text[i] == '\n') {
+            line_idx++;
+            line_start = i + 1;
+        }
+    }
+    col_idx = p - line_start;
+}
+
+std::vector<int> VimEditor::get_line_starts(const QString &text) {
+    std::vector<int> line_starts;
+    line_starts.push_back(0);
+    for (int i = 0; i < text.length(); ++i) {
+        if (text[i] == '\n') {
+            line_starts.push_back(i + 1);
+        }
+    }
+    return line_starts;
+}
+
+VisualBlockBounds VimEditor::get_visual_block_bounds(int pos) const {
+    if (pos == -1) {
+        pos = get_cursor_position();
+    }
+    const QString text = adapter->get_text();
+    int anchor_line, anchor_col, pos_line, pos_col;
+    get_line_and_col(visual_mode_anchor, anchor_line, anchor_col);
+    get_line_and_col(pos, pos_line, pos_col);
+
+    VisualBlockBounds bounds;
+    bounds.min_line = std::min(anchor_line, pos_line);
+    bounds.max_line = std::max(anchor_line, pos_line);
+    bounds.min_col = std::min(anchor_col, pos_col);
+    bounds.max_col = std::max(anchor_col, pos_col);
+    bounds.line_starts = get_line_starts(text);
+    return bounds;
+}
+
+void VimEditor::apply_transform_to_visual_block(const std::function<QString(const QString&)> &transform_fn) {
+    VisualBlockBounds bounds = get_visual_block_bounds();
+    const QString text = adapter->get_text();
+
+    for (int l = bounds.max_line; l >= bounds.min_line && l < static_cast<int>(bounds.line_starts.size()); --l) {
+        int l_start = bounds.line_starts[l];
+        int l_end = (l + 1 < static_cast<int>(bounds.line_starts.size())) ? bounds.line_starts[l + 1] - 1 : text.length();
+        int l_len = l_end - l_start;
+        if (bounds.min_col < l_len) {
+            int start_idx = l_start + bounds.min_col;
+            int end_idx = l_start + std::min(bounds.max_col, l_len - 1);
+            QString slice = text.mid(start_idx, end_idx - start_idx + 1);
+            insert_text(transform_fn(slice), start_idx, end_idx + 1);
+        }
+    }
+    int first_line_start = bounds.line_starts[bounds.min_line];
+    set_mode(VimMode::Normal);
+    adapter->set_extra_selections({});
+    set_cursor_position(first_line_start + bounds.min_col);
+}
+
+void VimEditor::enter_visual_block_insert_mode(bool at_end) {
+    VisualBlockBounds bounds = get_visual_block_bounds();
+    int target_col = at_end ? bounds.max_col + 1 : bounds.min_col;
+    visual_block_insert_state = VisualBlockInsertState{bounds.min_line, bounds.max_line, target_col};
+    set_mode(VimMode::Insert);
+    adapter->set_extra_selections({});
+
+    const QString text = adapter->get_text();
+    int l_start = bounds.line_starts[bounds.min_line];
+    int l_end = (bounds.min_line + 1 < static_cast<int>(bounds.line_starts.size())) ? bounds.line_starts[bounds.min_line + 1] - 1 : text.length();
+    int col_pos = std::min(target_col, l_end - l_start);
+    set_cursor_position(l_start + col_pos);
+}
+
+void VimEditor::handle_visual_block_action(VimLineEditCommand cmd) {
+    VisualBlockBounds bounds = get_visual_block_bounds();
+    if (action_waiting_for_motion.has_value() && action_waiting_for_motion->kind == ActionWaitingForMotionKind::Change) {
+        visual_block_insert_state = VisualBlockInsertState{
+            bounds.min_line,
+            bounds.max_line,
+            bounds.min_col
+        };
+    }
+
+    const QString text = adapter->get_text();
+    QStringList yanked_block;
+    for (int l = bounds.min_line; l <= bounds.max_line && l < static_cast<int>(bounds.line_starts.size()); ++l) {
+        int l_start = bounds.line_starts[l];
+        int l_end = (l + 1 < static_cast<int>(bounds.line_starts.size())) ? bounds.line_starts[l + 1] - 1 : text.length();
+        int l_len = l_end - l_start;
+        if (bounds.min_col < l_len) {
+            int start_idx = l_start + bounds.min_col;
+            int end_idx = l_start + std::min(bounds.max_col, l_len - 1);
+            yanked_block.append(text.mid(start_idx, end_idx - start_idx + 1));
+        } else {
+            yanked_block.append("");
+        }
+    }
+    set_last_deleted_text(yanked_block.join("\n"), current_paste_register, false);
+
+    if (cmd != VimLineEditCommand::Yank) {
+        for (int l = bounds.max_line; l >= bounds.min_line && l < static_cast<int>(bounds.line_starts.size()); --l) {
+            int l_start = bounds.line_starts[l];
+            int l_end = (l + 1 < static_cast<int>(bounds.line_starts.size())) ? bounds.line_starts[l + 1] - 1 : text.length();
+            int l_len = l_end - l_start;
+            if (bounds.min_col < l_len) {
+                int start_idx = l_start + bounds.min_col;
+                int end_idx = l_start + std::min(bounds.max_col, l_len - 1);
+                remove_text(start_idx, end_idx - start_idx + 1);
+            }
+        }
+    }
+    int first_line_start = bounds.line_starts[bounds.min_line];
+    set_cursor_position(first_line_start + bounds.min_col);
+}
+
+void VimEditor::replicate_visual_block_insert_text() {
+    if (!visual_block_insert_state.has_value()) {
+        return;
+    }
+    auto vbis = visual_block_insert_state.value();
+    visual_block_insert_state = {};
+    QString inserted_text = current_insert_mode_text;
+    if (inserted_text.isEmpty()) {
+        return;
+    }
+    const QString doc_text = adapter->get_text();
+    std::vector<int> line_starts = get_line_starts(doc_text);
+    for (int l = vbis.max_line; l >= vbis.min_line + 1 && l < static_cast<int>(line_starts.size()); --l) {
+        int l_start = line_starts[l];
+        int l_end = (l + 1 < static_cast<int>(line_starts.size())) ? line_starts[l + 1] - 1 : doc_text.length();
+        int l_len = l_end - l_start;
+        int insert_col = std::min(vbis.col, l_len);
+        insert_text(inserted_text, l_start + insert_col);
+    }
+}
+
+void VimEditor::set_cursor_position_with_block_selection(int pos) {
+    bool is_text_edit = dynamic_cast<QTextEditAdapter*>(adapter) != nullptr;
+    bool is_line_edit = dynamic_cast<QLineEditAdapter*>(adapter) != nullptr;
+    if (!is_text_edit && !is_line_edit) {
+        return;
+    }
+
+    VisualBlockBounds bounds = get_visual_block_bounds(pos);
+    const QString text = adapter->get_text();
+
+    if (is_text_edit) {
+        QTextEditAdapter *text_adapter = static_cast<QTextEditAdapter*>(adapter);
+        QList<QTextEdit::ExtraSelection> selections;
+
+        for (int l = bounds.min_line; l <= bounds.max_line && l < static_cast<int>(bounds.line_starts.size()); ++l) {
+            int l_start = bounds.line_starts[l];
+            int l_end = (l + 1 < static_cast<int>(bounds.line_starts.size())) ? bounds.line_starts[l + 1] - 1 : text.length();
+            int l_len = l_end - l_start;
+            if (bounds.min_col < l_len) {
+                int start_idx = l_start + bounds.min_col;
+                int end_idx = l_start + std::min(bounds.max_col, l_len - 1);
+
+                QTextCursor cursor(text_adapter->text_edit->document());
+                cursor.setPosition(start_idx, QTextCursor::MoveAnchor);
+                cursor.setPosition(end_idx + 1, QTextCursor::KeepAnchor);
+
+                QTextEdit::ExtraSelection selection;
+                selection.cursor = cursor;
+                QColor selection_foreground_color = text_adapter->text_edit->palette().color(QPalette::Text);
+                QColor selection_background_color = text_adapter->text_edit->palette().color(QPalette::Highlight);
+                selection.format.setBackground(selection_background_color);
+                selection.format.setForeground(selection_foreground_color);
+                selections.append(selection);
+            }
+        }
+        adapter->set_extra_selections(selections);
+        set_cursor_position(pos);
+    }
+    else if (is_line_edit) {
+        QLineEditAdapter *line_adapter = static_cast<QLineEditAdapter*>(adapter);
+        int start = std::min<int>(bounds.min_col, text.length());
+        int end = std::min<int>(bounds.max_col + 1, text.length());
+        line_adapter->line_edit->setSelection(start, std::max(0, end - start));
+    }
+}
+
 int VimEditor::get_line_start_position(int cursor_pos) {
     const QString text = adapter->get_text();
     int pos = cursor_pos;
@@ -2594,6 +2831,9 @@ void VimEditor::handle_search(bool reverse){
     else if (current_mode == VimMode::VisualLine) {
         set_cursor_position_with_line_selection(target_index);
     }
+    else if (current_mode == VimMode::VisualBlock) {
+        set_cursor_position_with_block_selection(target_index);
+    }
 }
 
 EscapeLineEdit::EscapeLineEdit(QWidget *parent) : QLineEdit(parent) {
@@ -2980,7 +3220,7 @@ void VimEditor::toggle_comment(const HistoryState &current_state, int num_repeat
         visual_line_selection_begin = -1;
         visual_line_selection_end = -1;
     }
-    if (current_mode == VimMode::Visual) {
+    if (current_mode == VimMode::Visual || current_mode == VimMode::VisualBlock) {
         adapter->set_extra_selections(QList<QTextEdit::ExtraSelection>());
     }
     set_mode(VimMode::Normal);
