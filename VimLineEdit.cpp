@@ -81,8 +81,10 @@ VimEditor::VimEditor(QWidget *editor_widget) : editor_widget(editor_widget) {
             hide_command_line_edit(true);
         }
         else{
-            highlight_matches(new_text.mid(1));
-            scroll_to_first_match(new_text);
+            if (pending_text_command.has_value() && (pending_text_command.value() == VimLineEditCommand::SearchCommand || pending_text_command.value() == VimLineEditCommand::ReverseSearchCommand)){
+                highlight_matches(new_text.mid(1));
+                scroll_to_first_match(new_text);
+            }
         }
     });
 
