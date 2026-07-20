@@ -343,7 +343,7 @@ class VimEditor {
     explicit VimEditor(QWidget *editor_widget);
     void update_cursor_style();
 
-    bool key_press_event(QKeyEvent *event);
+    bool key_press_event(QKeyEvent *event, bool& should_propagate);
 
     QString get_word_under_cursor_bounds(int &start, int &end);
     void add_vim_keybindings();

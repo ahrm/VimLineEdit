@@ -217,8 +217,10 @@ void VimEditor::scroll_to_first_match(const QString &new_text) {
     }
 }
 
-bool VimEditor::key_press_event(QKeyEvent *event) {
+bool VimEditor::key_press_event(QKeyEvent* event, bool& should_propagate) {
 
+    should_propagate = false;
+    
     if (event->key() == Qt::Key_Return && current_mode == VimMode::Normal) {
         if (dynamic_cast<QLineEditAdapter*>(adapter)){
             return true;
@@ -360,7 +362,8 @@ bool VimEditor::key_press_event(QKeyEvent *event) {
                                      event->modifiers().testFlag(Qt::MetaModifier) ||
                                      event->modifiers().testFlag(Qt::AltModifier);
         if (has_modifier_shortcut) {
-            return true;
+            should_propagate = true;
+            return false;
         }
 
         return false;
@@ -966,7 +969,8 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
             for (int j = 0; j < num_repeats; j++){
                 for (int i = 0; i < macro.events.size(); i++) {
                     auto clone = macro.events[i].get()->clone();
-                    if (key_press_event(clone)){
+                    bool should_propagate = false;
+                    if (key_press_event(clone, should_propagate)){
                         adapter->key_press_event(clone);
                     }
                     delete clone;
@@ -3310,8 +3314,21 @@ VimLineEdit::VimLineEdit(QWidget *parent) : QLineEdit(parent) {
 }
 
 void VimLineEdit::keyPressEvent(QKeyEvent *event) {
-    if ((!vim_enabled) || editor->key_press_event(event)){
-        QLineEdit::keyPressEvent(event);
+    if (!vim_enabled){
+        return QLineEdit::keyPressEvent(event);
+    }
+
+    bool should_propagate = false;
+    bool should_handle_with_qlineedit = editor->key_press_event(event, should_propagate);
+    if (should_handle_with_qlineedit){
+        return QLineEdit::keyPressEvent(event);
+    }
+
+    if (should_propagate){
+        event->ignore();
+    }
+    else {
+        event->accept();
     }
 }
 
@@ -3354,8 +3371,22 @@ VimTextEdit::VimTextEdit(QWidget *parent) : QTextEdit(parent) {
 }
 
 void VimTextEdit::keyPressEvent(QKeyEvent *event) {
-    if ((!vim_enabled) || editor->key_press_event(event)){
-        QTextEdit::keyPressEvent(event);
+
+    if (!vim_enabled){
+        return QTextEdit::keyPressEvent(event);
+    }
+
+    bool should_propagate = false;
+    bool should_handle_with_qlineedit = editor->key_press_event(event, should_propagate);
+    if (should_handle_with_qlineedit){
+        return QTextEdit::keyPressEvent(event);
+    }
+
+    if (should_propagate){
+        event->ignore();
+    }
+    else {
+        event->accept();
     }
 }
 
