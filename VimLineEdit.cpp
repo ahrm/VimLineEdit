@@ -285,11 +285,11 @@ bool VimEditor::key_press_event(QKeyEvent *event) {
                 }
                 else {
                     handle_command(command.value());
+                    return false;
                 }
             }
         }
 
-        return false;
     }
     else{
         Qt::KeyboardModifier CONTROL = Qt::ControlModifier;
