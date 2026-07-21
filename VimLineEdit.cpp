@@ -1132,6 +1132,13 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
         // characters Move cursor back by one position unless we're already at
         // the beginning of a line
         if (previous_mode == VimMode::Insert){
+
+            // when we insert some text in visual block mode and press escape
+            // the cursor should be on the last character inserted
+            if (visual_block_insert_state.has_value()){
+                new_pos--;
+            }
+
             replicate_visual_block_insert_text();
             bool is_at_beginning_of_line = (new_pos > 0 && current_state.text[new_pos - 1] == '\n');
             if (get_cursor_position() > 0) {
