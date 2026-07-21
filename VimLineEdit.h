@@ -29,6 +29,7 @@ enum class VimLineEditCommand {
     EnterNormalMode,
     EnterVisualMode,
     EnterVisualLineMode,
+    EnterVisualBlockMode,
     MoveLeft,
     MoveRight,
     MoveUp,
@@ -145,6 +146,20 @@ struct ActionWaitingForMotion {
     SurroundingKind surrounding_kind = SurroundingKind::None;
 };
 
+struct VisualBlockInsertState {
+    int min_line;
+    int max_line;
+    int col;
+};
+
+struct VisualBlockBounds {
+    int min_line;
+    int max_line;
+    int min_col;
+    int max_col;
+    std::vector<int> line_starts;
+};
+
 QString to_string(VimLineEditCommand cmd);
 QString get_initial_command_text(VimLineEditCommand cmd);
 
@@ -185,6 +200,7 @@ enum class VimMode {
     Insert,
     Visual,
     VisualLine,
+    VisualBlock,
 };
 
 enum class FindDirection {
@@ -333,6 +349,7 @@ class VimEditor {
     std::optional<VimMode> last_visual_mode = {};
     int last_visual_anchor = -1;
     int last_visual_pos = -1;
+    std::optional<VisualBlockInsertState> visual_block_insert_state = {};
 
     void set_style_for_mode(VimMode mode);
     QWidget* editor_widget = nullptr;
@@ -382,6 +399,14 @@ class VimEditor {
 
     void set_cursor_position(int pos);
     void set_cursor_position_with_selection(int pos); void set_cursor_position_with_line_selection(int pos);
+    void set_cursor_position_with_block_selection(int pos);
+    void get_line_and_col(int pos, int &line_idx, int &col_idx) const;
+    VisualBlockBounds get_visual_block_bounds(int pos = -1) const;
+    static std::vector<int> get_line_starts(const QString &text);
+    void apply_transform_to_visual_block(const std::function<QString(const QString&)> &transform_fn);
+    void enter_visual_block_insert_mode(bool at_end);
+    void handle_visual_block_action(VimLineEditCommand cmd);
+    void replicate_visual_block_insert_text();
     int get_line_start_position(int cursor_pos);
     int get_line_end_position(int cursor_pos);
     int get_ith_line_start_position(int i);
