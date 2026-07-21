@@ -1367,18 +1367,22 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
         if (cmd != VimLineEditCommand::YankCurrentLine){
 
             if (cmd == VimLineEditCommand::DeleteCurrentLine) {
-                line_end++;
+                if (line_end < current_state.text.size() && current_state.text[line_end] == '\n') {
+                    line_end++;
+                } else if (line_start > 0 && current_state.text[line_start - 1] == '\n') {
+                    line_start--;
+                }
             }
 
             push_history(current_state);
             remove_text(line_start, line_end - line_start);
 
-            // if we delete the last line, we need to move the cursor to the previous line
-            if (line_end >= current_state.text.size()) {
-                set_cursor_position(line_start - 1);
+            int updated_len = adapter->get_text().size();
+            if (line_start >= updated_len) {
+                new_pos = std::max(0, updated_len - 1);
             }
             else {
-                set_cursor_position(line_start);
+                new_pos = line_start;
             }
 
             if (cmd == VimLineEditCommand::ChangeCurrentLine) {
