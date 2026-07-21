@@ -1721,8 +1721,11 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
 
     }
 
-    if (cmd != VimLineEditCommand::EnterNormalMode && current_mode == VimMode::Normal && new_pos == current_state.text.size()) {
-        new_pos = current_state.text.size() - 1;
+    QString updated_text = adapter->get_text();
+    if (cmd != VimLineEditCommand::EnterNormalMode && current_mode == VimMode::Normal && updated_text.size() > 0 && new_pos == updated_text.size()) {
+        if (new_pos > 0 && updated_text[new_pos - 1] != '\n') {
+            new_pos = updated_text.size() - 1;
+        }
     }
 
     if (new_pos != -1) {
@@ -2545,7 +2548,7 @@ int VimEditor::calculate_move_down(int cursor_pos) {
     int next_line_start = current_line_end + 1;
 
     // If there's no next line, stay at current position
-    if (next_line_start >= text.length()) {
+    if (next_line_start > text.length()) {
         return cursor_pos;
     }
 
@@ -3364,12 +3367,15 @@ void VimEditor::handle_text_command(QString text){
 
     VimLineEdit* line_edit = dynamic_cast<VimLineEdit*>(editor_widget);
     VimTextEdit* text_edit = dynamic_cast<VimTextEdit*>(editor_widget);
+    bool handled = false;
     if (text == "w" || text == "wq" || text == "write"){
         emit_save();
+        handled = true;
     }
 
     if (text == "q" || text == "quit" || text == "wq"){
         emit_quit();
+        handled = true;
     }
     if (text == "q!" || text == "quit!"){
         if (line_edit){
@@ -3378,9 +3384,10 @@ void VimEditor::handle_text_command(QString text){
         if (text_edit){
             emit text_edit->forceQuitCommand();
         }
+        handled = true;
     }
 
-    else {
+    if (!handled) {
         qDebug() << "Unknown command: " << text;
     }
 }
