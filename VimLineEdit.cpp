@@ -3418,7 +3418,6 @@ QString QTextEditAdapter::get_text() const {
 void QLineEditAdapter::set_cursor_width(int width) {
     line_edit->setStyle(new LineEditStyle(width));
 }
-
 void QTextEditAdapter::set_cursor_width(int width) {
     text_edit->setCursorWidth(width);
 }
@@ -3568,7 +3567,20 @@ void QTextEditAdapter::key_press_event(QKeyEvent *kevent) {
 }
 
 VimLineEdit::VimLineEdit(QWidget *parent) : QLineEdit(parent) {
+    for (QObject *child : children()) {
+        if (child->inherits("QWidgetLineControl")) {
+            child->installEventFilter(this);
+            break;
+        }
+    }
     editor = new VimEditor(this);
+}
+
+bool VimLineEdit::eventFilter(QObject *watched, QEvent *event) {
+    if (vim_enabled && event->type() == QEvent::Timer) {
+        return true;
+    }
+    return QLineEdit::eventFilter(watched, event);
 }
 
 void VimLineEdit::keyPressEvent(QKeyEvent *event) {
@@ -3609,6 +3621,12 @@ void LineNumberArea::paintEvent(QPaintEvent *event) {
 }
 
 VimTextEdit::VimTextEdit(QWidget *parent) : QTextEdit(parent) {
+    for (QObject *child : children()) {
+        if (child->inherits("QWidgetTextControl")) {
+            child->installEventFilter(this);
+            break;
+        }
+    }
     editor = new VimEditor(this);
     line_number_area = new LineNumberArea(this);
     line_number_area->hide();
@@ -3627,6 +3645,13 @@ VimTextEdit::VimTextEdit(QWidget *parent) : QTextEdit(parent) {
         update_line_number_area();
     });
     update_line_number_area_width();
+}
+
+bool VimTextEdit::eventFilter(QObject *watched, QEvent *event) {
+    if (vim_enabled && event->type() == QEvent::Timer) {
+        return true;
+    }
+    return QTextEdit::eventFilter(watched, event);
 }
 
 void VimTextEdit::keyPressEvent(QKeyEvent *event) {

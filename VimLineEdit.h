@@ -450,6 +450,7 @@ class VimLineEdit : public QLineEdit {
     void resizeEvent(QResizeEvent *event) override;
     void set_vim_enabled(bool enabled);
     bool get_vim_enabled();
+    bool eventFilter(QObject *watched, QEvent *event) override;
 signals:
     void quitCommand();
     void forceQuitCommand();
@@ -491,6 +492,7 @@ class VimTextEdit : public QTextEdit {
     bool get_line_numbers_visible() const;
     void focusInEvent(QFocusEvent* event) override;
     void focusOutEvent(QFocusEvent* event) override;
+    bool eventFilter(QObject *watched, QEvent *event) override;
     void show_autocomplete_suggestions(const QStringList &suggestions);
     virtual void show_documentation(const QString &word);
     virtual void custom_current_line_painter(int line_number, QString line_text, QPainter *painter, const QRect &rect);
