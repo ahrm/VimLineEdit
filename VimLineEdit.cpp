@@ -3420,6 +3420,7 @@ void QLineEditAdapter::set_cursor_width(int width) {
 }
 void QTextEditAdapter::set_cursor_width(int width) {
     text_edit->setCursorWidth(width);
+    text_edit->viewport()->update();
 }
 
 void QTextEditAdapter::set_extra_selections(const QList<QTextEdit::ExtraSelection> &selections) {
