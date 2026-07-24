@@ -1259,11 +1259,21 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
     case VimLineEditCommand::DeleteCharAndEnterInsertMode:
     case VimLineEditCommand::DeleteChar:
         push_history(current_state);
-        for (int i = 0; i < num_repeats; i++){
-            delete_char(num_repeats == 1);
+        // if we have a text selection, delete it instead of the character under the cursor
+        if (current_mode == VimMode::Visual || current_mode == VimMode::VisualLine || current_mode == VimMode::VisualBlock) {
+            delete_selection();
+            if (cmd == VimLineEditCommand::DeleteCharAndEnterInsertMode) {
+                set_mode(VimMode::Insert);
+            }
+            break;
         }
-        if (cmd == VimLineEditCommand::DeleteCharAndEnterInsertMode) {
-            set_mode(VimMode::Insert);
+        else{
+            for (int i = 0; i < num_repeats; i++){
+                delete_char(num_repeats == 1);
+            }
+            if (cmd == VimLineEditCommand::DeleteCharAndEnterInsertMode) {
+                set_mode(VimMode::Insert);
+            }
         }
         break;
     case VimLineEditCommand::Delete:
@@ -3398,6 +3408,13 @@ void VimEditor::handle_text_command(QString text){
 
 int VimEditor::get_cursor_position() const {
     return adapter->get_cursor_position();
+}
+
+void VimEditor::delete_selection() {
+    int selection_begin, selection_end;
+    QString selected_text = get_current_selection(selection_begin, selection_end);
+    remove_text(selection_begin, selection_end - selection_begin);
+    set_cursor_position(selection_begin);
 }
 
 QLineEditAdapter::QLineEditAdapter(QLineEdit *line_edit) : line_edit(line_edit) {

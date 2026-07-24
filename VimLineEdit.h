@@ -432,6 +432,7 @@ class VimEditor {
     void handle_text_command(QString text);
     QString get_word_under_cursor();
     int get_cursor_position() const;
+    void delete_selection();
     void emit_save();
     void emit_quit();
     void emit_open_file();
