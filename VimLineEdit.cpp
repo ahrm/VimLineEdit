@@ -7,6 +7,7 @@
 #include <QtGui/qtextcursor.h>
 #include <QtWidgets/qlineedit.h>
 #include <QtWidgets/qwidget.h>
+#include <iostream>
 // #include <QFontMetrics>
 #include <QCommonStyle>
 #include <QRegularExpression>
@@ -3402,7 +3403,7 @@ void VimEditor::handle_text_command(QString text){
     }
 
     if (!handled) {
-        qDebug() << "Unknown command: " << text;
+        std::cerr << "Unknown command: " << text.toStdString();
     }
 }
 
