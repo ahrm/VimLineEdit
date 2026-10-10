@@ -4542,10 +4542,11 @@ class EmacsEditor : public QObject {
     std::optional<int> argument;
     bool argument_digits = false;
     bool argument_negative = false;
+    bool argument_complete = false;
 
     void clear_argument() {
         argument.reset();
-        argument_digits = argument_negative = false;
+        argument_digits = argument_negative = argument_complete = false;
     }
     int character_target(int count) const {
         const auto value = text();
@@ -5552,7 +5553,7 @@ class EmacsEditor : public QObject {
         replace(begin, end, "");
         last_action = LastAction::Kill;
     }
-    void yank(bool cycle) {
+    void yank(bool cycle, int count = 1, bool before = false) {
         if (read_only()) return;
         if (!cycle) {
             const auto clipboard = QApplication::clipboard()->text();
@@ -5564,9 +5565,9 @@ class EmacsEditor : public QObject {
         if (kill_ring().empty()) return;
         if (cycle) {
             if (position() != yank_end || text().mid(yank_begin, yank_end - yank_begin) != yanked_text) return;
-            yank_index = (yank_index + 1) % kill_ring().size();
+            yank_index = ((yank_index + count) % int(kill_ring().size()) + kill_ring().size()) % kill_ring().size();
         } else {
-            yank_index = 0;
+            yank_index = ((count - 1) % int(kill_ring().size()) + kill_ring().size()) % kill_ring().size();
             yank_begin = yank_end = position();
         }
         mark = yank_begin;
@@ -5574,6 +5575,7 @@ class EmacsEditor : public QObject {
         yank_end = position();
         yanked_text = text().mid(yank_begin, yank_end - yank_begin);
         last_action = LastAction::Yank;
+        if (before) { mark = yank_end; move_to(yank_begin); }
     }
     void show_search() {
         show_prompt(QString(search->failed ? "Failing " : "") +
@@ -5861,15 +5863,16 @@ class EmacsEditor : public QObject {
         meta_pending = false;
         if (!control_x_pending && !modifiers.command) {
             if (modifiers.control && !meta && key == Qt::Key_U) {
-                argument = argument ? std::min(10000, *argument * 4) : 4;
+                if (argument_digits) argument_complete = true;
+                else argument = argument ? std::max(-10000, std::min(10000, *argument * 4)) : 4;
                 return true;
             }
-            if ((meta || argument) && key == Qt::Key_Minus && !argument_digits) {
+            if ((meta || (argument && !argument_complete)) && key == Qt::Key_Minus && !argument_digits) {
                 argument = -1;
                 argument_negative = true;
                 return true;
             }
-            if ((meta || argument) && key >= Qt::Key_0 && key <= Qt::Key_9) {
+            if ((meta || (argument && !argument_complete)) && key >= Qt::Key_0 && key <= Qt::Key_9) {
                 int magnitude = argument_digits ? std::abs(*argument) : 0;
                 magnitude = std::min(10000, magnitude * 10 + key - Qt::Key_0);
                 argument = argument_negative ? -magnitude : magnitude;
@@ -5883,6 +5886,7 @@ class EmacsEditor : public QObject {
         }
         const bool explicit_argument = argument.has_value();
         const int count = argument.value_or(1);
+        const bool universal_argument = explicit_argument && !argument_digits && !argument_negative;
         clear_argument();
         const LastAction previous_action = last_action;
         last_action = LastAction::Other;
@@ -6041,7 +6045,7 @@ class EmacsEditor : public QObject {
                 deactivate_mark();
                 return true;
             case Qt::Key_Y:
-                if (previous_action == LastAction::Yank) yank(true);
+                if (previous_action == LastAction::Yank) yank(true, count);
                 return true;
             default: break;
             }
@@ -6056,8 +6060,14 @@ class EmacsEditor : public QObject {
                 return true;
             case Qt::Key_T: transpose(0, count); return true;
             case Qt::Key_A:
-                move_to(line_start(value, pos)); return true;
-            case Qt::Key_E: move_to(line_end(value, pos)); return true;
+            case Qt::Key_E: {
+                int target = pos;
+                int lines = count - 1;
+                for (int i = 0; i < std::abs(lines); ++i)
+                    target = lines > 0 ? std::min(int(value.size()), line_end(value, target) + 1) : line_start(value, std::max(0, line_start(value, target) - 1));
+                move_to(key == Qt::Key_A ? line_start(value, target) : line_end(value, target));
+                return true;
+            }
             case Qt::Key_B: move_to(character_target(-count)); return true;
             case Qt::Key_F: move_to(character_target(count)); return true;
             case Qt::Key_D: {
@@ -6103,7 +6113,7 @@ class EmacsEditor : public QObject {
                 if (mark >= 0) kill(std::min(mark, pos), std::max(mark, pos), pos < mark,
                                     previous_action == LastAction::Kill);
                 return true;
-            case Qt::Key_Y: yank(false); return true;
+            case Qt::Key_Y: yank(false, universal_argument ? 1 : count, universal_argument); return true;
             case Qt::Key_S: begin_search(true); return true;
             case Qt::Key_R: begin_search(false); return true;
             case Qt::Key_Question: undo(count, true); return true;
@@ -6117,7 +6127,12 @@ class EmacsEditor : public QObject {
             (!event->text().isEmpty() || key == Qt::Key_Backspace || key == Qt::Key_Delete)) {
             // Fundamental-mode insertion leaves the region's text intact.
             deactivate_mark();
-            if (key == Qt::Key_Backspace) { int target = character_target(-count); replace(std::min(pos, target), std::max(pos, target), ""); return true; }
+            if (key == Qt::Key_Backspace) {
+                int target = character_target(-count);
+                if (explicit_argument) kill(std::min(pos, target), std::max(pos, target), target < pos, previous_action == LastAction::Kill);
+                else replace(std::min(pos, target), std::max(pos, target), "");
+                return true;
+            }
             if (key == Qt::Key_Delete) { int target = character_target(count); replace(std::min(pos, target), std::max(pos, target), ""); return true; }
             if (explicit_argument) {
                 QString inserted = event->text();
