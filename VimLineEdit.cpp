@@ -982,6 +982,45 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
         last_visual_pos = get_cursor_position();
     }
 
+    if ((cmd == VimLineEditCommand::PasteForward || cmd == VimLineEditCommand::PasteBackward) &&
+        (current_mode == VimMode::Visual || current_mode == VimMode::VisualLine || current_mode == VimMode::VisualBlock)) {
+        auto contents = get_last_deleted_text(current_paste_register);
+        if (!contents) return;
+        push_history(current_state);
+        int begin, end;
+        QString replaced = get_current_selection(begin, end);
+        bool linewise = current_mode == VimMode::VisualLine;
+        QString replacement = contents->text.repeated(num_repeats);
+        if (current_mode == VimMode::VisualBlock) {
+            auto bounds = get_visual_block_bounds();
+            for (int line = bounds.max_line; line >= bounds.min_line; --line) {
+                int start = bounds.line_starts[line];
+                int finish = get_line_end_position(start);
+                int left = std::min(start + bounds.min_col, finish);
+                int right = std::min(start + bounds.max_col + 1, finish);
+                insert_text(replacement, left, right);
+            }
+            begin = bounds.line_starts[bounds.min_line] + bounds.min_col;
+        } else {
+            if (linewise) {
+                begin = visual_line_selection_begin;
+                end = visual_line_selection_end;
+                replaced = current_state.text.mid(begin, end - begin);
+                if (replaced.endsWith('\n')) replaced.chop(1);
+                if (end < current_state.text.size()) replacement += "\n";
+            }
+            insert_text(replacement, begin, end);
+        }
+        if (cmd == VimLineEditCommand::PasteForward) set_last_deleted_text(replaced, {}, linewise);
+        action_waiting_for_motion = {};
+        current_paste_register = {};
+        set_mode(VimMode::Normal);
+        adapter->set_extra_selections({});
+        visual_line_selection_begin = visual_line_selection_end = -1;
+        set_cursor_position(linewise ? begin : begin + std::max(0, static_cast<int>(replacement.size()) - 1));
+        return;
+    }
+
     switch (cmd) {
     case VimLineEditCommand::EnterInsertMode:
         insert_repeat_count = num_repeats;
