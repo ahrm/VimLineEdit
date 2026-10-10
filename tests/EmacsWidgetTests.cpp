@@ -1,6 +1,7 @@
 #include <QApplication>
 #include <QKeyEvent>
 #include <QLabel>
+#include <QClipboard>
 #include <QScrollBar>
 #include <iostream>
 #include <optional>
@@ -106,10 +107,30 @@ static void test_scrolling() {
     check(widget.cursorRect().center().y() > 20 && widget.cursorRect().center().y() < 180, "C-l should recenter point");
 }
 
+static void test_shared_kill_ring() {
+    VimLineEdit first;
+    VimTextEdit second;
+    first.set_keybinding_mode(KeybindingMode::Emacs);
+    second.set_keybinding_mode(KeybindingMode::Emacs);
+    first.setText("shared text");
+    control(first, Qt::Key_A);
+    control(first, Qt::Key_K);
+    check(QApplication::clipboard()->text() == "shared text", "Emacs kills should reach the system clipboard");
+    control(second, Qt::Key_Y);
+    check(second.toPlainText() == "shared text", "Emacs widgets should share the kill ring");
+    QApplication::clipboard()->setText("external");
+    control(second, Qt::Key_Y);
+    check(second.toPlainText() == "shared textexternal", "C-y should import external clipboard text");
+    QKeyEvent rotate(QEvent::KeyPress, Qt::Key_Y, Qt::AltModifier);
+    QApplication::sendEvent(&second, &rotate);
+    check(second.toPlainText() == "shared textshared text", "M-y should rotate from external clipboard into the shared ring");
+}
+
 int main(int argc, char **argv) {
     QApplication application(argc, argv);
     test_modes<VimLineEdit>();
     test_modes<VimTextEdit>();
     test_scrolling();
+    test_shared_kill_ring();
     return failures ? 1 : 0;
 }

@@ -4593,7 +4593,14 @@ class EmacsEditor : public QObject {
     std::optional<std::pair<int, int>> pending_edit;
     enum class LastAction { Other, Kill, Yank };
     LastAction last_action = LastAction::Other;
-    std::deque<QString> kill_ring;
+    static std::deque<QString> &kill_ring() {
+        static std::deque<QString> entries;
+        return entries;
+    }
+    static QString &last_clipboard() {
+        static QString contents;
+        return contents;
+    }
     int yank_index = 0;
     int yank_begin = -1, yank_end = -1;
     QString yanked_text;
@@ -5094,31 +5101,45 @@ class EmacsEditor : public QObject {
     }
     void save_kill(const QString &contents, bool append, bool backward) {
         if (contents.isEmpty()) return;
-        if (append && !kill_ring.empty()) {
-            if (backward) kill_ring.front().prepend(contents);
-            else kill_ring.front().append(contents);
+        if (append && !kill_ring().empty()) {
+            if (backward) kill_ring().front().prepend(contents);
+            else kill_ring().front().append(contents);
         } else {
-            kill_ring.push_front(contents);
-            if (kill_ring.size() > 60) kill_ring.pop_back();
+            kill_ring().push_front(contents);
+            if (kill_ring().size() > 60) kill_ring().pop_back();
         }
+    }
+    void publish_kill() {
+        if (kill_ring().empty()) return;
+        last_clipboard() = kill_ring().front();
+        QApplication::clipboard()->setText(last_clipboard());
     }
     void kill(int begin, int end, bool backward, bool append) {
         if (read_only() || begin == end) return;
         save_kill(text().mid(begin, end - begin), append, backward);
+        publish_kill();
         replace(begin, end, "");
         last_action = LastAction::Kill;
     }
     void yank(bool cycle) {
-        if (read_only() || kill_ring.empty()) return;
+        if (read_only()) return;
+        if (!cycle) {
+            const auto clipboard = QApplication::clipboard()->text();
+            if (!clipboard.isEmpty() && clipboard != last_clipboard()) {
+                save_kill(clipboard, false, false);
+                last_clipboard() = clipboard;
+            }
+        }
+        if (kill_ring().empty()) return;
         if (cycle) {
             if (position() != yank_end || text().mid(yank_begin, yank_end - yank_begin) != yanked_text) return;
-            yank_index = (yank_index + 1) % kill_ring.size();
+            yank_index = (yank_index + 1) % kill_ring().size();
         } else {
             yank_index = 0;
             yank_begin = yank_end = position();
         }
         mark = yank_begin;
-        replace(yank_begin, yank_end, kill_ring[yank_index]);
+        replace(yank_begin, yank_end, kill_ring()[yank_index]);
         yank_end = position();
         yanked_text = text().mid(yank_begin, yank_end - yank_begin);
         last_action = LastAction::Yank;
@@ -5218,7 +5239,7 @@ class EmacsEditor : public QObject {
         }
         if (modifiers.control && (key == Qt::Key_W || key == Qt::Key_Y)) {
             search_steps.push_back(*search);
-            QString added = key == Qt::Key_W ? text().mid(search->point, word_target(true, search->point) - search->point) : kill_ring.empty() ? "" : kill_ring.front();
+            QString added = key == Qt::Key_W ? text().mid(search->point, word_target(true, search->point) - search->point) : kill_ring().empty() ? "" : kill_ring().front();
             search->query += search->regexp ? QRegularExpression::escape(added) : added;
             update_search(); return true;
         }
@@ -5509,7 +5530,10 @@ class EmacsEditor : public QObject {
                 return true;
             }
             case Qt::Key_W:
-                if (mark >= 0) save_kill(value.mid(std::min(mark, pos), std::abs(pos - mark)), false, false);
+                if (mark >= 0) {
+                    save_kill(value.mid(std::min(mark, pos), std::abs(pos - mark)), false, false);
+                    publish_kill();
+                }
                 deactivate_mark();
                 return true;
             case Qt::Key_Y:
