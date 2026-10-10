@@ -2918,6 +2918,12 @@ void VimEditor::perform_pending_text_command_with_text(QString text){
 void VimEditor::handle_action_waiting_for_motion(int old_pos, int new_pos, int delete_pos_offset){
     if (action_waiting_for_motion.has_value()) {
         QString current_text = adapter->get_text();
+        if (action_waiting_for_motion->kind == ActionWaitingForMotionKind::Yank) {
+            int begin = std::min(old_pos, new_pos);
+            int end = std::max(old_pos, new_pos) + (new_pos >= old_pos ? delete_pos_offset : 0);
+            set_last_deleted_text(current_text.mid(begin, end - begin), current_paste_register);
+            set_cursor_position(old_pos);
+        }
         if (action_waiting_for_motion.value().kind == ActionWaitingForMotionKind::Delete ||
             action_waiting_for_motion.value().kind == ActionWaitingForMotionKind::Change) {
             // delete from old_pos to new_pos
