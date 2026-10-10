@@ -5533,6 +5533,7 @@ class EmacsEditor : public QObject {
         move_to(begin);
     }
     void delete_blank_lines() {
+        const int original_point = position();
         const auto value = text();
         auto blank = [&](int p) { return value.mid(p, line_end(value, p) - p).trimmed().isEmpty(); };
         int begin = line_start(value, position()), end = begin;
@@ -5543,7 +5544,7 @@ class EmacsEditor : public QObject {
         while (end < value.size() && blank(end)) end = std::min(int(value.size()), line_end(value, end) + 1);
         int first_end = std::min(int(value.size()), line_end(value, begin) + 1);
         replace(begin, end, on_blank && end > first_end ? "\n" : "");
-        move_to(on_blank ? begin : std::min(position(), begin));
+        move_to(on_blank ? begin : original_point);
     }
     void change_case(int key, int count, bool region = false) {
         if (region && mark < 0) return;
