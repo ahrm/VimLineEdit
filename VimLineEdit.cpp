@@ -287,7 +287,9 @@ bool VimEditor::key_press_event(QKeyEvent* event, bool& should_propagate) {
 
             if ((action_waiting_for_motion->kind == ActionWaitingForMotionKind::Indent && event->text() == ">") ||
                 (action_waiting_for_motion->kind == ActionWaitingForMotionKind::Unindent && event->text() == "<") ||
-                (action_waiting_for_motion->kind == ActionWaitingForMotionKind::Reindent && event->text() == "=")) {
+                (action_waiting_for_motion->kind == ActionWaitingForMotionKind::Reindent && event->text() == "=") ||
+                (action_waiting_for_motion->kind == ActionWaitingForMotionKind::Lowercase && event->text() == "u") ||
+                (action_waiting_for_motion->kind == ActionWaitingForMotionKind::Uppercase && event->text() == "U")) {
                 handle_command(VimLineEditCommand::TransformCurrentLine);
                 return false;
             }
@@ -562,6 +564,8 @@ void VimEditor::add_vim_keybindings() {
         KeyBinding{{KeyChord{">", {}}}, VimLineEditCommand::Indent},
         KeyBinding{{KeyChord{"<", {}}}, VimLineEditCommand::Unindent},
         KeyBinding{{KeyChord{"=", {}}}, VimLineEditCommand::Reindent},
+        KeyBinding{{KeyChord{"g", {}}, KeyChord{"u", {}}}, VimLineEditCommand::Lowercase},
+        KeyBinding{{KeyChord{"g", {}}, KeyChord{"U", {}}}, VimLineEditCommand::Uppercase},
         KeyBinding{{KeyChord{"J", {}}}, VimLineEditCommand::JoinLines},
         KeyBinding{{KeyChord{"g", {}}, KeyChord{"J", {}}}, VimLineEditCommand::JoinLinesWithoutSpace},
         KeyBinding{{KeyChord{"D", {}}}, VimLineEditCommand::DeleteToEndOfLine},
@@ -917,6 +921,8 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
         case VimLineEditCommand::Indent:
         case VimLineEditCommand::Unindent:
         case VimLineEditCommand::Reindent:
+        case VimLineEditCommand::Lowercase:
+        case VimLineEditCommand::Uppercase:
         case VimLineEditCommand::TransformCurrentLine:
         case VimLineEditCommand::JoinLines:
         case VimLineEditCommand::JoinLinesWithoutSpace:
@@ -1486,6 +1492,21 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
             new_pos = next;
         }
         break;
+    case VimLineEditCommand::Lowercase:
+    case VimLineEditCommand::Uppercase: {
+        push_history(current_state);
+        pending_operator_count = num_repeats;
+        action_waiting_for_motion = {cmd == VimLineEditCommand::Lowercase ?
+            ActionWaitingForMotionKind::Lowercase : ActionWaitingForMotionKind::Uppercase};
+        if (current_mode == VimMode::Visual || current_mode == VimMode::VisualLine) {
+            handle_action_waiting_for_motion(std::min(old_pos, visual_mode_anchor),
+                std::max(old_pos, visual_mode_anchor), 1, current_mode == VimMode::VisualLine);
+            set_mode(VimMode::Normal);
+            adapter->set_extra_selections({});
+            pending_operator_count = 1;
+        }
+        break;
+    }
     case VimLineEditCommand::Indent:
     case VimLineEditCommand::Unindent:
     case VimLineEditCommand::Reindent: {
@@ -2357,6 +2378,11 @@ bool VimEditor::handle_surrounding_motion_action() {
             }
             // Only proceed if we found a word
             if (start < end) {
+                if (action_waiting_for_motion->kind == ActionWaitingForMotionKind::Lowercase ||
+                    action_waiting_for_motion->kind == ActionWaitingForMotionKind::Uppercase) {
+                    handle_action_waiting_for_motion(start, end, 0);
+                    return true;
+                }
                 if (action_waiting_for_motion->kind == ActionWaitingForMotionKind::Delete ||
                     action_waiting_for_motion->kind == ActionWaitingForMotionKind::Change) {
                     // Store deleted text for paste operation
@@ -2465,6 +2491,11 @@ bool VimEditor::handle_surrounding_motion_action() {
 
             // If we found both begin and end symbols, perform the action
             if (found_begin && found_end) {
+                if (action_waiting_for_motion->kind == ActionWaitingForMotionKind::Lowercase ||
+                    action_waiting_for_motion->kind == ActionWaitingForMotionKind::Uppercase) {
+                    handle_action_waiting_for_motion(start, end, 0);
+                    return true;
+                }
                 if (action_waiting_for_motion->kind == ActionWaitingForMotionKind::Delete ||
                     action_waiting_for_motion->kind == ActionWaitingForMotionKind::Change) {
                     // Store deleted text for paste operation
@@ -3064,6 +3095,19 @@ void VimEditor::handle_action_waiting_for_motion(int old_pos, int new_pos, int d
     if (action_waiting_for_motion.has_value()) {
         QString current_text = adapter->get_text();
         auto kind = action_waiting_for_motion->kind;
+        if (kind == ActionWaitingForMotionKind::Lowercase || kind == ActionWaitingForMotionKind::Uppercase) {
+            int begin = std::min(old_pos, new_pos);
+            int end = std::max(old_pos, new_pos) + (new_pos >= old_pos ? delete_pos_offset : 0);
+            if (linewise) {
+                begin = get_line_start_position(begin);
+                end = get_line_end_position(std::max(old_pos, new_pos));
+            }
+            QString text = current_text.mid(begin, end - begin);
+            insert_text(kind == ActionWaitingForMotionKind::Lowercase ? text.toLower() : text.toUpper(), begin, end);
+            set_cursor_position(begin);
+            action_waiting_for_motion = {};
+            return;
+        }
         if (kind == ActionWaitingForMotionKind::Indent || kind == ActionWaitingForMotionKind::Unindent ||
             kind == ActionWaitingForMotionKind::Reindent) {
             int begin = get_line_start_position(std::min(old_pos, new_pos));
