@@ -371,7 +371,7 @@ class VimEditor {
     std::optional<VimLineEditCommand> handle_key_event(QString event_text, int key,
                                                        Qt::KeyboardModifiers modifiers);
     void handle_command(VimLineEditCommand cmd, std::optional<char> symbol = {});
-    int calculate_find(FindState find_state, bool reverse = false) const;
+    int calculate_find(FindState find_state, bool reverse = false, int count = 1, bool repeat = false) const;
     void set_mode(VimMode mode);
     VimMode get_mode() const { return current_mode; }
     void goto_line(int line_number);

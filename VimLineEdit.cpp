@@ -1498,7 +1498,7 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
     }
     case VimLineEditCommand::FindForward: {
         last_find_state = FindState{FindDirection::Forward, symbol};
-        new_pos = calculate_find(last_find_state.value());
+        new_pos = calculate_find(last_find_state.value(), false, num_repeats);
         delete_pos_offset = 1;
         break;
     }
@@ -1519,29 +1519,28 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
     }
     case VimLineEditCommand::FindBackward: {
         last_find_state = FindState{FindDirection::Backward, symbol};
-        new_pos = calculate_find(last_find_state.value());
+        new_pos = calculate_find(last_find_state.value(), false, num_repeats);
         break;
     }
     case VimLineEditCommand::FindForwardTo: {
         last_find_state = FindState{FindDirection::ForwardTo, symbol};
-        new_pos = calculate_find(last_find_state.value());
+        new_pos = calculate_find(last_find_state.value(), false, num_repeats);
         delete_pos_offset = 1;
         break;
     }
     case VimLineEditCommand::FindBackwardTo: {
         last_find_state = FindState{FindDirection::BackwardTo, symbol};
-        new_pos = calculate_find(last_find_state.value());
+        new_pos = calculate_find(last_find_state.value(), false, num_repeats);
         break;
     }
-    case VimLineEditCommand::RepeatFind: {
-        if (last_find_state.has_value()) {
-            new_pos = calculate_find(last_find_state.value());
-        }
-        break;
-    }
+    case VimLineEditCommand::RepeatFind:
     case VimLineEditCommand::RepeatFindReverse: {
-        if (last_find_state.has_value()) {
-            new_pos = calculate_find(last_find_state.value(), true);
+        if (last_find_state) {
+            bool reverse = cmd == VimLineEditCommand::RepeatFindReverse;
+            new_pos = calculate_find(*last_find_state, reverse, num_repeats, true);
+            bool forward = last_find_state->direction == FindDirection::Forward ||
+                           last_find_state->direction == FindDirection::ForwardTo;
+            delete_pos_offset = (forward != reverse) ? 1 : 0;
         }
         break;
     }
@@ -1927,6 +1926,12 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
 
     }
 
+    if (new_pos == -1 && (cmd == VimLineEditCommand::FindForward || cmd == VimLineEditCommand::FindBackward ||
+        cmd == VimLineEditCommand::FindForwardTo || cmd == VimLineEditCommand::FindBackwardTo ||
+        cmd == VimLineEditCommand::RepeatFind || cmd == VimLineEditCommand::RepeatFindReverse)) {
+        action_waiting_for_motion = {};
+    }
+
     QString updated_text = adapter->get_text();
     if (cmd != VimLineEditCommand::EnterNormalMode && current_mode == VimMode::Normal && !action_waiting_for_motion && updated_text.size() > 0 && new_pos == updated_text.size()) {
         if (new_pos > 0 && updated_text[new_pos - 1] != '\n') {
@@ -1965,47 +1970,24 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
 }
 
 
-int VimEditor::calculate_find(FindState find_state, bool reverse) const {
-
-    int location = -1;
-    FindDirection direction =
-        reverse ? (find_state.direction == FindDirection::Forward ? FindDirection::Backward
-                                                                  : FindDirection::Forward)
-                : find_state.direction;
+int VimEditor::calculate_find(FindState state, bool reverse, int count, bool repeat) const {
     QString text = adapter->get_text();
-    switch (direction) {
-    case FindDirection::Forward:
-        location = text.indexOf(QChar(find_state.character.value_or(' ')),
-                                         get_cursor_position() + 2);
-        break;
-    case FindDirection::Backward:
-        if (get_cursor_position() == 0)
-            return get_cursor_position();
-        location = text.lastIndexOf(QChar(find_state.character.value_or(' ')),
-                                             get_cursor_position() - 1);
-        break;
-    case FindDirection::ForwardTo:
-        location = text.indexOf(QChar(find_state.character.value_or(' ')),
-                                         get_cursor_position() + 2);
-        if (location != -1) {
-            location--;
-        }
-        break;
-    case FindDirection::BackwardTo:
-        if (get_cursor_position() == 0)
-            return get_cursor_position();
-        location = text.lastIndexOf(QChar(find_state.character.value_or(' ')),
-                                             get_cursor_position() - 1);
-        if (location != -1) {
-            location++;
-        }
-        break;
+    int cursor = get_cursor_position();
+    bool forward = state.direction == FindDirection::Forward || state.direction == FindDirection::ForwardTo;
+    bool till = state.direction == FindDirection::ForwardTo || state.direction == FindDirection::BackwardTo;
+    if (reverse) forward = !forward;
+    int step = forward ? 1 : -1;
+    int location = cursor;
+    for (int occurrence = 0; occurrence < count; ++occurrence) {
+        int scan = location + step;
+        if (repeat && till && occurrence == 0 && scan >= 0 && scan < text.size() &&
+            text[scan] == QChar(state.character.value_or(' '))) scan += step;
+        while (scan >= 0 && scan < text.size() && text[scan] != '\n' &&
+               text[scan] != QChar(state.character.value_or(' '))) scan += step;
+        if (scan < 0 || scan >= text.size() || text[scan] == '\n') return -1;
+        location = scan;
     }
-
-    if (location != -1) {
-        return location;
-    }
-    return get_cursor_position();
+    return till ? location - step : location;
 }
 
 int VimEditor::calculate_move_word_forward(bool with_symbols, int pos) const {
