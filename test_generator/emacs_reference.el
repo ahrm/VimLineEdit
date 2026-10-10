@@ -26,6 +26,9 @@
          (keys (mapcar #'reference-event events)))
     (switch-to-buffer (generate-new-buffer " *editing-reference*"))
     (fundamental-mode)
+    ;; Exercise editing commands without Emacs's first-use confirmation dialogs.
+    (put 'upcase-region 'disabled nil)
+    (put 'downcase-region 'disabled nil)
     (transient-mark-mode 1)
     (electric-indent-mode -1)
     (setq-local indent-tabs-mode nil)
