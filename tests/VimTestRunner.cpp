@@ -10,10 +10,25 @@
 
 // Function to simulate keystrokes on VimLineEdit
 void simulate_keystrokes(QVimEditor::VimTextEdit *lineEdit, const QByteArray &keystrokes) {
+    // Vim key logs also contain three-byte special-key codes. Preserve their
+    // existing replay behavior while decoding ordinary input as UTF-8.
+    QByteArray utf8;
+    for (int i = 0; i < keystrokes.size(); ++i) {
+        if (static_cast<unsigned char>(keystrokes[i]) == 0x80 && i + 2 < keystrokes.size()) {
+            utf8 += '\b';
+            i += 2;
+        } else {
+            unsigned char byte = static_cast<unsigned char>(keystrokes[i]);
+            int length = byte >= 0xf0 ? 4 : byte >= 0xe0 ? 3 : byte >= 0xc0 ? 2 : 1;
+            utf8 += keystrokes.mid(i, length);
+            i += length - 1;
+        }
+    }
+    QString input = QString::fromUtf8(utf8);
     int index = 0;
     int BACKSPACE_KEY = 0xfffd;
-    while (index < keystrokes.length()) {
-        QChar c = keystrokes.at(index);
+    while (index < input.length()) {
+        QChar c = input.at(index);
         // qDebug() << "Processing keystroke at index" << index << ":" << c;
         Qt::Key key = Qt::Key_unknown;
         Qt::KeyboardModifiers modifiers = Qt::NoModifier;

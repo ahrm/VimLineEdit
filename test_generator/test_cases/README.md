@@ -95,12 +95,9 @@ use interior lines where necessary so the runner's `.trimmed()` comparison
 cannot hide the regression. These are intentionally failing tests; no editor
 implementation changes accompany them.
 
-**Unicode runner limitation:** Cases 137–138 contain UTF-8 keystrokes and have
-Vim-generated UTF-8 expectations. The current runner iterates bytes rather
-than decoding Unicode characters, so their failures also expose the runner's
-input-decoding limitation. They cannot isolate the editor's `toLatin1()` symbol
-conversion bug until Unicode key replay is supported. Neither the runner nor
-the editor is changed here.
+Cases 137–138 contain UTF-8 keystrokes and Vim-generated UTF-8 expectations.
+The runner now decodes UTF-8 while preserving existing Vim special-key log
+codes, so these cases exercise the editor's Unicode find/replace handling.
 
 | Case | Behavior | Sequence after initial text and `gg0` |
 | --- | --- | --- |

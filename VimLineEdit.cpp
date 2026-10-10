@@ -364,7 +364,7 @@ bool VimEditor::process_key_press_event(QKeyEvent* event, bool& should_propagate
             pending_symbol_command = {};
 
             if (event->text().size() > 0) {
-                handle_command(command, static_cast<char>(event->text().at(0).toLatin1()));
+                handle_command(command, event->text().at(0));
             }
 
             return false;
@@ -1002,7 +1002,7 @@ bool VimEditor::requires_symbol(VimLineEditCommand cmd) {
     }
 }
 
-void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbol) {
+void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<QChar> symbol) {
 
     // Vim mutations bypass QTextEdit's native read-only handling.
     auto* text_edit = qobject_cast<QTextEdit*>(editor_widget);
@@ -1262,15 +1262,15 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
         }
         else{
             Macro new_macro;
-            new_macro.name = symbol.value();
+            new_macro.name = symbol->unicode();
             current_macro = std::move(new_macro);
         }
         break;
     case VimLineEditCommand::SelectPasteRegister:
-        current_paste_register = symbol.value();
+        current_paste_register = symbol->toLatin1();
         break;
     case VimLineEditCommand::RepeatMacro: {
-        int macro_symbol = symbol.value();
+        int macro_symbol = symbol->unicode();
 
         if (symbol.value() == '@'){
             macro_symbol = last_macro_symbol;
@@ -1796,14 +1796,14 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
     }
     case VimLineEditCommand::SetMark: {
         Mark mark;
-        mark.name = symbol.value();
+        mark.name = symbol->unicode();
         mark.position = get_cursor_position();
-        marks[symbol.value()] = mark;
+        marks[symbol->unicode()] = mark;
         break;
     }
     case VimLineEditCommand::GotoMark: {
-        if (marks.find(symbol.value()) != marks.end()) {
-            Mark mark = marks[symbol.value()];
+        if (marks.find(symbol->unicode()) != marks.end()) {
+            Mark mark = marks[symbol->unicode()];
             // move the cursor to the mark location
             new_pos = mark.position;
         }
