@@ -155,6 +155,7 @@ enum class SurroundingKind {
     DoubleQuotes,
     Backticks,
     Word,
+    WORD,
 };
 
 struct ActionWaitingForMotion {
@@ -422,6 +423,7 @@ class VimEditor {
 
     void delete_char(bool is_single);
     bool handle_surrounding_motion_action();
+    void apply_text_object(int begin, int end, bool linewise = false);
     void add_jump(int pos);
 
     void push_history(HistoryState state);

@@ -440,7 +440,7 @@ bool VimEditor::process_key_press_event(QKeyEvent* event, bool& should_propagate
                     action_waiting_for_motion->surrounding_kind = SurroundingKind::DoubleQuotes;
                     break;
                 case Qt::Key_W:
-                    action_waiting_for_motion->surrounding_kind = SurroundingKind::Word;
+                    action_waiting_for_motion->surrounding_kind = event->text() == "W" ? SurroundingKind::WORD : SurroundingKind::Word;
                     break;
                 default:
                     // If the key is not recognized, we reset the action waiting for motion
@@ -2538,44 +2538,59 @@ QString VimEditor::get_word_under_cursor_bounds(int &start, int &end){
     return current_text.mid(start, end - start);
 }
 
+void VimEditor::apply_text_object(int begin, int end, bool linewise) {
+    if (action_waiting_for_motion->kind == ActionWaitingForMotionKind::Visual) {
+        visual_mode_anchor = begin;
+        set_cursor_position(std::max(begin, end - 1));
+        set_visual_selection(begin, end - begin);
+        action_waiting_for_motion = {};
+    } else {
+        handle_action_waiting_for_motion(begin, linewise ? std::max(begin, end - 1) : end, 0, linewise);
+    }
+    current_command_repeat_number.clear();
+    pending_operator_count = 1;
+    current_paste_register = {};
+}
+
 bool VimEditor::handle_surrounding_motion_action() {
     if (action_waiting_for_motion.has_value()) {
-        if (action_waiting_for_motion->surrounding_kind == SurroundingKind::Word) {
-
-            int start, end;
-            QString text_under_cursor = get_word_under_cursor_bounds(start, end);
-            if (text_under_cursor.size() == 0){
+        if (action_waiting_for_motion->surrounding_kind == SurroundingKind::Word ||
+            action_waiting_for_motion->surrounding_kind == SurroundingKind::WORD) {
+            QString text = adapter->get_text();
+            int start = get_cursor_position();
+            if (start >= text.size()) {
+                action_waiting_for_motion = {};
                 return true;
             }
-            // Only proceed if we found a word
-            if (start < end) {
-                if (action_waiting_for_motion->kind == ActionWaitingForMotionKind::Lowercase ||
-                    action_waiting_for_motion->kind == ActionWaitingForMotionKind::Uppercase) {
-                    handle_action_waiting_for_motion(start, end, 0);
-                    return true;
+            bool big_word = action_waiting_for_motion->surrounding_kind == SurroundingKind::WORD;
+            bool around = action_waiting_for_motion->surrounding_scope == SurroundingScope::Around;
+            auto category = [&](int pos) {
+                QChar ch = text[pos];
+                return ch.isSpace() ? 0 : (big_word || ch.isLetterOrNumber() || ch == '_' ? 1 : 2);
+            };
+            int type = category(start);
+            while (start > 0 && text[start - 1] != '\n' && category(start - 1) == type) --start;
+            int end = start;
+            int count = std::max(1, current_command_repeat_number.toInt()) * pending_operator_count;
+            for (int i = 0; i < count && end < text.size(); ++i) {
+                type = category(end);
+                do { ++end; } while (end < text.size() && category(end) == type);
+                if (around && type == 0 && end < text.size()) {
+                    type = category(end);
+                    do { ++end; } while (end < text.size() && category(end) == type);
                 }
-                if (action_waiting_for_motion->kind == ActionWaitingForMotionKind::Delete ||
-                    action_waiting_for_motion->kind == ActionWaitingForMotionKind::Change) {
-                    // Store deleted text for paste operation
-                    set_last_deleted_text(text_under_cursor, current_paste_register);
-                    // Delete only the word characters
-                    remove_text(start, end - start);
-                    set_cursor_position(start);
-
-                    if (action_waiting_for_motion->kind == ActionWaitingForMotionKind::Change) {
-                        set_mode(VimMode::Insert);
-                    }
-                }
-                else if (action_waiting_for_motion->kind == ActionWaitingForMotionKind::Yank) {
-                    set_last_deleted_text(text_under_cursor, current_paste_register);
-                }
-                else if (action_waiting_for_motion->kind == ActionWaitingForMotionKind::Visual) {
-                    visual_mode_anchor = start;
-                    set_cursor_position(end - 1);
-                    set_visual_selection(start, end - start);
+                if (around && i + 1 < count) {
+                    while (end < text.size() && text[end].isSpace()) ++end;
                 }
             }
-            action_waiting_for_motion = {};
+            if (around && category(get_cursor_position()) != 0) {
+                int before_spaces = end;
+                while (end < text.size() && text[end] != '\n' && text[end].isSpace()) ++end;
+                if (end == before_spaces) {
+                    while (start > 0 && text[start - 1] != '\n' && text[start - 1].isSpace()) --start;
+                }
+            }
+            apply_text_object(start, end);
             return true;
         }
         else {
@@ -2666,32 +2681,9 @@ bool VimEditor::handle_surrounding_motion_action() {
                 }
             }
 
-            // If we found both begin and end symbols, perform the action
             if (found_begin && found_end) {
-                if (action_waiting_for_motion->kind == ActionWaitingForMotionKind::Lowercase ||
-                    action_waiting_for_motion->kind == ActionWaitingForMotionKind::Uppercase) {
-                    handle_action_waiting_for_motion(start, end, 0);
-                    return true;
-                }
-                if (action_waiting_for_motion->kind == ActionWaitingForMotionKind::Delete ||
-                    action_waiting_for_motion->kind == ActionWaitingForMotionKind::Change) {
-                    // Store deleted text for paste operation
-                    set_last_deleted_text(current_text.mid(start, end - start), current_paste_register);
-                    // Delete the surrounding symbols
-                    remove_text(start, end - start);
-                    set_cursor_position(start);
-                    if (action_waiting_for_motion->kind == ActionWaitingForMotionKind::Change) {
-                        set_mode(VimMode::Insert);
-                    }
-                }
-                else if (action_waiting_for_motion->kind == ActionWaitingForMotionKind::Yank) {
-                    set_last_deleted_text(current_text.mid(start, end - start), current_paste_register);
-                }
-                else if (action_waiting_for_motion->kind == ActionWaitingForMotionKind::Visual) {
-                    visual_mode_anchor = start;
-                    set_cursor_position(end - 1);
-                    set_visual_selection(start, end - start);
-                }
+                apply_text_object(start, end);
+                return true;
             }
             action_waiting_for_motion = {};
             return true;
