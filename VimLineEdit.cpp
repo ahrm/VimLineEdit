@@ -439,6 +439,9 @@ bool VimEditor::process_key_press_event(QKeyEvent* event, bool& should_propagate
                 case Qt::Key_QuoteDbl:
                     action_waiting_for_motion->surrounding_kind = SurroundingKind::DoubleQuotes;
                     break;
+                case Qt::Key_S:
+                    action_waiting_for_motion->surrounding_kind = SurroundingKind::Sentence;
+                    break;
                 case Qt::Key_P:
                     action_waiting_for_motion->surrounding_kind = SurroundingKind::Paragraph;
                     break;
@@ -2634,6 +2637,40 @@ void VimEditor::apply_text_object(int begin, int end, bool linewise) {
 
 bool VimEditor::handle_surrounding_motion_action() {
     if (action_waiting_for_motion.has_value()) {
+        if (action_waiting_for_motion->surrounding_kind == SurroundingKind::Sentence) {
+            QString text = adapter->get_text();
+            static const QRegularExpression ending(R"vim([.!?][)"'\]]*(?=\s|$)|\n(?=\n))vim");
+            std::vector<std::pair<int, int>> parts;
+            for (int begin = 0; begin < text.size();) {
+                int end = begin;
+                if (text[begin].isSpace()) {
+                    while (end < text.size() && text[end].isSpace()) ++end;
+                } else {
+                    auto match = ending.match(text, begin);
+                    end = match.hasMatch() ? match.capturedEnd() : text.size();
+                    while (end > begin && text[end - 1].isSpace()) --end;
+                }
+                parts.emplace_back(begin, end);
+                begin = end;
+            }
+            if (parts.empty()) { action_waiting_for_motion = {}; return true; }
+            int first = 0;
+            while (first + 1 < static_cast<int>(parts.size()) && parts[first].second <= get_cursor_position()) ++first;
+            int last = first;
+            bool around = action_waiting_for_motion->surrounding_scope == SurroundingScope::Around;
+            int count = std::min<qint64>(parts.size(),
+                static_cast<qint64>(std::max(1, current_command_repeat_number.toInt())) * pending_operator_count);
+            for (int i = 0; i < count && last < static_cast<int>(parts.size()); ++i) {
+                bool whitespace = text[parts[last].first].isSpace();
+                ++last;
+                if (around && last < static_cast<int>(parts.size()) &&
+                    text[parts[last].first].isSpace() != whitespace) ++last;
+            }
+            if (around && last == static_cast<int>(parts.size()) && !text[parts[last - 1].first].isSpace() &&
+                first > 0 && text[parts[first - 1].first].isSpace()) --first;
+            apply_text_object(parts[first].first, parts[last - 1].second);
+            return true;
+        }
         if (action_waiting_for_motion->surrounding_kind == SurroundingKind::Paragraph) {
             QString text = adapter->get_text();
             auto starts = get_line_starts(text);

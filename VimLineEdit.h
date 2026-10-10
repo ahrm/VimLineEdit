@@ -161,6 +161,7 @@ enum class SurroundingKind {
     Word,
     WORD,
     Paragraph,
+    Sentence,
 };
 
 struct ActionWaitingForMotion {
