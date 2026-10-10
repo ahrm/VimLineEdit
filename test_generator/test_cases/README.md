@@ -78,3 +78,72 @@ modifier convention as the other existing control-key tests.
 | 115 | Dot repeats an insert session at a new position |
 | 116 | Undo does not replace the last change for dot |
 | 117 | Redo does not replace the last change for dot |
+
+## Additional compatibility regressions (118–160)
+
+These 43 cases reproduce the follow-up review findings. Their expected output
+was generated from the complete keystroke files using a clean Vim instance
+(`-Nu NONE -N -n -i NONE -X --not-a-term`) and the `feedkeys(..., "xt")`
+method above. Do not use Ex mode (`-e` / `-es`) for this replay: Escape in a
+search command line behaves differently there, affecting case 119.
+
+Every case starts in an empty normal-mode buffer, inserts its initial text,
+returns to `gg0`, and executes the sequence in the table. An additional
+`<Esc>:wq<CR>` terminates each fixture, cancelling any pending command before
+saving. Cases involving significant line boundaries or surrounding whitespace
+use interior lines where necessary so the runner's `.trimmed()` comparison
+cannot hide the regression. These are intentionally failing tests; no editor
+implementation changes accompany them.
+
+**Unicode runner limitation:** Cases 137–138 contain UTF-8 keystrokes and have
+Vim-generated UTF-8 expectations. The current runner iterates bytes rather
+than decoding Unicode characters, so their failures also expose the runner's
+input-decoding limitation. They cannot isolate the editor's `toLatin1()` symbol
+conversion bug until Unicode key replay is supported. Neither the runner nor
+the editor is changed here.
+
+| Case | Behavior | Sequence after initial text and `gg0` |
+| --- | --- | --- |
+| 118 | Dot records edits after a completed search | `/abc<CR>x.` |
+| 119 | Dot records edits after a cancelled search | `/b<Esc>x.` |
+| 120 | Dot records edits after an Ex command | `:s/abc/ABC/<CR>x.` |
+| 121 | Dot repeats an operator with a search motion | `d/c<CR>.` |
+| 122 | Counted l stops at the end of its line | `4lx` |
+| 123 | Counted h stops at the beginning of its line | `jl4hx` |
+| 124 | dl deletes the last character before a newline | `$dl` |
+| 125 | dw at the end of a line preserves the newline | `jdw` |
+| 126 | Visual-line change preserves the following line | `VcX<Esc>` |
+| 127 | Visual r replaces every selected character | `vlrX` |
+| 128 | Visual u lowercases the selection | `veu` |
+| 129 | Block yank and put preserve rectangular register type | `<C-v>jyp` |
+| 130 | Inner WORD includes punctuation | `diW` |
+| 131 | Inner word selects a punctuation run | `llldiw` |
+| 132 | Inner word selects whitespace | `llldiw` |
+| 133 | Counted inner word includes the following whitespace object | `jd2iw` |
+| 134 | Around final word includes preceding whitespace | `jwdaw` |
+| 135 | Inner quote works on the opening quote | `f"di"` |
+| 136 | Inner quote finds a quoted string ahead on the line | `di"` |
+| 137 | Find accepts a non-Latin character | `fبx` |
+| 138 | Replace accepts a non-Latin character | `rب` |
+| 139 | Counted dollar moves to the following line end | `2$x` |
+| 140 | Counted D deletes through the following line | `j2D` |
+| 141 | Counted n skips the requested number of matches | `/a<CR>2nx` |
+| 142 | Counted o repeats inserted lines | `2oX<Esc>` |
+| 143 | Dot count replaces a count after an operator | `d2w2.` |
+| 144 | Register 1 stores the most recent line deletion | `dd"1p` |
+| 145 | Numbered registers rotate older line deletions | `dddd"2p` |
+| 146 | Small-delete register stores a character deletion | `x"-p` |
+| 147 | Uppercase register appends to its lowercase register | `"ayiww"Ayiw"ap` |
+| 148 | X deletes the preceding character | `lX` |
+| 149 | S changes the current line | `SX<Esc>` |
+| 150 | Y yanks the current line | `Yp` |
+| 151 | ge moves to the preceding word end | `wgex` |
+| 152 | gE moves to the preceding WORD end | `WgEx` |
+| 153 | Apostrophe mark jump moves to the marked line | `jmaj'ax` |
+| 154 | Inner paragraph selects the current paragraph | `dip` |
+| 155 | Around paragraph includes the following blank line | `jjdap` |
+| 156 | Inner sentence selects the current sentence | `dis` |
+| 157 | Around sentence includes following whitespace | `das` |
+| 158 | Insert Ctrl-r inserts a named register | `"ayiwA<C-r>a<Esc>` |
+| 159 | Insert Ctrl-o executes one normal command then resumes insertion | `A<C-o>bX<Esc>` |
+| 160 | Visual substitution applies to all selected lines | `Vj:s/one/two/<CR>` |
