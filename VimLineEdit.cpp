@@ -1491,25 +1491,16 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
         action_waiting_for_motion = {ActionWaitingForMotionKind::Visual, SurroundingScope::None, SurroundingKind::None};
         break;
     }
-    case VimLineEditCommand::MoveLeft: {
-        int old_pos = get_cursor_position();
-        new_pos = old_pos - num_repeats;
-        if (new_pos >= 0 && current_state.text[new_pos] == '\n') {
-            new_pos = old_pos;
-        }
+    case VimLineEditCommand::MoveLeft:
+        new_pos = std::max(get_line_start_position(old_pos), old_pos - num_repeats);
         break;
-    }
     case VimLineEditCommand::MoveRight: {
-        int old_pos = get_cursor_position();
-        if ((get_cursor_position() + num_repeats - 1) < current_state.text.length()) {
-            new_pos = get_cursor_position() + num_repeats;
+        int end = get_line_end_position(old_pos);
+        // An exclusive operator motion may reach just past the final character.
+        if (!action_waiting_for_motion || action_waiting_for_motion->kind == ActionWaitingForMotionKind::Visual) {
+            end = std::max(get_line_start_position(old_pos), end - 1);
         }
-        else {
-            new_pos = current_state.text.length();
-        }
-        if (new_pos < current_state.text.length() && current_state.text[new_pos] == '\n') {
-            new_pos = old_pos;
-        }
+        new_pos = old_pos + std::min(num_repeats, std::max(0, end - old_pos));
         break;
     }
     case VimLineEditCommand::MoveUp:
