@@ -2629,6 +2629,33 @@ bool VimEditor::handle_surrounding_motion_action() {
 
             int cursor_pos = get_cursor_position();
             QString current_text = adapter->get_text();
+            if (begin_symbol == end_symbol) {
+                int opening = -1;
+                int line_start = get_line_start_position(cursor_pos);
+                int line_end = get_line_end_position(cursor_pos);
+                for (int i = line_start; i < line_end; ++i) {
+                    if (current_text[i] == '\\') { ++i; continue; }
+                    if (current_text[i] != begin_symbol) continue;
+                    if (opening == -1) { opening = i; continue; }
+                    if (i >= cursor_pos) {
+                        int begin = opening, end = i + 1;
+                        if (action_waiting_for_motion->surrounding_scope == SurroundingScope::Inside) {
+                            ++begin;
+                            --end;
+                        } else {
+                            while (end < line_end && current_text[end].isSpace()) ++end;
+                            if (end == i + 1) {
+                                while (begin > line_start && current_text[begin - 1].isSpace()) --begin;
+                            }
+                        }
+                        apply_text_object(begin, end);
+                        return true;
+                    }
+                    opening = -1;
+                }
+                action_waiting_for_motion = {};
+                return true;
+            }
             int start = cursor_pos;
             int end = cursor_pos;
             bool found_begin = false;
