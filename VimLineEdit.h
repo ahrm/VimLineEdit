@@ -46,6 +46,7 @@ enum class VimLineEditCommand {
     MoveWordBackwardWithSymbols,
     DeleteChar,
     ReplaceChar,
+    EnterReplaceMode,
     FindForward,
     FindBackward,
     FindForwardTo,
@@ -334,6 +335,8 @@ class VimEditor {
     QString current_command_repeat_number = "";
     int pending_operator_count = 1;
     int insert_repeat_count = 1;
+    bool replacing = false;
+    std::vector<HistoryState> replace_steps;
 
     std::unordered_map<int, Mark> marks;
     std::unordered_map<int, Macro> macros;

@@ -400,6 +400,28 @@ bool VimEditor::key_press_event(QKeyEvent* event, bool& should_propagate) {
         }
     }
 
+    if (current_mode == VimMode::Insert && replacing) {
+        int cursor = get_cursor_position();
+        if (event->key() == Qt::Key_Backspace && !replace_steps.empty() &&
+            cursor == replace_steps.back().cursor_position + 1) {
+            auto state = replace_steps.back();
+            replace_steps.pop_back();
+            adapter->set_text(state.text);
+            set_cursor_position(state.cursor_position);
+            marks = state.marks;
+            if (!current_insert_mode_text.isEmpty()) current_insert_mode_text.chop(1);
+            return false;
+        }
+        if (!event->text().isEmpty() && event->text().at(0).isPrint() &&
+            !(event->modifiers() & (Qt::ControlModifier | Qt::MetaModifier))) {
+            replace_steps.push_back({adapter->get_text(), cursor, marks});
+            insert_text(event->text(), cursor, std::min(cursor + static_cast<int>(event->text().size()), get_line_end_position(cursor)));
+            set_cursor_position(cursor + event->text().size());
+            current_insert_mode_text += event->text();
+            return false;
+        }
+    }
+
     if (current_mode == VimMode::Insert){
         current_insert_mode_text += event->text();
         int text_size = event->text().size();
@@ -529,6 +551,7 @@ void VimEditor::add_vim_keybindings() {
         KeyBinding{{KeyChord{"T", {}}}, VimLineEditCommand::FindBackwardTo},
         KeyBinding{{KeyChord{"x", {}}}, VimLineEditCommand::DeleteChar},
         KeyBinding{{KeyChord{"r", {}}}, VimLineEditCommand::ReplaceChar},
+        KeyBinding{{KeyChord{"R", {}}}, VimLineEditCommand::EnterReplaceMode},
         KeyBinding{{KeyChord{"D", {}}}, VimLineEditCommand::DeleteToEndOfLine},
         KeyBinding{{KeyChord{"C", {}}}, VimLineEditCommand::ChangeToEndOfLine},
         KeyBinding{{KeyChord{"d", {}}}, VimLineEditCommand::Delete},
@@ -879,6 +902,7 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
         case VimLineEditCommand::EnterInsertModeEnd:
         case VimLineEditCommand::EnterInsertModeBeginLine:
         case VimLineEditCommand::EnterInsertModeEndLine:
+        case VimLineEditCommand::EnterReplaceMode:
         case VimLineEditCommand::ReplaceChar:
         case VimLineEditCommand::DeleteChar:
         case VimLineEditCommand::Delete:
@@ -1443,6 +1467,12 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
             if (next == new_pos) break;
             new_pos = next;
         }
+        break;
+    case VimLineEditCommand::EnterReplaceMode:
+        push_history(current_state);
+        set_mode(VimMode::Insert);
+        replacing = true;
+        replace_steps.clear();
         break;
     case VimLineEditCommand::ReplaceChar: {
         int end = get_line_end_position(old_pos);
@@ -3482,6 +3512,10 @@ void VimEditor::toggle_comment(const HistoryState &current_state, int num_repeat
 }
 
 void VimEditor::set_mode(VimMode mode){
+    if (mode != VimMode::Insert) {
+        replacing = false;
+        replace_steps.clear();
+    }
     if (current_mode == VimMode::Insert){
         last_insert_mode_text = current_insert_mode_text;
     }
