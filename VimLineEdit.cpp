@@ -584,8 +584,8 @@ void VimEditor::add_vim_keybindings() {
         KeyBinding{{KeyChord{"g", {}}, KeyChord{Qt::Key_A, CONTROL}}, VimLineEditCommand::ProgressiveIncrement},
         KeyBinding{{KeyChord{"g", {}}, KeyChord{Qt::Key_X, CONTROL}}, VimLineEditCommand::ProgressiveDecrement},
         KeyBinding{{KeyChord{"0", {}}}, VimLineEditCommand::MoveToBeginningOfLine},
-        KeyBinding{{KeyChord{"_", {}}}, VimLineEditCommand::MoveToBeginningOfLine},
-        KeyBinding{{KeyChord{"^", {}}}, VimLineEditCommand::MoveToBeginningOfLine},
+        KeyBinding{{KeyChord{"_", {}}}, VimLineEditCommand::MoveToFirstNonblank},
+        KeyBinding{{KeyChord{"^", {}}}, VimLineEditCommand::MoveToFirstNonblank},
         KeyBinding{{KeyChord{"$", {}}}, VimLineEditCommand::MoveToEndOfLine},
         KeyBinding{{KeyChord{"s", {}}}, VimLineEditCommand::DeleteCharAndEnterInsertMode},
         KeyBinding{{KeyChord{":", {}}}, VimLineEditCommand::CommandCommand},
@@ -1145,6 +1145,8 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
         }
         set_mode(VimMode::Insert);
         new_pos = get_line_start_position(get_cursor_position());
+        while (new_pos < get_line_end_position(old_pos) &&
+               (current_state.text[new_pos] == ' ' || current_state.text[new_pos] == '\t')) ++new_pos;
         break;
     case VimLineEditCommand::EnterInsertModeEndLine:
         insert_repeat_count = num_repeats;
@@ -1222,6 +1224,11 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
         else {
             new_pos = get_ith_line_start_position(num_repeats - 1);
         }
+        break;
+    case VimLineEditCommand::MoveToFirstNonblank:
+        new_pos = get_line_start_position(old_pos);
+        while (new_pos < get_line_end_position(old_pos) &&
+               (current_state.text[new_pos] == ' ' || current_state.text[new_pos] == '\t')) ++new_pos;
         break;
     case VimLineEditCommand::MoveToBeginningOfLine:{
         new_pos = get_line_start_position(get_cursor_position());

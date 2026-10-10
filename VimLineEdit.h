@@ -76,6 +76,7 @@ enum class VimLineEditCommand {
     InsertLineAbove,
     ToggleVisualCursor,
     MoveToBeginningOfLine,
+    MoveToFirstNonblank,
     MoveToEndOfLine,
     DeleteCharAndEnterInsertMode,
     DeleteCurrentLine,
