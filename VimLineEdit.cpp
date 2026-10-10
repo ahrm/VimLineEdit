@@ -4541,6 +4541,12 @@ class EmacsEditor : public QObject {
     bool mark_active = false;
     bool control_x_pending = false;
     QString observed_text;
+    enum class LastAction { Other, Kill, Yank };
+    LastAction last_action = LastAction::Other;
+    std::deque<QString> kill_ring;
+    int yank_index = 0;
+    int yank_begin = -1, yank_end = -1;
+    QString yanked_text;
 
     QString text() const { return line ? line->text() : multi->toPlainText(); }
     int position() const { return line ? line->cursorPosition() : multi->textCursor().position(); }
@@ -4644,6 +4650,37 @@ class EmacsEditor : public QObject {
         }
         deactivate_mark();
     }
+    void save_kill(const QString &contents, bool append, bool backward) {
+        if (contents.isEmpty()) return;
+        if (append && !kill_ring.empty()) {
+            if (backward) kill_ring.front().prepend(contents);
+            else kill_ring.front().append(contents);
+        } else {
+            kill_ring.push_front(contents);
+            if (kill_ring.size() > 60) kill_ring.pop_back();
+        }
+    }
+    void kill(int begin, int end, bool backward, bool append) {
+        if (read_only() || begin == end) return;
+        save_kill(text().mid(begin, end - begin), append, backward);
+        replace(begin, end, "");
+        last_action = LastAction::Kill;
+    }
+    void yank(bool cycle) {
+        if (read_only() || kill_ring.empty()) return;
+        if (cycle) {
+            if (position() != yank_end || text().mid(yank_begin, yank_end - yank_begin) != yanked_text) return;
+            yank_index = (yank_index + 1) % kill_ring.size();
+        } else {
+            yank_index = 0;
+            yank_begin = yank_end = position();
+        }
+        mark = yank_begin;
+        replace(yank_begin, yank_end, kill_ring[yank_index]);
+        yank_end = position();
+        yanked_text = text().mid(yank_begin, yank_end - yank_begin);
+        last_action = LastAction::Yank;
+    }
 
   public:
     explicit EmacsEditor(QWidget *widget) : QObject(widget),
@@ -4658,6 +4695,7 @@ class EmacsEditor : public QObject {
             }
             if (mark > begin) mark = mark <= old_end ? begin : mark + new_end - old_end;
             observed_text = current;
+            last_action = LastAction::Other;
         };
         if (line) connect(line, &QLineEdit::textChanged, this, changed);
         else connect(multi, &QTextEdit::textChanged, this, changed);
@@ -4669,6 +4707,7 @@ class EmacsEditor : public QObject {
         control_x_pending = false;
         mark = -1;
         mark_active = false;
+        last_action = LastAction::Other;
         move_to(position());
     }
 
@@ -4677,12 +4716,15 @@ class EmacsEditor : public QObject {
         if (meta_pending || control_x_pending || event->key() == Qt::Key_Escape) return true;
         if (modifiers.alt && !modifiers.control && !modifiers.command)
             return event->key() == Qt::Key_B || event->key() == Qt::Key_F ||
-                   event->key() == Qt::Key_Less || event->key() == Qt::Key_Greater;
+                   event->key() == Qt::Key_Less || event->key() == Qt::Key_Greater ||
+                   event->key() == Qt::Key_D || event->key() == Qt::Key_Backspace ||
+                   event->key() == Qt::Key_W || event->key() == Qt::Key_Y;
         return modifiers.control && !modifiers.alt && !modifiers.command &&
             (event->key() == Qt::Key_A || event->key() == Qt::Key_E ||
              event->key() == Qt::Key_B || event->key() == Qt::Key_F || event->key() == Qt::Key_D ||
              event->key() == Qt::Key_N || event->key() == Qt::Key_P ||
-             event->key() == Qt::Key_Space || event->key() == Qt::Key_X || event->key() == Qt::Key_G);
+             event->key() == Qt::Key_Space || event->key() == Qt::Key_X || event->key() == Qt::Key_G ||
+             event->key() == Qt::Key_K || event->key() == Qt::Key_W || event->key() == Qt::Key_Y);
     }
 
     bool key_press_event(QKeyEvent *event) {
@@ -4694,9 +4736,12 @@ class EmacsEditor : public QObject {
             meta_pending = control_x_pending = false;
             desired_column.reset();
             deactivate_mark();
+            last_action = LastAction::Other;
             return true;
         }
         if (key == Qt::Key_Escape) { meta_pending = true; return true; }
+        const LastAction previous_action = last_action;
+        last_action = LastAction::Other;
         const bool meta = modifiers.alt || meta_pending;
         meta_pending = false;
         const bool vertical = modifiers.control && !meta && (key == Qt::Key_N || key == Qt::Key_P);
@@ -4731,6 +4776,15 @@ class EmacsEditor : public QObject {
             case Qt::Key_F: move_to(word_target(true)); return true;
             case Qt::Key_Less: move_to(0); return true;
             case Qt::Key_Greater: move_to(value.size()); return true;
+            case Qt::Key_D: kill(pos, word_target(true), false, previous_action == LastAction::Kill); return true;
+            case Qt::Key_Backspace: kill(word_target(false), pos, true, previous_action == LastAction::Kill); return true;
+            case Qt::Key_W:
+                if (mark >= 0) save_kill(value.mid(std::min(mark, pos), std::abs(pos - mark)), false, false);
+                deactivate_mark();
+                return true;
+            case Qt::Key_Y:
+                if (previous_action == LastAction::Yank) yank(true);
+                return true;
             default: break;
             }
         }
@@ -4750,6 +4804,17 @@ class EmacsEditor : public QObject {
                 move_to(pos);
                 return true;
             case Qt::Key_X: control_x_pending = true; return true;
+            case Qt::Key_K: {
+                int end = line_end(value, pos);
+                if (end < value.size() && value.mid(pos, end - pos).trimmed().isEmpty()) ++end;
+                kill(pos, end, false, previous_action == LastAction::Kill);
+                return true;
+            }
+            case Qt::Key_W:
+                if (mark >= 0) kill(std::min(mark, pos), std::max(mark, pos), pos < mark,
+                                    previous_action == LastAction::Kill);
+                return true;
+            case Qt::Key_Y: yank(false); return true;
             default: break;
             }
         }
