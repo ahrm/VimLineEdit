@@ -4832,7 +4832,7 @@ class EmacsEditor : public QObject {
         }
         bool uppercase = false;
         for (QChar c : query) uppercase |= c.isUpper();
-        return QRegularExpression(pattern, uppercase ? QRegularExpression::NoPatternOption : QRegularExpression::CaseInsensitiveOption);
+        return QRegularExpression(pattern, QRegularExpression::MultilineOption | (uppercase ? QRegularExpression::NoPatternOption : QRegularExpression::CaseInsensitiveOption));
     }
     void next_replacement() {
         if (!replacement) return;
@@ -4860,7 +4860,7 @@ class EmacsEditor : public QObject {
             } else inserted += c;
         }
         const auto matched = r.match.captured();
-        if (inserted == inserted.toLower() && !matched.isEmpty()) {
+        if (!inserted.isEmpty() && inserted == inserted.toLower() && !matched.isEmpty()) {
             if (matched == matched.toUpper()) inserted = inserted.toUpper();
             else if (matched[0].isUpper()) inserted[0] = inserted[0].toUpper();
         }
