@@ -4595,14 +4595,14 @@ class EmacsEditor : public QObject {
     static int column_at(const QString &value, int pos) {
         int column = 0;
         for (int i = line_start(value, pos); i < pos; i = next_character(value, i))
-            column += value[i] == '\t' ? 8 - column % 8 : 1;
+            column += character_width(value, i, column);
         return column;
     }
     static QString column_slice(const QString &row, int begin, int end, bool pad = false) {
         QString result;
         int column = 0;
         for (int i = 0; i < row.size(); i = next_character(row, i)) {
-            int width = row[i] == '\t' ? 8 - column % 8 : 1;
+            int width = character_width(row, i, column);
             if (column + width > begin && column < end) {
                 if (row[i] == '\t') result += QString(std::min(end, column + width) - std::max(begin, column), ' ');
                 else result += row.mid(i, next_character(row, i) - i);
@@ -5205,15 +5205,37 @@ class EmacsEditor : public QObject {
     int position() const { return line ? line->cursorPosition() : multi->textCursor().position(); }
     bool read_only() const { return line ? line->isReadOnly() : multi->isReadOnly(); }
 
-    static int next_character(const QString &value, int pos) {
+    static int codepoint_end(const QString &value, int pos) {
         if (pos >= value.size()) return value.size();
-        return pos + (value[pos].isHighSurrogate() && pos + 1 < value.size() &&
-                      value[pos + 1].isLowSurrogate() ? 2 : 1);
+        return pos + (value[pos].isHighSurrogate() && pos + 1 < value.size() && value[pos + 1].isLowSurrogate() ? 2 : 1);
+    }
+    static uint codepoint(const QString &value, int pos) {
+        return value.mid(pos, codepoint_end(value, pos) - pos).toUcs4().value(0);
+    }
+    static int next_character(const QString &value, int pos) {
+        pos = codepoint_end(value, pos);
+        while (pos < value.size() && QChar::isMark(codepoint(value, pos))) pos = codepoint_end(value, pos);
+        return pos;
     }
     static int previous_character(const QString &value, int pos) {
-        if (pos <= 0) return 0;
-        return pos - (value[pos - 1].isLowSurrogate() && pos > 1 &&
-                      value[pos - 2].isHighSurrogate() ? 2 : 1);
+        do {
+            if (pos <= 0) return 0;
+            pos -= value[pos - 1].isLowSurrogate() && pos > 1 && value[pos - 2].isHighSurrogate() ? 2 : 1;
+        } while (pos > 0 && QChar::isMark(codepoint(value, pos)));
+        return pos;
+    }
+    static int character_width(const QString &value, int pos, int column) {
+        uint c = codepoint(value, pos);
+        if (c == '\t') return 8 - column % 8;
+        if (QChar::isMark(c)) return 0;
+        if (c < 32 || c == 127) return 2;
+        // Wide CJK blocks and emoji occupy two logical Emacs columns.
+        bool wide = (c >= 0x1100 && c <= 0x115f) || c == 0x2329 || c == 0x232a ||
+            (c >= 0x2e80 && c <= 0xa4cf && c != 0x303f) || (c >= 0xac00 && c <= 0xd7a3) ||
+            (c >= 0xf900 && c <= 0xfaff) || (c >= 0xfe10 && c <= 0xfe6f) ||
+            (c >= 0xff01 && c <= 0xff60) || (c >= 0xffe0 && c <= 0xffe6) ||
+            (c >= 0x1f300 && c <= 0x1faff) || (c >= 0x20000 && c <= 0x3fffd);
+        return wide ? 2 : 1;
     }
     static int line_start(const QString &value, int pos) {
         return pos == 0 ? 0 : value.lastIndexOf('\n', pos - 1) + 1;
@@ -5261,7 +5283,7 @@ class EmacsEditor : public QObject {
         if (!desired_column) {
             int column = 0;
             for (int i = start; i < pos; i = next_character(value, i))
-                column += value[i] == '\t' ? 8 - column % 8 : 1;
+                column += character_width(value, i, column);
             desired_column = column;
         }
         if ((forward && line_end(value, pos) == value.size()) || (!forward && start == 0)) {
@@ -5275,7 +5297,7 @@ class EmacsEditor : public QObject {
         int target = forward ? end + 1 : line_start(value, start - 1);
         int column = 0;
         while (target < value.size() && value[target] != '\n' && column < *desired_column) {
-            const int width = value[target] == '\t' ? 8 - column % 8 : 1;
+            const int width = character_width(value, target, column);
             if (column + width > *desired_column) break;
             column += width;
             target = next_character(value, target);
