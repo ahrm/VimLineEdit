@@ -453,6 +453,7 @@ class VimEditor {
     QString get_current_selection(int &begin, int &end);
     QString get_previous_word();
     void handle_text_command(QString text);
+    bool handle_substitute(const QString &command);
     QString get_word_under_cursor();
     int get_cursor_position() const;
     void delete_selection();

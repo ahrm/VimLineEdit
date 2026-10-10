@@ -3847,7 +3847,96 @@ void VimEditor::emit_quit(){
 
 }
 
+bool VimEditor::handle_substitute(const QString &command) {
+    static const QRegularExpression prefix(R"(^(%|[.$0-9]+(?:,[.$0-9]+)?)?s([^\w\s\\]))");
+    auto parsed = prefix.match(command);
+    if (!parsed.hasMatch()) return false;
+    auto *widget = qobject_cast<QTextEdit*>(editor_widget);
+    if (widget && widget->isReadOnly()) return true;
+    QChar delimiter = parsed.captured(2).at(0);
+    int position = parsed.capturedEnd();
+    auto read_part = [&](QString &part) {
+        while (position < command.size()) {
+            QChar ch = command[position++];
+            if (ch == delimiter) return true;
+            part += ch;
+            if (ch == '\\' && position < command.size()) part += command[position++];
+        }
+        return false;
+    };
+    QString pattern, replacement;
+    if (!read_part(pattern)) return true;
+    read_part(replacement); // Vim permits an omitted final delimiter.
+    QString flags = command.mid(position);
+    for (QChar flag : flags) {
+        if (!QString("giIe").contains(flag)) return true;
+    }
+    if (pattern.isEmpty() && last_search_state) pattern = last_search_state->query.value_or("");
+    auto regex = vim_regex(pattern);
+    if (flags.contains('i')) regex.setPatternOptions(regex.patternOptions() | QRegularExpression::CaseInsensitiveOption);
+    if (flags.contains('I')) regex.setPatternOptions(regex.patternOptions() & ~QRegularExpression::CaseInsensitiveOption);
+    if (pattern.isEmpty() || !regex.isValid()) return true;
+
+    QString text = adapter->get_text();
+    auto starts = get_line_starts(text);
+    int current_line = 0, column = 0;
+    get_line_and_col(get_cursor_position(), current_line, column);
+    int first = current_line, last = current_line;
+    QString range = parsed.captured(1);
+    auto address = [&](const QString &value) {
+        if (value == ".") return current_line;
+        if (value == "$") return static_cast<int>(starts.size()) - 1;
+        return std::clamp(value.toInt() - 1, 0, static_cast<int>(starts.size()) - 1);
+    };
+    if (range == "%") { first = 0; last = starts.size() - 1; }
+    else if (!range.isEmpty()) {
+        auto addresses = range.split(',');
+        first = address(addresses.front());
+        last = address(addresses.back());
+    }
+    if (first > last) return true;
+    struct Edit { int start, length; QString text; };
+    std::vector<Edit> edits;
+    int last_changed_line = first;
+    for (int line = first; line <= last; ++line) {
+        int start = starts[line];
+        QString content = text.mid(start, get_line_end_position(start) - start);
+        auto matches = regex.globalMatch(content);
+        while (matches.hasNext()) {
+            auto match = matches.next();
+            QString expanded;
+            for (int i = 0; i < replacement.size(); ++i) {
+                QChar ch = replacement[i];
+                if (ch == '&') expanded += match.captured(0);
+                else if (ch == '\\' && i + 1 < replacement.size()) {
+                    ch = replacement[++i];
+                    if (ch.isDigit()) expanded += match.captured(ch.digitValue());
+                    else if (ch == 'r') expanded += '\n';
+                    else expanded += ch;
+                } else expanded += ch;
+            }
+            edits.push_back({start + static_cast<int>(match.capturedStart()), static_cast<int>(match.capturedLength()), expanded});
+            last_changed_line = line;
+            if (!flags.contains('g')) break;
+        }
+    }
+    last_search_state = SearchState{FindDirection::Forward, pattern};
+    if (!edits.empty()) {
+        push_current_history_state();
+        int cursor = starts[last_changed_line];
+        for (auto it = edits.rbegin(); it != edits.rend(); ++it) {
+            if (it->start < starts[last_changed_line]) cursor += it->text.size() - it->length;
+            insert_text(it->text, it->start, it->start + it->length);
+        }
+        QString updated = adapter->get_text();
+        while (cursor < updated.size() && (updated[cursor] == ' ' || updated[cursor] == '\t')) ++cursor;
+        set_cursor_position(cursor);
+    }
+    return true;
+}
+
 void VimEditor::handle_text_command(QString text){
+    if (handle_substitute(text)) return;
 
     VimLineEdit* line_edit = dynamic_cast<VimLineEdit*>(editor_widget);
     VimTextEdit* text_edit = dynamic_cast<VimTextEdit*>(editor_widget);
