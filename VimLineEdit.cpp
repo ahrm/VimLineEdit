@@ -717,6 +717,7 @@ void VimEditor::add_vim_keybindings() {
 
     visual_mode_input_tree = normal_mode_input_tree.clone();
     std::vector<KeyBinding> visual_mode_keybindings = {
+        KeyBinding{{KeyChord{"u", {}}}, VimLineEditCommand::Lowercase},
         KeyBinding{{KeyChord{"o", {}}}, VimLineEditCommand::ToggleVisualCursor},
         KeyBinding{{KeyChord{"U", {}}}, VimLineEditCommand::Uppercasify},
         KeyBinding{{KeyChord{"~", {}}}, VimLineEditCommand::SwapCaseSelection},
@@ -1619,7 +1620,15 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
         pending_operator_count = num_repeats;
         action_waiting_for_motion = {cmd == VimLineEditCommand::Lowercase ?
             ActionWaitingForMotionKind::Lowercase : ActionWaitingForMotionKind::Uppercase};
-        if (current_mode == VimMode::Visual || current_mode == VimMode::VisualLine) {
+        if (current_mode == VimMode::VisualBlock) {
+            apply_transform_to_visual_block([&](const QString &text) {
+                return cmd == VimLineEditCommand::Lowercase ? text.toLower() : text.toUpper();
+            });
+            action_waiting_for_motion = {};
+            set_mode(VimMode::Normal);
+            adapter->set_extra_selections({});
+            pending_operator_count = 1;
+        } else if (current_mode == VimMode::Visual || current_mode == VimMode::VisualLine) {
             handle_action_waiting_for_motion(std::min(old_pos, visual_mode_anchor),
                 std::max(old_pos, visual_mode_anchor), 1, current_mode == VimMode::VisualLine);
             set_mode(VimMode::Normal);
