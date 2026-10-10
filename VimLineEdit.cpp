@@ -498,6 +498,21 @@ bool VimEditor::process_key_press_event(QKeyEvent* event, bool& should_propagate
         bool is_keypress_a_modifier = event_key == Qt::Key_Shift || event_key == Qt::Key_Control ||
                                       event_key == Qt::Key_Alt || event_key == Qt::Key_Meta;
 
+        if (!is_keypress_a_modifier && waiting_for_insert_register) {
+            waiting_for_insert_register = false;
+            if (!event->text().isEmpty()) {
+                auto contents = get_last_deleted_text(event->text().at(0).toLatin1());
+                if (contents) {
+                    QString text = contents->text + (contents->is_line ? "\n" : "");
+                    int cursor = get_cursor_position();
+                    insert_text(text, cursor);
+                    set_cursor_position(cursor + text.size());
+                    current_insert_mode_text += text;
+                }
+            }
+            return false;
+        }
+
         if ((!is_keypress_a_modifier) && event->modifiers().testFlag(CONTROL)) {
             std::optional<VimLineEditCommand> command =
                 handle_key_event(event->text(), event->key(), event->modifiers());
@@ -740,6 +755,7 @@ void VimEditor::add_vim_keybindings() {
     }
 
     std::vector<KeyBinding> insert_mode_keybindings = {
+        KeyBinding{{KeyChord{Qt::Key_R, CONTROL}}, VimLineEditCommand::InsertRegister},
         KeyBinding{{KeyChord{Qt::Key_W, CONTROL}}, VimLineEditCommand::DeletePreviousWord},
         KeyBinding{{KeyChord{Qt::Key_A, CONTROL}}, VimLineEditCommand::InsertLastInsertModeText},
         KeyBinding{{KeyChord{Qt::Key_X, CONTROL}, KeyChord{Qt::Key_N, CONTROL}}, VimLineEditCommand::AutoComplete}
@@ -1378,6 +1394,9 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<QChar> symb
         }
         break;
     }
+    case VimLineEditCommand::InsertRegister:
+        waiting_for_insert_register = true;
+        break;
     case VimLineEditCommand::InsertLastInsertModeText:{
         // Insert the last text entered in insert mode in the current position
         if (last_insert_mode_text.size() > 0) {
@@ -4043,6 +4062,7 @@ void VimEditor::toggle_comment(const HistoryState &current_state, int num_repeat
 
 void VimEditor::set_mode(VimMode mode){
     if (mode != VimMode::Insert) {
+        waiting_for_insert_register = false;
         replacing = false;
         replace_steps.clear();
     }

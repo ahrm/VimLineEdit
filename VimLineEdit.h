@@ -95,6 +95,7 @@ enum class VimLineEditCommand {
     ProgressiveIncrement,
     ProgressiveDecrement,
     InsertLastInsertModeText,
+    InsertRegister,
     SetMark,
     GotoMark,
     GotoMarkLine,
@@ -367,6 +368,7 @@ class VimEditor {
     std::vector<std::unique_ptr<QKeyEvent>> last_change_keys;
     bool process_key_press_event(QKeyEvent *event, bool &should_propagate);
     bool replacing = false;
+    bool waiting_for_insert_register = false;
     std::vector<HistoryState> replace_steps;
 
     std::unordered_map<int, Mark> marks;
