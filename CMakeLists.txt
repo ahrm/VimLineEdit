@@ -24,10 +24,8 @@ add_executable(vim_lineedit
 target_link_libraries(vim_lineedit Qt6::Widgets)
 
 # build the subproject in ./tests/CMakeLists.txt
-add_subdirectory(tests)
-
-# Enable testing
 enable_testing()
+add_subdirectory(tests)
 
 file(GLOB_RECURSE ALL_DATA_FILES
      CONFIGURE_DEPENDS
@@ -59,4 +57,3 @@ endforeach()
 
 # Add compile-time definition for tests folder path
 target_compile_definitions(vim_lineedit_tests PRIVATE TESTS_DIR="${CMAKE_SOURCE_DIR}/test_generator/test_cases")
-
