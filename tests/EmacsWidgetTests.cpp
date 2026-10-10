@@ -1,6 +1,7 @@
 #include <QApplication>
 #include <QKeyEvent>
 #include <QLabel>
+#include <QScrollBar>
 #include <iostream>
 #include <optional>
 #include <variant>
@@ -79,9 +80,27 @@ template<class Widget> static void test_modes() {
     check(contents(widget) == "abc", "Unsupported Escape-prefixed commands must not type their final key");
 }
 
+static void test_scrolling() {
+    VimTextEdit widget;
+    widget.set_keybinding_mode(KeybindingMode::Emacs);
+    widget.resize(400, 200);
+    widget.setPlainText(QString("line of text\n").repeated(100));
+    widget.show();
+    QApplication::processEvents();
+    control(widget, Qt::Key_V);
+    check(widget.verticalScrollBar()->value() > 0 && position(widget) > 0, "C-v should scroll and move point into the page");
+    QKeyEvent back(QEvent::KeyPress, Qt::Key_V, Qt::AltModifier);
+    QApplication::sendEvent(&widget, &back);
+    check(widget.verticalScrollBar()->value() == 0, "M-v should scroll back");
+    auto cursor = widget.textCursor(); cursor.setPosition(600); widget.setTextCursor(cursor);
+    control(widget, Qt::Key_L);
+    check(widget.cursorRect().center().y() > 20 && widget.cursorRect().center().y() < 180, "C-l should recenter point");
+}
+
 int main(int argc, char **argv) {
     QApplication application(argc, argv);
     test_modes<VimLineEdit>();
     test_modes<VimTextEdit>();
+    test_scrolling();
     return failures ? 1 : 0;
 }

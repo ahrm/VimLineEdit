@@ -4577,6 +4577,103 @@ class EmacsEditor : public QObject {
     std::vector<IncrementalSearch> search_steps;
     QString previous_search;
     QLabel *search_label = nullptr;
+    QString prompt_title, prompt_input;
+    std::function<void(const QString &)> prompt_callback;
+    bool goto_pending = false;
+    int recenter_step = 0;
+
+    void show_prompt(const QString &message) {
+        auto *widget = static_cast<QWidget *>(parent());
+        if (!search_label) {
+            search_label = new QLabel(widget);
+            search_label->setObjectName("emacsSearchPrompt");
+            search_label->setTextFormat(Qt::PlainText);
+            search_label->setAutoFillBackground(true);
+            search_label->setFrameStyle(QFrame::StyledPanel);
+        }
+        search_label->setFont(widget->font());
+        search_label->setText(message);
+        const int height = std::min(widget->height(), search_label->sizeHint().height());
+        search_label->setGeometry(0, widget->height() - height, widget->width(), height);
+        search_label->show();
+        search_label->raise();
+    }
+    void request_text(const QString &title, std::function<void(const QString &)> callback) {
+        prompt_title = title;
+        prompt_input.clear();
+        prompt_callback = std::move(callback);
+        show_prompt(title);
+    }
+    bool prompt_key(QKeyEvent *event, const KeyboardModifierState &modifiers) {
+        int key = event->key();
+        if (modifiers.control && key == Qt::Key_G) {
+            prompt_callback = nullptr;
+            search_label->hide();
+        } else if (key == Qt::Key_Return || key == Qt::Key_Enter) {
+            auto callback = std::move(prompt_callback);
+            auto input = prompt_input;
+            prompt_callback = nullptr;
+            search_label->hide();
+            callback(input);
+        } else {
+            if (key == Qt::Key_Backspace && !prompt_input.isEmpty()) prompt_input.chop(prompt_input.size() - previous_character(prompt_input, prompt_input.size()));
+            else if (modifiers.control && key == Qt::Key_U) prompt_input.clear();
+            else if (!modifiers.control && !modifiers.alt && !modifiers.command) prompt_input += event->text();
+            show_prompt(prompt_title + prompt_input);
+        }
+        return true;
+    }
+    void goto_line(const QString &input) {
+        bool valid;
+        int number = input.toInt(&valid);
+        if (!valid || number < 1) return;
+        push_mark(position());
+        const auto value = text();
+        int target = 0;
+        while (--number && target < value.size()) target = std::min(int(value.size()), line_end(value, target) + 1);
+        move_to(target);
+    }
+    int sentence_target(int count) const {
+        const auto value = text();
+        const QRegularExpression boundary(R"(([.!?]["')\]]*)(?:[ \t]{2,}|\n|$))");
+        int target = position();
+        for (int i = 0; i < std::abs(count); ++i) {
+            auto matches = boundary.globalMatch(value);
+            int next = count > 0 ? value.size() : 0;
+            while (matches.hasNext()) {
+                const auto match = matches.next();
+                int end = match.capturedEnd(1);
+                if (count > 0 && end > target) { next = end; break; }
+                if (count < 0) {
+                    while (end < value.size() && value[end].isSpace()) ++end;
+                    if (end < target) next = end;
+                }
+            }
+            target = next;
+        }
+        return target;
+    }
+    void scroll_page(int count) {
+        if (!multi) return;
+        auto *bar = multi->verticalScrollBar();
+        int distance = std::max(1, multi->viewport()->height() - 2 * multi->fontMetrics().height());
+        int old = bar->value();
+        bar->setValue(old + count * distance);
+        if (bar->value() != old) {
+            const int target_scroll = bar->value();
+            const int y = count > 0 ? 0 : multi->viewport()->height() - multi->fontMetrics().height();
+            move_to(multi->cursorForPosition(QPoint(0, y)).position());
+            bar->setValue(target_scroll);
+        }
+    }
+    void recenter() {
+        if (!multi) return;
+        const int height = multi->viewport()->height();
+        int target = recenter_step == 0 ? height / 2 : recenter_step == 1 ? multi->fontMetrics().height() : height - multi->fontMetrics().height();
+        auto *bar = multi->verticalScrollBar();
+        bar->setValue(bar->value() + multi->cursorRect().center().y() - target);
+        recenter_step = (recenter_step + 1) % 3;
+    }
 
     QString text() const { return line ? line->text() : multi->toPlainText(); }
     int position() const { return line ? line->cursorPosition() : multi->textCursor().position(); }
@@ -4833,21 +4930,8 @@ class EmacsEditor : public QObject {
         last_action = LastAction::Yank;
     }
     void show_search() {
-        auto *widget = static_cast<QWidget *>(parent());
-        if (!search_label) {
-            search_label = new QLabel(widget);
-            search_label->setObjectName("emacsSearchPrompt");
-            search_label->setTextFormat(Qt::PlainText);
-            search_label->setAutoFillBackground(true);
-            search_label->setFrameStyle(QFrame::StyledPanel);
-        }
-        search_label->setFont(widget->font());
-        search_label->setText(QString(search->failed ? "Failing " : "") +
+        show_prompt(QString(search->failed ? "Failing " : "") +
             (search->forward ? "I-search: " : "I-search backward: ") + search->query);
-        const int height = std::min(widget->height(), search_label->sizeHint().height());
-        search_label->setGeometry(0, widget->height() - height, widget->width(), height);
-        search_label->show();
-        search_label->raise();
     }
     void update_search() {
         if (search->query.isEmpty()) {
@@ -4968,6 +5052,9 @@ class EmacsEditor : public QObject {
 
     void reset() {
         finish_search(false);
+        prompt_callback = nullptr;
+        goto_pending = false;
+        if (search_label) search_label->hide();
         meta_pending = false;
         clear_argument();
         desired_column.reset();
@@ -4984,9 +5071,11 @@ class EmacsEditor : public QObject {
 
     bool handles_shortcut(QKeyEvent *event) const {
         auto modifiers = KeyboardModifierState::from_qt_modifiers(event->modifiers());
-        if (quoted_count || argument || search || meta_pending || control_x_pending || event->key() == Qt::Key_Escape) return true;
+        if (prompt_callback || goto_pending || quoted_count || argument || search || meta_pending || control_x_pending || event->key() == Qt::Key_Escape) return true;
         if (modifiers.alt && !modifiers.control && !modifiers.command)
-            return event->key() == Qt::Key_M || event->key() == Qt::Key_AsciiCircum || event->key() == Qt::Key_Space || event->key() == Qt::Key_Backslash ||
+            return event->key() == Qt::Key_A || event->key() == Qt::Key_E || event->key() == Qt::Key_K ||
+                   event->key() == Qt::Key_BraceLeft || event->key() == Qt::Key_BraceRight || event->key() == Qt::Key_G || event->key() == Qt::Key_V ||
+                   event->key() == Qt::Key_M || event->key() == Qt::Key_AsciiCircum || event->key() == Qt::Key_Space || event->key() == Qt::Key_Backslash ||
                    event->key() == Qt::Key_U || event->key() == Qt::Key_L || event->key() == Qt::Key_C ||
                    event->key() == Qt::Key_T || event->key() == Qt::Key_At || event->key() == Qt::Key_H ||
                    event->key() == Qt::Key_B || event->key() == Qt::Key_F ||
@@ -4995,7 +5084,7 @@ class EmacsEditor : public QObject {
                    event->key() == Qt::Key_W || event->key() == Qt::Key_Y ||
                    event->key() == Qt::Key_Minus || (event->key() >= Qt::Key_0 && event->key() <= Qt::Key_9);
         return modifiers.control && !modifiers.alt && !modifiers.command &&
-            (event->key() == Qt::Key_O || event->key() == Qt::Key_Q || event->key() == Qt::Key_T || event->key() == Qt::Key_U || event->key() == Qt::Key_A || event->key() == Qt::Key_E ||
+            (event->key() == Qt::Key_V || event->key() == Qt::Key_L || event->key() == Qt::Key_O || event->key() == Qt::Key_Q || event->key() == Qt::Key_T || event->key() == Qt::Key_U || event->key() == Qt::Key_A || event->key() == Qt::Key_E ||
              event->key() == Qt::Key_B || event->key() == Qt::Key_F || event->key() == Qt::Key_D ||
              event->key() == Qt::Key_N || event->key() == Qt::Key_P ||
              event->key() == Qt::Key_Space || event->key() == Qt::Key_X || event->key() == Qt::Key_G ||
@@ -5010,6 +5099,7 @@ class EmacsEditor : public QObject {
         if (key == Qt::Key_Control || key == Qt::Key_Shift || key == Qt::Key_Alt || key == Qt::Key_Meta)
             return false;
         auto modifiers = KeyboardModifierState::from_qt_modifiers(event->modifiers());
+        if (prompt_callback) return prompt_key(event, modifiers);
         if (quoted_count) {
             QString inserted = event->text();
             if (modifiers.control && key >= Qt::Key_A && key <= Qt::Key_Z) inserted = QChar(key - Qt::Key_A + 1);
@@ -5024,6 +5114,7 @@ class EmacsEditor : public QObject {
         if (modifiers.control && !modifiers.command && key == Qt::Key_G) {
             meta_pending = control_x_pending = false;
             clear_argument();
+            goto_pending = false;
             desired_column.reset();
             deactivate_mark();
             last_action = LastAction::Other;
@@ -5060,6 +5151,12 @@ class EmacsEditor : public QObject {
         clear_argument();
         const LastAction previous_action = last_action;
         last_action = LastAction::Other;
+        if (goto_pending) {
+            goto_pending = false;
+            if (key == Qt::Key_G) request_text("Goto line: ", [this](const QString &input) { goto_line(input); });
+            return true;
+        }
+        if (!(modifiers.control && key == Qt::Key_L)) recenter_step = 0;
         if (!(meta && key == Qt::Key_Space)) spacing_begin = -1;
         const bool vertical = modifiers.control && !meta && (key == Qt::Key_N || key == Qt::Key_P);
         if (!vertical) desired_column.reset();
@@ -5097,6 +5194,21 @@ class EmacsEditor : public QObject {
         }
         if (meta && !modifiers.control) {
             switch (key) {
+            case Qt::Key_A: move_to(sentence_target(-count)); return true;
+            case Qt::Key_E: move_to(sentence_target(count)); return true;
+            case Qt::Key_K: {
+                int target = sentence_target(count);
+                kill(std::min(pos, target), std::max(pos, target), target < pos, previous_action == LastAction::Kill);
+                return true;
+            }
+            case Qt::Key_BraceLeft:
+            case Qt::Key_BraceRight: {
+                int target = pos;
+                for (int i = 0; i < std::abs(count); ++i) target = paragraph_target(target, (key == Qt::Key_BraceRight) == (count > 0));
+                move_to(target); return true;
+            }
+            case Qt::Key_G: goto_pending = true; return true;
+            case Qt::Key_V: scroll_page(-count); return true;
             case Qt::Key_M: {
                 int target = line_start(value, pos);
                 while (target < value.size() && (value[target] == ' ' || value[target] == '\t')) ++target;
@@ -5147,6 +5259,8 @@ class EmacsEditor : public QObject {
         }
         if (modifiers.control && !meta) {
             switch (key) {
+            case Qt::Key_V: scroll_page(count); return true;
+            case Qt::Key_L: recenter(); return true;
             case Qt::Key_Q: quoted_count = std::max(1, count); return true;
             case Qt::Key_O:
                 if (multi) { replace(pos, pos, QString(std::max(0, count), '\n')); move_to(pos); }
