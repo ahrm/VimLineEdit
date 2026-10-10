@@ -4536,6 +4536,7 @@ class EmacsEditor : public QObject {
     QLineEdit *line;
     QTextEdit *multi;
     bool meta_pending = false;
+    std::optional<int> desired_column;
 
     QString text() const { return line ? line->text() : multi->toPlainText(); }
     int position() const { return line ? line->cursorPosition() : multi->textCursor().position(); }
@@ -4550,6 +4551,59 @@ class EmacsEditor : public QObject {
         if (pos <= 0) return 0;
         return pos - (value[pos - 1].isLowSurrogate() && pos > 1 &&
                       value[pos - 2].isHighSurrogate() ? 2 : 1);
+    }
+    static int line_start(const QString &value, int pos) {
+        return pos == 0 ? 0 : value.lastIndexOf('\n', pos - 1) + 1;
+    }
+    static int line_end(const QString &value, int pos) {
+        const int end = value.indexOf('\n', pos);
+        return end < 0 ? value.size() : end;
+    }
+    static bool word_character(const QString &value, int pos) {
+        const uint character = value.mid(pos, next_character(value, pos) - pos).toUcs4().value(0);
+        const auto category = QChar::category(character);
+        return QChar::isLetterOrNumber(character) || category == QChar::Mark_NonSpacing ||
+               category == QChar::Mark_SpacingCombining || category == QChar::Mark_Enclosing;
+    }
+    int word_target(bool forward) const {
+        const auto value = text();
+        int pos = position();
+        if (forward) {
+            while (pos < value.size() && !word_character(value, pos)) pos = next_character(value, pos);
+            while (pos < value.size() && word_character(value, pos)) pos = next_character(value, pos);
+        } else {
+            while (pos > 0 && !word_character(value, previous_character(value, pos))) pos = previous_character(value, pos);
+            while (pos > 0 && word_character(value, previous_character(value, pos))) pos = previous_character(value, pos);
+        }
+        return pos;
+    }
+    void move_vertical(bool forward) {
+        auto value = text();
+        int pos = position();
+        int start = line_start(value, pos);
+        if (!desired_column) {
+            int column = 0;
+            for (int i = start; i < pos; i = next_character(value, i))
+                column += value[i] == '\t' ? 8 - column % 8 : 1;
+            desired_column = column;
+        }
+        if ((forward && line_end(value, pos) == value.size()) || (!forward && start == 0)) {
+            if (auto *widget = qobject_cast<VimTextEdit *>(multi)) emit widget->textBoundaryRequested(forward);
+            value = text();
+            pos = position();
+            start = line_start(value, pos);
+        }
+        const int end = line_end(value, pos);
+        if ((forward && end == value.size()) || (!forward && start == 0)) return;
+        int target = forward ? end + 1 : line_start(value, start - 1);
+        int column = 0;
+        while (target < value.size() && value[target] != '\n' && column < *desired_column) {
+            const int width = value[target] == '\t' ? 8 - column % 8 : 1;
+            if (column + width > *desired_column) break;
+            column += width;
+            target = next_character(value, target);
+        }
+        move_to(target);
     }
     void move_to(int pos) {
         pos = std::max(0, std::min(pos, static_cast<int>(text().size())));
@@ -4582,15 +4636,20 @@ class EmacsEditor : public QObject {
 
     void reset() {
         meta_pending = false;
+        desired_column.reset();
         move_to(position());
     }
 
     bool handles_shortcut(QKeyEvent *event) const {
         auto modifiers = KeyboardModifierState::from_qt_modifiers(event->modifiers());
         if (meta_pending || event->key() == Qt::Key_Escape) return true;
+        if (modifiers.alt && !modifiers.control && !modifiers.command)
+            return event->key() == Qt::Key_B || event->key() == Qt::Key_F ||
+                   event->key() == Qt::Key_Less || event->key() == Qt::Key_Greater;
         return modifiers.control && !modifiers.alt && !modifiers.command &&
             (event->key() == Qt::Key_A || event->key() == Qt::Key_E ||
-             event->key() == Qt::Key_B || event->key() == Qt::Key_F || event->key() == Qt::Key_D);
+             event->key() == Qt::Key_B || event->key() == Qt::Key_F || event->key() == Qt::Key_D ||
+             event->key() == Qt::Key_N || event->key() == Qt::Key_P);
     }
 
     bool key_press_event(QKeyEvent *event) {
@@ -4601,20 +4660,30 @@ class EmacsEditor : public QObject {
         if (key == Qt::Key_Escape) { meta_pending = true; return true; }
         const bool meta = modifiers.alt || meta_pending;
         meta_pending = false;
+        const bool vertical = modifiers.control && !meta && (key == Qt::Key_N || key == Qt::Key_P);
+        if (!vertical) desired_column.reset();
         if (modifiers.command) return false;
         const auto value = text();
         const int pos = position();
+        if (meta && !modifiers.control) {
+            switch (key) {
+            case Qt::Key_B: move_to(word_target(false)); return true;
+            case Qt::Key_F: move_to(word_target(true)); return true;
+            case Qt::Key_Less: move_to(0); return true;
+            case Qt::Key_Greater: move_to(value.size()); return true;
+            default: break;
+            }
+        }
         if (modifiers.control && !meta) {
             switch (key) {
             case Qt::Key_A:
-                move_to(pos == 0 ? 0 : value.lastIndexOf('\n', pos - 1) + 1); return true;
-            case Qt::Key_E: {
-                const int end = value.indexOf('\n', pos);
-                move_to(end < 0 ? value.size() : end); return true;
-            }
+                move_to(line_start(value, pos)); return true;
+            case Qt::Key_E: move_to(line_end(value, pos)); return true;
             case Qt::Key_B: move_to(previous_character(value, pos)); return true;
             case Qt::Key_F: move_to(next_character(value, pos)); return true;
             case Qt::Key_D: replace(pos, next_character(value, pos), ""); return true;
+            case Qt::Key_N: move_vertical(true); return true;
+            case Qt::Key_P: move_vertical(false); return true;
             default: break;
             }
         }
