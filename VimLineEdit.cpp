@@ -5,6 +5,7 @@
 #include <QPainter>
 #include <QKeySequence>
 #include <QPointer>
+#include <QScopedValueRollback>
 #include <QScrollBar>
 #include <QtCore/qnamespace.h>
 #include <QtGui/qtextcursor.h>
@@ -4557,6 +4558,7 @@ class EmacsEditor : public QObject {
     int mark = -1;
     std::deque<int> mark_ring;
     bool mark_active = false;
+    bool setting_selection = false;
     bool control_x_pending = false;
     bool rectangle_active = false, register_prefix = false;
     bool register_argument = false;
@@ -5229,6 +5231,15 @@ class EmacsEditor : public QObject {
         return target;
     }
     void move_vertical(bool forward) {
+        if (multi && multi->lineWrapMode() != QTextEdit::NoWrap && !rectangle_active) {
+            auto cursor = multi->textCursor();
+            if (cursor.movePosition(forward ? QTextCursor::Down : QTextCursor::Up,
+                                    mark_active ? QTextCursor::KeepAnchor : QTextCursor::MoveAnchor)) {
+                QScopedValueRollback<bool> guard(setting_selection, true);
+                multi->setTextCursor(cursor);
+                return;
+            }
+        }
         auto value = text();
         int pos = position();
         int start = line_start(value, pos);
@@ -5257,6 +5268,7 @@ class EmacsEditor : public QObject {
         move_to(target);
     }
     void move_to(int pos) {
+        QScopedValueRollback<bool> guard(setting_selection, true);
         pos = std::max(0, std::min(pos, static_cast<int>(text().size())));
         if (line) {
             if (mark_active && mark >= 0 && mark != pos) line->setSelection(mark, pos - mark);
@@ -5710,8 +5722,26 @@ class EmacsEditor : public QObject {
             observed_text = current;
             last_action = LastAction::Other;
         };
-        if (line) connect(line, &QLineEdit::textChanged, this, changed);
-        else connect(multi, &QTextEdit::textChanged, this, changed);
+        auto selection_changed = [this]() {
+            const auto mode = line ? static_cast<VimLineEdit *>(line)->get_keybinding_mode() : static_cast<VimTextEdit *>(multi)->get_keybinding_mode();
+            if (mode != KeybindingMode::Emacs || setting_selection || pending_edit) return;
+            int anchor = position();
+            if (line && line->hasSelectedText()) {
+                anchor = line->selectionStart();
+                if (anchor == position()) anchor += line->selectedText().size();
+            } else if (multi) anchor = multi->textCursor().anchor();
+            mark_active = anchor != position();
+            if (mark_active) mark = anchor;
+            rectangle_active = false;
+            if (multi) multi->setExtraSelections({});
+        };
+        if (line) {
+            connect(line, &QLineEdit::textChanged, this, changed);
+            connect(line, &QLineEdit::selectionChanged, this, selection_changed);
+        } else {
+            connect(multi, &QTextEdit::textChanged, this, changed);
+            connect(multi, &QTextEdit::selectionChanged, this, selection_changed);
+        }
     }
 
     void reset() {

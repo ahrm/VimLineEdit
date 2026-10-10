@@ -171,6 +171,39 @@ static void test_open_command() {
     check(comment_begin == 0 && comment_end == 8, "M-; should pass the current line to the host comment hook");
 }
 
+static void test_mouse_selection_and_wrapping() {
+    VimLineEdit line;
+    line.set_keybinding_mode(KeybindingMode::Emacs);
+    line.setText("abcd");
+    line.setSelection(1, 2);
+    control(line, Qt::Key_W);
+    check(line.text() == "ad", "C-w should kill a native single-line selection");
+    VimTextEdit multi;
+    multi.set_keybinding_mode(KeybindingMode::Emacs);
+    multi.setPlainText("abcd");
+    auto selected = multi.textCursor();
+    selected.setPosition(1); selected.setPosition(3, QTextCursor::KeepAnchor);
+    multi.setTextCursor(selected);
+    control(multi, Qt::Key_W);
+    check(multi.toPlainText() == "ad", "C-w should kill a native multiline selection");
+    multi.resize(160, 200);
+    multi.setLineWrapMode(QTextEdit::WidgetWidth);
+    multi.setPlainText(QString("word ").repeated(30) + "\nlast line");
+    multi.show(); QApplication::processEvents();
+    auto expected = multi.textCursor();
+    expected.movePosition(QTextCursor::Down);
+    control(multi, Qt::Key_N);
+    check(position(multi) == expected.position(), "C-n should follow visual lines in a wrapped widget");
+    control(multi, Qt::Key_P);
+    check(position(multi) == 0, "C-p should return to the same visual column");
+    control(multi, Qt::Key_X);
+    multi.set_keybinding_mode(KeybindingMode::Standard);
+    multi.set_keybinding_mode(KeybindingMode::Emacs);
+    QKeyEvent typed(QEvent::KeyPress, Qt::Key_H, Qt::NoModifier, "h");
+    QApplication::sendEvent(&multi, &typed);
+    check(multi.toPlainText().startsWith("hword"), "Mode switching should clear pending Emacs prefixes");
+}
+
 int main(int argc, char **argv) {
     QApplication application(argc, argv);
     test_modes<VimLineEdit>();
@@ -181,5 +214,6 @@ int main(int argc, char **argv) {
     test_host_commands<VimLineEdit>();
     test_host_commands<VimTextEdit>();
     test_open_command();
+    test_mouse_selection_and_wrapping();
     return failures ? 1 : 0;
 }
