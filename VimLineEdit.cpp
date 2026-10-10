@@ -4918,8 +4918,22 @@ class EmacsEditor : public QObject {
     int recenter_step = 0;
     int fill_column = 70;
 
-    void fill_paragraph() {
+    void fill_paragraph(bool use_region = true) {
         if (!multi || read_only()) return;
+        if (use_region && mark_active && mark >= 0) {
+            const auto value = text();
+            int begin = std::min(position(), mark), end = std::max(position(), mark);
+            std::vector<int> paragraphs;
+            for (int pos = line_start(value, begin); pos < end;) {
+                if (!value.mid(pos, line_end(value, pos) - pos).trimmed().isEmpty()) {
+                    paragraphs.push_back(pos);
+                    pos = paragraph_target(pos, true);
+                } else pos = std::min(int(value.size()), line_end(value, pos) + 1);
+            }
+            deactivate_mark();
+            for (auto it = paragraphs.rbegin(); it != paragraphs.rend(); ++it) { move_to(*it); fill_paragraph(false); }
+            return;
+        }
         auto value = text();
         int pos = position();
         int begin = line_start(value, pos);
@@ -5325,9 +5339,8 @@ class EmacsEditor : public QObject {
             while (target < value.size() && blank(target)) target = std::min(int(value.size()), line_end(value, target) + 1);
             while (target < value.size() && !blank(target)) target = std::min(int(value.size()), line_end(value, target) + 1);
         } else {
-            if (target > 0) target = line_start(value, target - 1);
             while (target > 0 && blank(target)) target = line_start(value, target - 1);
-            while (target > 0 && !blank(line_start(value, target - 1))) target = line_start(value, target - 1);
+            while (target > 0 && !blank(target)) target = line_start(value, target - 1);
         }
         return target;
     }
