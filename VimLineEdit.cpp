@@ -286,7 +286,8 @@ bool VimEditor::key_press_event(QKeyEvent* event, bool& should_propagate) {
         if (!is_keypress_a_modifier && action_waiting_for_motion.has_value()) {
 
             if ((action_waiting_for_motion->kind == ActionWaitingForMotionKind::Indent && event->text() == ">") ||
-                (action_waiting_for_motion->kind == ActionWaitingForMotionKind::Unindent && event->text() == "<")) {
+                (action_waiting_for_motion->kind == ActionWaitingForMotionKind::Unindent && event->text() == "<") ||
+                (action_waiting_for_motion->kind == ActionWaitingForMotionKind::Reindent && event->text() == "=")) {
                 handle_command(VimLineEditCommand::TransformCurrentLine);
                 return false;
             }
@@ -560,6 +561,7 @@ void VimEditor::add_vim_keybindings() {
         KeyBinding{{KeyChord{"R", {}}}, VimLineEditCommand::EnterReplaceMode},
         KeyBinding{{KeyChord{">", {}}}, VimLineEditCommand::Indent},
         KeyBinding{{KeyChord{"<", {}}}, VimLineEditCommand::Unindent},
+        KeyBinding{{KeyChord{"=", {}}}, VimLineEditCommand::Reindent},
         KeyBinding{{KeyChord{"J", {}}}, VimLineEditCommand::JoinLines},
         KeyBinding{{KeyChord{"g", {}}, KeyChord{"J", {}}}, VimLineEditCommand::JoinLinesWithoutSpace},
         KeyBinding{{KeyChord{"D", {}}}, VimLineEditCommand::DeleteToEndOfLine},
@@ -914,6 +916,7 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
         case VimLineEditCommand::EnterInsertModeEndLine:
         case VimLineEditCommand::Indent:
         case VimLineEditCommand::Unindent:
+        case VimLineEditCommand::Reindent:
         case VimLineEditCommand::TransformCurrentLine:
         case VimLineEditCommand::JoinLines:
         case VimLineEditCommand::JoinLinesWithoutSpace:
@@ -1484,11 +1487,13 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
         }
         break;
     case VimLineEditCommand::Indent:
-    case VimLineEditCommand::Unindent: {
+    case VimLineEditCommand::Unindent:
+    case VimLineEditCommand::Reindent: {
         push_history(current_state);
         pending_operator_count = num_repeats;
         action_waiting_for_motion = {cmd == VimLineEditCommand::Indent ?
-            ActionWaitingForMotionKind::Indent : ActionWaitingForMotionKind::Unindent};
+            ActionWaitingForMotionKind::Indent : (cmd == VimLineEditCommand::Unindent ?
+            ActionWaitingForMotionKind::Unindent : ActionWaitingForMotionKind::Reindent)};
         if (current_mode == VimMode::Visual || current_mode == VimMode::VisualLine) {
             handle_action_waiting_for_motion(std::min(old_pos, visual_mode_anchor),
                                             std::max(old_pos, visual_mode_anchor), 0, true);
@@ -3059,10 +3064,25 @@ void VimEditor::handle_action_waiting_for_motion(int old_pos, int new_pos, int d
     if (action_waiting_for_motion.has_value()) {
         QString current_text = adapter->get_text();
         auto kind = action_waiting_for_motion->kind;
-        if (kind == ActionWaitingForMotionKind::Indent || kind == ActionWaitingForMotionKind::Unindent) {
+        if (kind == ActionWaitingForMotionKind::Indent || kind == ActionWaitingForMotionKind::Unindent ||
+            kind == ActionWaitingForMotionKind::Reindent) {
             int begin = get_line_start_position(std::min(old_pos, new_pos));
             int end = get_line_end_position(std::max(old_pos, new_pos));
             QStringList lines = current_text.mid(begin, end - begin).split('\n');
+            int previous_indent = 0;
+            for (int previous = begin - 1; previous >= 0;) {
+                int start = get_line_start_position(previous);
+                QString line = current_text.mid(start, previous - start);
+                if (!line.trimmed().isEmpty()) {
+                    for (QChar ch : line) {
+                        if (ch == ' ') ++previous_indent;
+                        else if (ch == '\t') previous_indent += 8 - previous_indent % 8;
+                        else break;
+                    }
+                    break;
+                }
+                previous = start - 1;
+            }
             for (QString &line : lines) {
                 int prefix = 0, columns = 0;
                 while (prefix < line.size() && (line[prefix] == ' ' || line[prefix] == '\t')) {
@@ -3070,7 +3090,8 @@ void VimEditor::handle_action_waiting_for_motion(int old_pos, int new_pos, int d
                     ++prefix;
                 }
                 if (prefix == line.size()) continue;
-                columns = kind == ActionWaitingForMotionKind::Indent ? columns + 8 : std::max(0, columns - 8);
+                columns = kind == ActionWaitingForMotionKind::Reindent ? previous_indent :
+                          (kind == ActionWaitingForMotionKind::Indent ? columns + 8 : std::max(0, columns - 8));
                 line = QString(columns / 8, '\t') + QString(columns % 8, ' ') + line.mid(prefix);
             }
             insert_text(lines.join("\n"), begin, end);
