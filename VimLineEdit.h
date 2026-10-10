@@ -506,6 +506,7 @@ class VimLineEdit : public QLineEdit {
     bool get_vim_enabled() const;
     void set_keybinding_mode(KeybindingMode mode);
     KeybindingMode get_keybinding_mode() const { return keybinding_mode; }
+    bool handles_emacs_shortcut(QKeyEvent *event) const;
     bool event(QEvent *event) override;
     bool eventFilter(QObject *watched, QEvent *event) override;
 signals:
@@ -550,6 +551,7 @@ class VimTextEdit : public QTextEdit {
     bool get_vim_enabled() const;
     void set_keybinding_mode(KeybindingMode mode);
     KeybindingMode get_keybinding_mode() const { return keybinding_mode; }
+    bool handles_emacs_shortcut(QKeyEvent *event) const;
     bool event(QEvent *event) override;
     QList<QTextCursor> selection_cursors() const;
     void set_line_numbers_visible(bool visible);

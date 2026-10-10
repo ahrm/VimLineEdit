@@ -5920,20 +5920,28 @@ class EmacsEditor : public QObject {
     }
 };
 
+bool VimLineEdit::handles_emacs_shortcut(QKeyEvent *event) const {
+    return keybinding_mode == KeybindingMode::Emacs && emacs_editor &&
+           emacs_editor->handles_shortcut(event);
+}
+
 bool VimLineEdit::event(QEvent *event) {
-    if (keybinding_mode == KeybindingMode::Emacs && emacs_editor &&
-        event->type() == QEvent::ShortcutOverride &&
-        emacs_editor->handles_shortcut(static_cast<QKeyEvent *>(event))) {
+    if (event->type() == QEvent::ShortcutOverride &&
+        handles_emacs_shortcut(static_cast<QKeyEvent *>(event))) {
         event->accept();
         return true;
     }
     return QLineEdit::event(event);
 }
 
+bool VimTextEdit::handles_emacs_shortcut(QKeyEvent *event) const {
+    return keybinding_mode == KeybindingMode::Emacs && emacs_editor &&
+           emacs_editor->handles_shortcut(event);
+}
+
 bool VimTextEdit::event(QEvent *event) {
-    if (keybinding_mode == KeybindingMode::Emacs && emacs_editor &&
-        event->type() == QEvent::ShortcutOverride &&
-        emacs_editor->handles_shortcut(static_cast<QKeyEvent *>(event))) {
+    if (event->type() == QEvent::ShortcutOverride &&
+        handles_emacs_shortcut(static_cast<QKeyEvent *>(event))) {
         event->accept();
         return true;
     }
