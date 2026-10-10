@@ -4600,11 +4600,122 @@ class EmacsEditor : public QObject {
     struct IncrementalSearch {
         int origin, start, point;
         QString query;
-        bool forward, failed;
+        bool forward, failed, regexp;
     };
     std::optional<IncrementalSearch> search;
     std::vector<IncrementalSearch> search_steps;
     QString previous_search;
+    QStringList search_history;
+    int search_history_index = -1;
+    struct Replacement {
+        QRegularExpression expression;
+        QString replacement;
+        int limit, next, begin, end;
+        QRegularExpressionMatch match;
+    };
+    std::optional<Replacement> replacement;
+
+    static QRegularExpression expression(const QString &query, bool regexp) {
+        QString pattern;
+        if (!regexp) pattern = QRegularExpression::escape(query);
+        else {
+            // Emacs basic regexp grouping/alternation uses escaped delimiters.
+            for (int i = 0; i < query.size(); ++i) {
+                QChar c = query[i];
+                if (c == '\\' && i + 1 < query.size()) {
+                    QChar next = query[++i];
+                    if (QString("()|{}").contains(next)) pattern += next;
+                    else if (next == '<' || next == '>') pattern += "\\b";
+                    else { pattern += '\\'; pattern += next; }
+                } else {
+                    if (QString("()|{}").contains(c)) pattern += '\\';
+                    pattern += c;
+                }
+            }
+        }
+        bool uppercase = false;
+        for (QChar c : query) uppercase |= c.isUpper();
+        return QRegularExpression(pattern, uppercase ? QRegularExpression::NoPatternOption : QRegularExpression::CaseInsensitiveOption);
+    }
+    void next_replacement() {
+        if (!replacement) return;
+        auto &r = *replacement;
+        r.match = r.expression.match(text(), r.next);
+        if (!r.match.hasMatch() || r.match.capturedEnd() > r.limit) {
+            replacement.reset();
+            if (search_label) search_label->hide();
+            return;
+        }
+        r.begin = r.match.capturedStart(); r.end = r.match.capturedEnd();
+        move_to(r.end);
+        show_prompt("Replace with " + r.replacement + "? (y/n/!/q)");
+    }
+    void replace_match() {
+        auto &r = *replacement;
+        QString inserted;
+        for (int i = 0; i < r.replacement.size(); ++i) {
+            QChar c = r.replacement[i];
+            if (c == '\\' && i + 1 < r.replacement.size()) {
+                c = r.replacement[++i];
+                if (c.isDigit()) inserted += r.match.captured(c.digitValue());
+                else if (c == '&') inserted += r.match.captured();
+                else inserted += c;
+            } else inserted += c;
+        }
+        const auto matched = r.match.captured();
+        if (inserted == inserted.toLower() && !matched.isEmpty()) {
+            if (matched == matched.toUpper()) inserted = inserted.toUpper();
+            else if (matched[0].isUpper()) inserted[0] = inserted[0].toUpper();
+        }
+        const int begin = r.begin, end = r.end;
+        replace(begin, end, inserted);
+        r.limit += inserted.size() - (end - begin);
+        r.next = begin + inserted.size();
+        if (begin == end) r.next = next_character(text(), r.next);
+    }
+    bool replacement_key(QKeyEvent *event, const KeyboardModifierState &modifiers) {
+        int key = event->key();
+        if (key == Qt::Key_Q || key == Qt::Key_Return || (modifiers.control && key == Qt::Key_G)) {
+            replacement.reset(); search_label->hide(); return true;
+        }
+        if (key == Qt::Key_Exclam) {
+            while (replacement) {
+                int old = replacement->next;
+                replace_match();
+                if (replacement->next <= old && replacement->begin == replacement->end) {
+                    replacement.reset(); search_label->hide(); break;
+                }
+                next_replacement();
+            }
+        } else if (key == Qt::Key_Y || key == Qt::Key_Space || key == Qt::Key_Period) {
+            replace_match();
+            if (key == Qt::Key_Period) { replacement.reset(); search_label->hide(); }
+            else next_replacement();
+        } else if (key == Qt::Key_N || key == Qt::Key_Backspace) {
+            replacement->next = replacement->end > replacement->begin ? replacement->end : next_character(text(), replacement->end);
+            next_replacement();
+        }
+        return true;
+    }
+    void query_replace(bool regexp, bool all = false) {
+        if (read_only()) return;
+        int begin = mark_active ? std::min(mark, position()) : position();
+        int limit = mark_active ? std::max(mark, position()) : text().size();
+        request_text(regexp ? "Query replace regexp: " : "Query replace: ", [this, regexp, all, begin, limit](const QString &query) {
+            if (query.isEmpty()) return;
+            const auto pattern = expression(query, regexp);
+            if (!pattern.isValid()) return;
+            request_text("Replace " + query + " with: ", [this, pattern, all, begin, limit](const QString &inserted) {
+                deactivate_mark();
+                replacement = Replacement{pattern, inserted, limit, begin, begin, begin, {}};
+                next_replacement();
+                if (all && replacement) {
+                    QKeyEvent event(QEvent::KeyPress, Qt::Key_Exclam, Qt::NoModifier);
+                    replacement_key(&event, KeyboardModifierState::from_qt_modifiers(Qt::NoModifier));
+                }
+            });
+        });
+    }
     QLabel *search_label = nullptr;
     QString prompt_title, prompt_input;
     std::function<void(const QString &)> prompt_callback;
@@ -4968,21 +5079,28 @@ class EmacsEditor : public QObject {
             search->failed = false;
         } else {
             const auto value = text();
-            bool uppercase = false;
-            for (const QChar c : search->query) uppercase |= c.isUpper();
-            const auto sensitivity = uppercase ? Qt::CaseSensitive : Qt::CaseInsensitive;
-            const int last = search->start - search->query.size();
-            const int found = search->forward ? value.indexOf(search->query, search->start, sensitivity) :
-                (last < 0 ? -1 : value.lastIndexOf(search->query, last, sensitivity));
+            const auto pattern = expression(search->query, search->regexp);
+            auto matches = pattern.globalMatch(value);
+            int found = -1, end = -1;
+            while (matches.hasNext()) {
+                auto match = matches.next();
+                if (search->forward && match.capturedStart() >= search->start) {
+                    found = match.capturedStart(); end = match.capturedEnd(); break;
+                }
+                if (!search->forward && match.capturedEnd() <= search->start) {
+                    found = match.capturedStart(); end = match.capturedEnd();
+                }
+            }
             search->failed = found < 0;
-            if (found >= 0) search->point = found + (search->forward ? search->query.size() : 0);
+            if (found >= 0) search->point = search->forward ? end : found;
         }
         move_to(search->point);
         show_search();
     }
-    void begin_search(bool forward) {
+    void begin_search(bool forward, bool regexp = false) {
         deactivate_mark();
-        search = IncrementalSearch{position(), position(), position(), "", forward, false};
+        search = IncrementalSearch{position(), position(), position(), "", forward, false, regexp};
+        search_history_index = -1;
         search_steps.clear();
         show_search();
     }
@@ -4990,7 +5108,12 @@ class EmacsEditor : public QObject {
         if (!search) return;
         if (cancel) move_to(search->origin);
         else {
-            if (!search->query.isEmpty()) previous_search = search->query;
+            if (!search->query.isEmpty()) {
+                previous_search = search->query;
+                search_history.removeAll(previous_search);
+                search_history.prepend(previous_search);
+                if (search_history.size() > 60) search_history.removeLast();
+            }
             push_mark(search->origin);
         }
         search.reset();
@@ -5028,6 +5151,22 @@ class EmacsEditor : public QObject {
             if (search->query.isEmpty()) search->query = previous_search;
             update_search();
             return true;
+        }
+        if (modifiers.alt && (key == Qt::Key_P || key == Qt::Key_N) && !search_history.isEmpty()) {
+            search_steps.push_back(*search);
+            search_history_index = std::max(0, std::min(int(search_history.size()) - 1, search_history_index + (key == Qt::Key_P ? 1 : -1)));
+            request_text("Edit search: ", [this](const QString &query) {
+                if (search) { search->query = query; update_search(); }
+            });
+            prompt_input = search_history[search_history_index];
+            show_prompt(prompt_title + prompt_input);
+            return true;
+        }
+        if (modifiers.control && (key == Qt::Key_W || key == Qt::Key_Y)) {
+            search_steps.push_back(*search);
+            QString added = key == Qt::Key_W ? text().mid(search->point, word_target(true, search->point) - search->point) : kill_ring.empty() ? "" : kill_ring.front();
+            search->query += search->regexp ? QRegularExpression::escape(added) : added;
+            update_search(); return true;
         }
         if (!modifiers.control && !modifiers.alt && !modifiers.command && !event->text().isEmpty()) {
             search_steps.push_back(*search);
@@ -5082,6 +5221,7 @@ class EmacsEditor : public QObject {
     void reset() {
         finish_search(false);
         prompt_callback = nullptr;
+        replacement.reset();
         goto_pending = false;
         if (search_label) search_label->hide();
         meta_pending = false;
@@ -5102,9 +5242,10 @@ class EmacsEditor : public QObject {
 
     bool handles_shortcut(QKeyEvent *event) const {
         auto modifiers = KeyboardModifierState::from_qt_modifiers(event->modifiers());
-        if (prompt_callback || goto_pending || quoted_count || argument || search || meta_pending || control_x_pending || event->key() == Qt::Key_Escape) return true;
+        if (replacement || prompt_callback || goto_pending || quoted_count || argument || search || meta_pending || control_x_pending || event->key() == Qt::Key_Escape) return true;
+        if (modifiers.alt && modifiers.control && (event->key() == Qt::Key_S || event->key() == Qt::Key_R || event->key() == Qt::Key_Percent)) return true;
         if (modifiers.alt && !modifiers.control && !modifiers.command)
-            return event->key() == Qt::Key_A || event->key() == Qt::Key_E || event->key() == Qt::Key_K ||
+            return event->key() == Qt::Key_Percent || event->key() == Qt::Key_A || event->key() == Qt::Key_E || event->key() == Qt::Key_K ||
                    event->key() == Qt::Key_BraceLeft || event->key() == Qt::Key_BraceRight || event->key() == Qt::Key_G || event->key() == Qt::Key_V ||
                    event->key() == Qt::Key_M || event->key() == Qt::Key_AsciiCircum || event->key() == Qt::Key_Space || event->key() == Qt::Key_Backslash ||
                    event->key() == Qt::Key_U || event->key() == Qt::Key_L || event->key() == Qt::Key_C ||
@@ -5146,6 +5287,7 @@ class EmacsEditor : public QObject {
             repeat_command(std::nullopt); return true;
         }
         repeat_pending = false;
+        if (replacement) return replacement_key(event, modifiers);
         if (prompt_callback) return prompt_key(event, modifiers);
         if (quoted_count) {
             QString inserted = event->text();
@@ -5241,8 +5383,13 @@ class EmacsEditor : public QObject {
             }
             return true;
         }
+        if (meta && modifiers.control) {
+            if (key == Qt::Key_S || key == Qt::Key_R) { begin_search(key == Qt::Key_S, true); return true; }
+            if (key == Qt::Key_Percent) { query_replace(true); return true; }
+        }
         if (meta && !modifiers.control) {
             switch (key) {
+            case Qt::Key_Percent: query_replace(false); return true;
             case Qt::Key_A: move_to(sentence_target(-count)); return true;
             case Qt::Key_E: move_to(sentence_target(count)); return true;
             case Qt::Key_K: {

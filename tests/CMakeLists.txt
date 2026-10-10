@@ -21,7 +21,7 @@ if(Python3_Interpreter_FOUND)
   file(GLOB EMACS_CASES CONFIGURE_DEPENDS
        "${CMAKE_SOURCE_DIR}/test_generator/emacs_test_cases/emacs_test_case_*.keystrokes.txt")
   # Fixtures whose setup and edits fit in a single-line widget.
-  set(EMACS_LINE_CASES 0 2 3 4 6 8 9 10 11 12 13 14 15 17 18 19 21 22 23 24 25 26 27 28 29 30 31 32 33 34 36 38 39 40 42 43 45 47 48 51 52)
+  set(EMACS_LINE_CASES 0 2 3 4 6 8 9 10 11 12 13 14 15 17 18 19 21 22 23 24 25 26 27 28 29 30 31 32 33 34 36 38 39 40 42 43 45 47 48 51 52 53 54 55 56 57 58)
   foreach(fixture IN LISTS EMACS_CASES)
     get_filename_component(case_name "${fixture}" NAME_WE)
     add_test(NAME "${case_name}"
