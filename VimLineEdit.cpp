@@ -6,6 +6,8 @@
 #include <QKeySequence>
 #include <QPointer>
 #include <QScopedValueRollback>
+#include <QDialog>
+#include <QVBoxLayout>
 #include <QScrollBar>
 #include <QtCore/qnamespace.h>
 #include <QtGui/qtextcursor.h>
@@ -5003,7 +5005,8 @@ class EmacsEditor : public QObject {
             else emit multiple->commentRequested(begin, end);
         }
     }
-    struct NamedCommand { const char *name; int key; bool control, meta, prefix; };
+    QPointer<QDialog> bindings_help;
+    struct NamedCommand { const char *name; int key; bool control, meta, prefix; bool register_key = false; };
     static const std::vector<NamedCommand> &commands() {
         static const std::vector<NamedCommand> bindings = {
             {"forward-char", Qt::Key_F, true, false, false}, {"backward-char", Qt::Key_B, true, false, false},
@@ -5042,6 +5045,14 @@ class EmacsEditor : public QObject {
             {"save-buffer", Qt::Key_S, true, false, true}, {"find-file", Qt::Key_F, true, false, true},
             {"save-buffers-kill-terminal", Qt::Key_C, true, false, true}, {"kill-buffer", Qt::Key_K, false, false, true},
             {"comment-dwim", Qt::Key_Semicolon, false, true, false},
+            {"set-mark-command", Qt::Key_Space, true, false, false}, {"quoted-insert", Qt::Key_Q, true, false, false},
+            {"delete-char", Qt::Key_D, true, false, false}, {"delete-backward-char", Qt::Key_Backspace, false, false, false},
+            {"yank-pop", Qt::Key_Y, false, true, false}, {"rectangle-mark-mode", Qt::Key_Space, false, false, true},
+            {"kill-rectangle", Qt::Key_K, false, false, false, true}, {"copy-rectangle-as-kill", Qt::Key_W, false, true, false, true},
+            {"yank-rectangle", Qt::Key_Y, false, false, false, true}, {"delete-rectangle", Qt::Key_D, false, false, false, true},
+            {"clear-rectangle", Qt::Key_C, false, false, false, true}, {"string-rectangle", Qt::Key_T, false, false, false, true},
+            {"copy-to-register", Qt::Key_S, false, false, false, true}, {"insert-register", Qt::Key_I, false, false, false, true},
+            {"point-to-register", Qt::Key_Space, false, false, false, true}, {"jump-to-register", Qt::Key_J, false, false, false, true},
             {"start-kbd-macro", Qt::Key_ParenLeft, false, false, true},
             {"end-kbd-macro", Qt::Key_ParenRight, false, false, true},
             {"call-last-kbd-macro", Qt::Key_E, false, false, true},
@@ -5077,12 +5088,29 @@ class EmacsEditor : public QObject {
             QStringList bindings;
             for (const auto &command : commands()) {
                 QString key = QKeySequence(command.key).toString();
-                bindings << (QString(command.prefix ? "C-x " : "") + (command.control ? "C-" : "") + (command.meta ? "M-" : "") + key + "  " + command.name);
+                bindings << (QString(command.register_key ? "C-x r " : command.prefix ? "C-x " : "") + (command.control ? "C-" : "") + (command.meta ? "M-" : "") + key + "  " + command.name);
             }
-            show_prompt(bindings.join("\n"));
+            if (bindings_help) bindings_help->close();
+            auto *dialog = new QDialog(static_cast<QWidget *>(parent()));
+            bindings_help = dialog;
+            dialog->setObjectName("emacsBindingsHelp");
+            dialog->setWindowTitle("Emacs bindings");
+            dialog->setAttribute(Qt::WA_DeleteOnClose);
+            auto *layout = new QVBoxLayout(dialog);
+            auto *view = new QTextEdit(dialog);
+            view->setReadOnly(true);
+            view->setPlainText(bindings.join("\n"));
+            layout->addWidget(view);
+            dialog->resize(600, 450);
+            dialog->show();
             return;
         }
         for (const auto &command : commands()) if (name == command.name) {
+            if (command.register_key) {
+                register_argument = count.has_value();
+                if (!rectangle_command(command.key, command.meta)) register_command(command.key);
+                return;
+            }
             Qt::KeyboardModifiers modifiers = command.meta ? Qt::AltModifier : Qt::NoModifier;
 #ifdef Q_OS_MACOS
             if (command.control) modifiers |= Qt::MetaModifier;
@@ -5092,6 +5120,8 @@ class EmacsEditor : public QObject {
             QKeyEvent event(QEvent::KeyPress, command.key, modifiers);
             control_x_pending = command.prefix;
             argument = count;
+            argument_digits = count.has_value();
+            argument_negative = count.value_or(0) < 0;
             key_press_event(&event);
             return;
         }
@@ -5785,6 +5815,7 @@ class EmacsEditor : public QObject {
     void reset() {
         finish_search(false);
         prompt_callback = nullptr;
+        if (bindings_help) bindings_help->close();
         replacement.reset();
         goto_pending = false;
         if (search_label) search_label->hide();
@@ -5810,31 +5841,17 @@ class EmacsEditor : public QObject {
     void finish_key_event() { pending_edit.reset(); }
 
     bool handles_shortcut(QKeyEvent *event) const {
-        auto modifiers = KeyboardModifierState::from_qt_modifiers(event->modifiers());
-        if (register_callback || register_prefix || replacement || prompt_callback || goto_pending || quoted_count || argument || search || meta_pending || control_x_pending || event->key() == Qt::Key_Escape) return true;
-        if (event->key() == Qt::Key_Tab || event->key() == Qt::Key_F3 || event->key() == Qt::Key_F4) return true;
-        if (modifiers.alt && modifiers.control && (event->key() == Qt::Key_S || event->key() == Qt::Key_R || event->key() == Qt::Key_Percent || event->key() == Qt::Key_Backslash ||
-            event->key() == Qt::Key_F || event->key() == Qt::Key_B || event->key() == Qt::Key_N || event->key() == Qt::Key_P ||
-            event->key() == Qt::Key_U || event->key() == Qt::Key_D || event->key() == Qt::Key_K || event->key() == Qt::Key_Space || event->key() == Qt::Key_At)) return true;
-        if (modifiers.alt && !modifiers.control && !modifiers.command)
-            return event->key() == Qt::Key_Semicolon || event->key() == Qt::Key_Slash || event->key() == Qt::Key_X || event->key() == Qt::Key_Q || event->key() == Qt::Key_Percent || event->key() == Qt::Key_A || event->key() == Qt::Key_E || event->key() == Qt::Key_K ||
-                   event->key() == Qt::Key_BraceLeft || event->key() == Qt::Key_BraceRight || event->key() == Qt::Key_G || event->key() == Qt::Key_V ||
-                   event->key() == Qt::Key_M || event->key() == Qt::Key_AsciiCircum || event->key() == Qt::Key_Space || event->key() == Qt::Key_Backslash ||
-                   event->key() == Qt::Key_U || event->key() == Qt::Key_L || event->key() == Qt::Key_C ||
-                   event->key() == Qt::Key_T || event->key() == Qt::Key_At || event->key() == Qt::Key_H ||
-                   event->key() == Qt::Key_B || event->key() == Qt::Key_F ||
-                   event->key() == Qt::Key_Less || event->key() == Qt::Key_Greater ||
-                   event->key() == Qt::Key_D || event->key() == Qt::Key_Backspace ||
-                   event->key() == Qt::Key_W || event->key() == Qt::Key_Y ||
-                   event->key() == Qt::Key_Minus || (event->key() >= Qt::Key_0 && event->key() <= Qt::Key_9);
-        return modifiers.control && !modifiers.alt && !modifiers.command &&
-            (event->key() == Qt::Key_Question || event->key() == Qt::Key_V || event->key() == Qt::Key_L || event->key() == Qt::Key_O || event->key() == Qt::Key_Q || event->key() == Qt::Key_T || event->key() == Qt::Key_U || event->key() == Qt::Key_A || event->key() == Qt::Key_E ||
-             event->key() == Qt::Key_B || event->key() == Qt::Key_F || event->key() == Qt::Key_D ||
-             event->key() == Qt::Key_N || event->key() == Qt::Key_P ||
-             event->key() == Qt::Key_Space || event->key() == Qt::Key_X || event->key() == Qt::Key_G ||
-             event->key() == Qt::Key_K || event->key() == Qt::Key_W || event->key() == Qt::Key_Y ||
-             event->key() == Qt::Key_Underscore || event->key() == Qt::Key_Slash ||
-             event->key() == Qt::Key_S || event->key() == Qt::Key_R);
+        const auto modifiers = KeyboardModifierState::from_qt_modifiers(event->modifiers());
+        int key = event->key();
+        if (modifiers.command) return false;
+        if (register_callback || register_prefix || replacement || prompt_callback || goto_pending || quoted_count ||
+            argument || search || meta_pending || control_x_pending || key == Qt::Key_Escape) return true;
+        if (key == Qt::Key_F3 || key == Qt::Key_F4) return true;
+        if (modifiers.alt && (key == Qt::Key_Minus || (key >= Qt::Key_0 && key <= Qt::Key_9))) return true;
+        if (modifiers.control && !modifiers.alt && (key == Qt::Key_X || key == Qt::Key_U || key == Qt::Key_G || key == Qt::Key_Slash)) return true;
+        for (const auto &command : commands())
+            if (!command.prefix && !command.register_key && command.key == key && command.control == modifiers.control && command.meta == modifiers.alt) return true;
+        return false;
     }
 
     bool key_press_event(QKeyEvent *event) {
@@ -6180,7 +6197,7 @@ class EmacsEditor : public QObject {
             pending_edit = std::make_pair(pos, pos);
         }
         // An unknown Escape-prefixed command must not insert its final key.
-        return escape_prefix; // Otherwise let Qt handle typing and native shortcuts.
+        return meta || modifiers.control; // Let Qt handle ordinary typing and native Command shortcuts.
     }
 };
 

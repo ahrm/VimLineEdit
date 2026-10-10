@@ -2,6 +2,7 @@
 #include <QKeyEvent>
 #include <QLabel>
 #include <QClipboard>
+#include <QDialog>
 #include <QScrollBar>
 #include <iostream>
 #include <optional>
@@ -204,6 +205,21 @@ static void test_mouse_selection_and_wrapping() {
     check(multi.toPlainText().startsWith("hword"), "Mode switching should clear pending Emacs prefixes");
 }
 
+static void test_command_help() {
+    VimTextEdit widget;
+    widget.set_keybinding_mode(KeybindingMode::Emacs);
+    QKeyEvent prompt(QEvent::KeyPress, Qt::Key_X, Qt::AltModifier);
+    QApplication::sendEvent(&widget, &prompt);
+    QKeyEvent name(QEvent::KeyPress, Qt::Key_unknown, Qt::NoModifier, "describe-bindings");
+    QApplication::sendEvent(&widget, &name);
+    QKeyEvent enter(QEvent::KeyPress, Qt::Key_Return, Qt::NoModifier);
+    QApplication::sendEvent(&widget, &enter);
+    auto *help = widget.findChild<QDialog *>("emacsBindingsHelp");
+    auto *contents = help ? help->findChild<QTextEdit *>() : nullptr;
+    check(contents && contents->isReadOnly() && contents->toPlainText().contains("kill-rectangle"), "Emacs binding help should be scrollable and include rectangle commands");
+    if (help) help->close();
+}
+
 int main(int argc, char **argv) {
     QApplication application(argc, argv);
     test_modes<VimLineEdit>();
@@ -215,5 +231,6 @@ int main(int argc, char **argv) {
     test_host_commands<VimTextEdit>();
     test_open_command();
     test_mouse_selection_and_wrapping();
+    test_command_help();
     return failures ? 1 : 0;
 }
