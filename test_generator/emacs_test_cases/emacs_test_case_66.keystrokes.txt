@@ -1,0 +1,1 @@
+a1 b22 c3xquery-replace-regexp[0-9]+N!X

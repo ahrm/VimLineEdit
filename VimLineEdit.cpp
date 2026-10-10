@@ -4783,6 +4783,99 @@ class EmacsEditor : public QObject {
         replace(pos, pos, QString(target_column - column, ' '));
     }
 
+    struct NamedCommand { const char *name; int key; bool control, meta, prefix; };
+    static const std::vector<NamedCommand> &commands() {
+        static const std::vector<NamedCommand> bindings = {
+            {"forward-char", Qt::Key_F, true, false, false}, {"backward-char", Qt::Key_B, true, false, false},
+            {"forward-word", Qt::Key_F, false, true, false}, {"backward-word", Qt::Key_B, false, true, false},
+            {"beginning-of-line", Qt::Key_A, true, false, false}, {"end-of-line", Qt::Key_E, true, false, false},
+            {"beginning-of-buffer", Qt::Key_Less, false, true, false}, {"end-of-buffer", Qt::Key_Greater, false, true, false},
+            {"next-line", Qt::Key_N, true, false, false}, {"previous-line", Qt::Key_P, true, false, false},
+            {"kill-line", Qt::Key_K, true, false, false}, {"kill-word", Qt::Key_D, false, true, false},
+            {"backward-kill-word", Qt::Key_Backspace, false, true, false}, {"kill-region", Qt::Key_W, true, false, false},
+            {"kill-ring-save", Qt::Key_W, false, true, false}, {"yank", Qt::Key_Y, true, false, false},
+            {"mark-whole-buffer", Qt::Key_H, false, false, true}, {"mark-word", Qt::Key_At, false, true, false},
+            {"mark-paragraph", Qt::Key_H, false, true, false}, {"exchange-point-and-mark", Qt::Key_X, true, false, true},
+            {"upcase-word", Qt::Key_U, false, true, false}, {"downcase-word", Qt::Key_L, false, true, false},
+            {"capitalize-word", Qt::Key_C, false, true, false}, {"upcase-region", Qt::Key_U, true, false, true},
+            {"downcase-region", Qt::Key_L, true, false, true}, {"transpose-chars", Qt::Key_T, true, false, false},
+            {"transpose-words", Qt::Key_T, false, true, false}, {"transpose-lines", Qt::Key_T, true, false, true},
+            {"open-line", Qt::Key_O, true, false, false}, {"delete-indentation", Qt::Key_AsciiCircum, false, true, false},
+            {"delete-horizontal-space", Qt::Key_Backslash, false, true, false}, {"cycle-spacing", Qt::Key_Space, false, true, false},
+            {"delete-blank-lines", Qt::Key_O, true, false, true}, {"back-to-indentation", Qt::Key_M, false, true, false},
+            {"forward-sentence", Qt::Key_E, false, true, false}, {"backward-sentence", Qt::Key_A, false, true, false},
+            {"forward-paragraph", Qt::Key_BraceRight, false, true, false}, {"backward-paragraph", Qt::Key_BraceLeft, false, true, false},
+            {"kill-sentence", Qt::Key_K, false, true, false}, {"scroll-up-command", Qt::Key_V, true, false, false},
+            {"scroll-down-command", Qt::Key_V, false, true, false}, {"recenter-top-bottom", Qt::Key_L, true, false, false},
+            {"undo", Qt::Key_Underscore, true, false, false}, {"undo-redo", Qt::Key_Question, true, false, false},
+            {"repeat", Qt::Key_Z, false, false, true}, {"isearch-forward", Qt::Key_S, true, false, false},
+            {"isearch-backward", Qt::Key_R, true, false, false}, {"isearch-forward-regexp", Qt::Key_S, true, true, false},
+            {"isearch-backward-regexp", Qt::Key_R, true, true, false}, {"query-replace", Qt::Key_Percent, false, true, false},
+            {"query-replace-regexp", Qt::Key_Percent, true, true, false}, {"fill-paragraph", Qt::Key_Q, false, true, false},
+            {"set-fill-column", Qt::Key_F, false, false, true}, {"indent-region", Qt::Key_Backslash, true, true, false},
+            {"indent-for-tab-command", Qt::Key_Tab, false, false, false},
+        };
+        return bindings;
+    }
+    QStringList command_names() const {
+        QStringList names{"goto-line", "replace-string", "replace-regexp", "delete-trailing-whitespace", "describe-bindings"};
+        for (const auto &command : commands()) names << command.name;
+        names.sort();
+        return names;
+    }
+    void execute_named(const QString &name, std::optional<int> count) {
+        if (name == "goto-line") {
+            if (count) goto_line(QString::number(*count));
+            else request_text("Goto line: ", [this](const QString &input) { goto_line(input); });
+            return;
+        }
+        if (name == "replace-string" || name == "replace-regexp") { query_replace(name == "replace-regexp", true); return; }
+        if (name == "delete-trailing-whitespace") {
+            auto value = text();
+            int begin = mark_active ? std::min(mark, position()) : 0;
+            int end = mark_active ? std::max(mark, position()) : value.size();
+            for (int i = end; i > begin;) {
+                int stop = i;
+                while (i > begin && (value[i - 1] == ' ' || value[i - 1] == '\t')) --i;
+                if (i < stop && (stop == value.size() || value[stop] == '\n')) replace(i, stop, "");
+                --i;
+            }
+            return;
+        }
+        if (name == "describe-bindings") {
+            QStringList bindings;
+            for (const auto &command : commands()) {
+                QString key = QKeySequence(command.key).toString();
+                bindings << (QString(command.prefix ? "C-x " : "") + (command.control ? "C-" : "") + (command.meta ? "M-" : "") + key + "  " + command.name);
+            }
+            show_prompt(bindings.join("\n"));
+            return;
+        }
+        for (const auto &command : commands()) if (name == command.name) {
+            Qt::KeyboardModifiers modifiers = command.meta ? Qt::AltModifier : Qt::NoModifier;
+#ifdef Q_OS_MACOS
+            if (command.control) modifiers |= Qt::MetaModifier;
+#else
+            if (command.control) modifiers |= Qt::ControlModifier;
+#endif
+            QKeyEvent event(QEvent::KeyPress, command.key, modifiers);
+            control_x_pending = command.prefix;
+            argument = count;
+            key_press_event(&event);
+            return;
+        }
+        show_prompt("Unknown command: " + name);
+    }
+    void complete_command() {
+        QStringList matches;
+        for (const auto &name : command_names()) if (name.startsWith(prompt_input)) matches << name;
+        if (!matches.isEmpty()) {
+            QString common = matches.front();
+            for (const auto &match : matches) while (!match.startsWith(common)) common.chop(1);
+            prompt_input = common;
+        }
+        show_prompt(prompt_title + prompt_input + (matches.size() > 1 ? "\n" + matches.join("  ") : ""));
+    }
     void show_prompt(const QString &message) {
         auto *widget = static_cast<QWidget *>(parent());
         if (!search_label) {
@@ -4810,6 +4903,8 @@ class EmacsEditor : public QObject {
         if (modifiers.control && key == Qt::Key_G) {
             prompt_callback = nullptr;
             search_label->hide();
+        } else if (key == Qt::Key_Tab && prompt_title == "M-x ") {
+            complete_command();
         } else if (key == Qt::Key_Return || key == Qt::Key_Enter) {
             auto callback = std::move(prompt_callback);
             auto input = prompt_input;
@@ -5321,7 +5416,7 @@ class EmacsEditor : public QObject {
         if (event->key() == Qt::Key_Tab) return true;
         if (modifiers.alt && modifiers.control && (event->key() == Qt::Key_S || event->key() == Qt::Key_R || event->key() == Qt::Key_Percent || event->key() == Qt::Key_Backslash)) return true;
         if (modifiers.alt && !modifiers.control && !modifiers.command)
-            return event->key() == Qt::Key_Q || event->key() == Qt::Key_Percent || event->key() == Qt::Key_A || event->key() == Qt::Key_E || event->key() == Qt::Key_K ||
+            return event->key() == Qt::Key_X || event->key() == Qt::Key_Q || event->key() == Qt::Key_Percent || event->key() == Qt::Key_A || event->key() == Qt::Key_E || event->key() == Qt::Key_K ||
                    event->key() == Qt::Key_BraceLeft || event->key() == Qt::Key_BraceRight || event->key() == Qt::Key_G || event->key() == Qt::Key_V ||
                    event->key() == Qt::Key_M || event->key() == Qt::Key_AsciiCircum || event->key() == Qt::Key_Space || event->key() == Qt::Key_Backslash ||
                    event->key() == Qt::Key_U || event->key() == Qt::Key_L || event->key() == Qt::Key_C ||
@@ -5380,6 +5475,7 @@ class EmacsEditor : public QObject {
             meta_pending = control_x_pending = false;
             clear_argument();
             goto_pending = false;
+            if (search_label) search_label->hide();
             desired_column.reset();
             deactivate_mark();
             last_action = LastAction::Other;
@@ -5474,6 +5570,9 @@ class EmacsEditor : public QObject {
         }
         if (meta && !modifiers.control) {
             switch (key) {
+            case Qt::Key_X:
+                request_text("M-x ", [this, count, explicit_argument](const QString &name) { execute_named(name, explicit_argument ? std::optional<int>(count) : std::nullopt); });
+                return true;
             case Qt::Key_Q: fill_paragraph(); return true;
             case Qt::Key_Percent: query_replace(false); return true;
             case Qt::Key_A: move_to(sentence_target(-count)); return true;
