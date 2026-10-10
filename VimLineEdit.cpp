@@ -989,6 +989,7 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
         set_mode(VimMode::Insert);
         break;
     case VimLineEditCommand::EnterInsertModeAfter:{
+        push_history(current_state);
         set_mode(VimMode::Insert);
         int current_pos = get_cursor_position();
 
@@ -1005,10 +1006,12 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
         break;
     }
     case VimLineEditCommand::EnterInsertModeBegin:
+        push_history(current_state);
         set_mode(VimMode::Insert);
         new_pos = 0;
         break;
     case VimLineEditCommand::EnterInsertModeEnd:
+        push_history(current_state);
         set_mode(VimMode::Insert);
         new_pos = current_state.text.length();
         break;
@@ -1043,6 +1046,7 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
 
     }
     case VimLineEditCommand::EnterInsertModeBeginLine:
+        push_history(current_state);
         if (current_mode == VimMode::VisualBlock) {
             enter_visual_block_insert_mode(false);
             break;
@@ -1051,6 +1055,7 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
         new_pos = get_line_start_position(get_cursor_position());
         break;
     case VimLineEditCommand::EnterInsertModeEndLine:
+        push_history(current_state);
         if (current_mode == VimMode::VisualBlock) {
             enter_visual_block_insert_mode(true);
             break;
@@ -2047,44 +2052,43 @@ void VimEditor::delete_char(bool is_single) {
 }
 
 void VimEditor::push_history(HistoryState state) {
-    if (history.current_index >= 0 && history.current_index < history.states.size() - 1) {
-        // If we are in the middle of the history, remove all states after the current index
-        history.states.erase(history.states.begin() + history.current_index + 1,
-                             history.states.end());
+    // Entries after the cursor belong to an abandoned redo branch.
+    history.states.erase(history.states.begin() + (history.current_index + 1),
+                         history.states.end());
+    if (!history.states.empty() && history.states.back().text == state.text) {
+        return;
     }
-
-    history.states.push_back(state);
-
+    history.states.push_back(std::move(state));
     if (history.states.size() > 100) {
         history.states.pop_front();
     }
-
-    history.current_index = history.states.size() - 1;
+    history.current_index = static_cast<int>(history.states.size()) - 1;
 }
 
 void VimEditor::undo() {
-
-    if (history.current_index < 0) {
-        return;
+    while (history.current_index >= 0) {
+        HistoryState current{adapter->get_text(), get_cursor_position(), marks};
+        HistoryState &state = history.states[history.current_index--];
+        bool changed = state.text != current.text;
+        adapter->set_text(state.text);
+        set_cursor_position(state.cursor_position);
+        marks = state.marks;
+        state = std::move(current);
+        if (changed) break;
     }
-
-    history.current_index--;
-    const HistoryState &state = history.states[history.current_index + 1];
-    adapter->set_text(state.text);
-    set_cursor_position(state.cursor_position);
-    marks = state.marks;
 }
 
 void VimEditor::redo() {
-    if (history.current_index >= history.states.size() - 1) {
-        return;
+    while (history.current_index + 1 < static_cast<int>(history.states.size())) {
+        HistoryState current{adapter->get_text(), get_cursor_position(), marks};
+        HistoryState &state = history.states[++history.current_index];
+        bool changed = state.text != current.text;
+        adapter->set_text(state.text);
+        set_cursor_position(state.cursor_position);
+        marks = state.marks;
+        state = std::move(current);
+        if (changed) break;
     }
-
-    history.current_index++;
-    const HistoryState &state = history.states[history.current_index];
-    adapter->set_text(state.text);
-    set_cursor_position(state.cursor_position);
-    marks = state.marks;
 }
 
 bool equal_with_shift(const KeyboardModifierState &lhs, const KeyboardModifierState &rhs) {
@@ -4016,12 +4020,7 @@ void VimTextEdit::focusOutEvent(QFocusEvent* event){
 }
 
 void VimEditor::push_current_history_state() {
-
-    HistoryState state;
-    state.text = adapter->get_text();
-    state.cursor_position = get_cursor_position();
-    history.states.push_back(state);
-    history.current_index++;
+    push_history({adapter->get_text(), get_cursor_position(), marks});
 }
 void VimEditor::add_jump(int pos) {
     if (jump_index >= 0 && jump_index < static_cast<int>(jumps.size()) - 1) {
