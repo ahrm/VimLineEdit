@@ -369,6 +369,7 @@ class VimEditor {
     void handle_command(VimLineEditCommand cmd, std::optional<char> symbol = {});
     int calculate_find(FindState find_state, bool reverse = false) const;
     void set_mode(VimMode mode);
+    VimMode get_mode() const { return current_mode; }
     void goto_line(int line_number);
     void center_on_cursor();
     void goto_begin();
@@ -489,6 +490,7 @@ class VimTextEdit : public QTextEdit {
     void resizeEvent(QResizeEvent *event) override;
     void set_vim_enabled(bool enabled);
     bool get_vim_enabled();
+    QList<QTextCursor> selection_cursors() const;
     void set_line_numbers_visible(bool visible);
     bool get_line_numbers_visible() const;
     void focusInEvent(QFocusEvent* event) override;

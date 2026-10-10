@@ -856,6 +856,48 @@ bool VimEditor::requires_symbol(VimLineEditCommand cmd) {
 
 void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbol) {
 
+    // Vim mutations bypass QTextEdit's native read-only handling.
+    auto* text_edit = qobject_cast<QTextEdit*>(editor_widget);
+    if (text_edit && text_edit->isReadOnly()) {
+        switch (cmd) {
+        case VimLineEditCommand::EnterInsertMode:
+        case VimLineEditCommand::EnterInsertModeAfter:
+        case VimLineEditCommand::EnterInsertModeBegin:
+        case VimLineEditCommand::EnterInsertModeEnd:
+        case VimLineEditCommand::EnterInsertModeBeginLine:
+        case VimLineEditCommand::EnterInsertModeEndLine:
+        case VimLineEditCommand::DeleteChar:
+        case VimLineEditCommand::Delete:
+        case VimLineEditCommand::Change:
+        case VimLineEditCommand::DeleteToEndOfLine:
+        case VimLineEditCommand::ChangeToEndOfLine:
+        case VimLineEditCommand::PasteForward:
+        case VimLineEditCommand::PasteBackward:
+        case VimLineEditCommand::Undo:
+        case VimLineEditCommand::Redo:
+        case VimLineEditCommand::InsertLineBelow:
+        case VimLineEditCommand::InsertLineAbove:
+        case VimLineEditCommand::DeleteCharAndEnterInsertMode:
+        case VimLineEditCommand::DeleteCurrentLine:
+        case VimLineEditCommand::ChangeCurrentLine:
+        case VimLineEditCommand::DeletePreviousWord:
+        case VimLineEditCommand::IncrementNextNumberOnCurrentLine:
+        case VimLineEditCommand::DecrementNextNumberOnCurrentLine:
+        case VimLineEditCommand::ProgressiveIncrement:
+        case VimLineEditCommand::ProgressiveDecrement:
+        case VimLineEditCommand::InsertLastInsertModeText:
+        case VimLineEditCommand::Uppercasify:
+        case VimLineEditCommand::SwapCaseCharacterUnderCursor:
+        case VimLineEditCommand::SwapCaseSelection:
+        case VimLineEditCommand::ToggleComment:
+        case VimLineEditCommand::AutoComplete:
+            current_command_repeat_number.clear();
+            return;
+        default:
+            break;
+        }
+    }
+
     // don't handle the 0 key while we are typing a repeat number
     if (cmd == VimLineEditCommand::MoveToBeginningOfLine && current_command_repeat_number.size() > 1) {
         return;
@@ -3450,6 +3492,9 @@ void QLineEditAdapter::set_extra_selections(const QList<QTextEdit::ExtraSelectio
 }
 
 void QTextEditAdapter::set_text(QString text) {
+    if (text_edit->isReadOnly()) {
+        return;
+    }
     QScrollBar *vertical_scroll_bar = text_edit->verticalScrollBar();
     QScrollBar *horizontal_scroll_bar = text_edit->horizontalScrollBar();
     int vertical_scroll_value = vertical_scroll_bar->value();
@@ -3671,6 +3716,23 @@ bool VimTextEdit::eventFilter(QObject *watched, QEvent *event) {
         return true;
     }
     return QTextEdit::eventFilter(watched, event);
+}
+
+QList<QTextCursor> VimTextEdit::selection_cursors() const {
+    if (!vim_enabled) {
+        return {textCursor()};
+    }
+    const auto mode = editor->get_mode();
+    if (mode != VimMode::Visual && mode != VimMode::VisualLine && mode != VimMode::VisualBlock) {
+        return {};
+    }
+    QList<QTextCursor> cursors;
+    for (const auto& selection : extraSelections()) {
+        if (selection.format.property(QTextFormat::UserProperty).toInt() != SEARCH_HIGHLIGHT_PROPERTY_INDEX) {
+            cursors.append(selection.cursor);
+        }
+    }
+    return cursors;
 }
 
 void VimTextEdit::keyPressEvent(QKeyEvent *event) {
