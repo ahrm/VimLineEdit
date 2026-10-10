@@ -528,6 +528,7 @@ void VimEditor::add_vim_keybindings() {
         KeyBinding{{KeyChord{"t", {}}}, VimLineEditCommand::FindForwardTo},
         KeyBinding{{KeyChord{"T", {}}}, VimLineEditCommand::FindBackwardTo},
         KeyBinding{{KeyChord{"x", {}}}, VimLineEditCommand::DeleteChar},
+        KeyBinding{{KeyChord{"r", {}}}, VimLineEditCommand::ReplaceChar},
         KeyBinding{{KeyChord{"D", {}}}, VimLineEditCommand::DeleteToEndOfLine},
         KeyBinding{{KeyChord{"C", {}}}, VimLineEditCommand::ChangeToEndOfLine},
         KeyBinding{{KeyChord{"d", {}}}, VimLineEditCommand::Delete},
@@ -849,6 +850,7 @@ bool is_jump_command(VimLineEditCommand cmd) {
 
 bool VimEditor::requires_symbol(VimLineEditCommand cmd) {
     switch (cmd) {
+    case VimLineEditCommand::ReplaceChar:
     case VimLineEditCommand::FindForward:
     case VimLineEditCommand::FindBackward:
     case VimLineEditCommand::FindForwardTo:
@@ -877,6 +879,7 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
         case VimLineEditCommand::EnterInsertModeEnd:
         case VimLineEditCommand::EnterInsertModeBeginLine:
         case VimLineEditCommand::EnterInsertModeEndLine:
+        case VimLineEditCommand::ReplaceChar:
         case VimLineEditCommand::DeleteChar:
         case VimLineEditCommand::Delete:
         case VimLineEditCommand::Change:
@@ -1441,6 +1444,14 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
             new_pos = next;
         }
         break;
+    case VimLineEditCommand::ReplaceChar: {
+        int end = get_line_end_position(old_pos);
+        if (!symbol || num_repeats > end - old_pos) break;
+        push_history(current_state);
+        insert_text(QString(num_repeats, QChar(*symbol)), old_pos, old_pos + num_repeats);
+        new_pos = old_pos + num_repeats - 1;
+        break;
+    }
     case VimLineEditCommand::DeleteCharAndEnterInsertMode:
     case VimLineEditCommand::DeleteChar:
         push_history(current_state);
