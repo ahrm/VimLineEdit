@@ -4537,6 +4537,10 @@ class EmacsEditor : public QObject {
     QTextEdit *multi;
     bool meta_pending = false;
     std::optional<int> desired_column;
+    int mark = -1;
+    bool mark_active = false;
+    bool control_x_pending = false;
+    QString observed_text;
 
     QString text() const { return line ? line->text() : multi->toPlainText(); }
     int position() const { return line ? line->cursorPosition() : multi->textCursor().position(); }
@@ -4607,12 +4611,22 @@ class EmacsEditor : public QObject {
     }
     void move_to(int pos) {
         pos = std::max(0, std::min(pos, static_cast<int>(text().size())));
-        if (line) line->setCursorPosition(pos);
+        if (line) {
+            if (mark_active && mark >= 0 && mark != pos) line->setSelection(mark, pos - mark);
+            else line->setCursorPosition(pos);
+        }
         else {
             auto cursor = multi->textCursor();
-            cursor.setPosition(pos);
+            if (mark_active && mark >= 0) {
+                cursor.setPosition(mark);
+                cursor.setPosition(pos, QTextCursor::KeepAnchor);
+            } else cursor.setPosition(pos);
             multi->setTextCursor(cursor);
         }
+    }
+    void deactivate_mark() {
+        mark_active = false;
+        move_to(position());
     }
     void replace(int begin, int end, const QString &replacement) {
         if (read_only()) return;
@@ -4628,28 +4642,47 @@ class EmacsEditor : public QObject {
             cursor.endEditBlock();
             multi->setTextCursor(cursor);
         }
+        deactivate_mark();
     }
 
   public:
     explicit EmacsEditor(QWidget *widget) : QObject(widget),
-        line(qobject_cast<QLineEdit *>(widget)), multi(qobject_cast<QTextEdit *>(widget)) {}
+        line(qobject_cast<QLineEdit *>(widget)), multi(qobject_cast<QTextEdit *>(widget)), observed_text(text()) {
+        auto changed = [this]() {
+            const auto current = text();
+            int begin = 0;
+            while (begin < observed_text.size() && begin < current.size() && observed_text[begin] == current[begin]) ++begin;
+            int old_end = observed_text.size(), new_end = current.size();
+            while (old_end > begin && new_end > begin && observed_text[old_end - 1] == current[new_end - 1]) {
+                --old_end; --new_end;
+            }
+            if (mark > begin) mark = mark <= old_end ? begin : mark + new_end - old_end;
+            observed_text = current;
+        };
+        if (line) connect(line, &QLineEdit::textChanged, this, changed);
+        else connect(multi, &QTextEdit::textChanged, this, changed);
+    }
 
     void reset() {
         meta_pending = false;
         desired_column.reset();
+        control_x_pending = false;
+        mark = -1;
+        mark_active = false;
         move_to(position());
     }
 
     bool handles_shortcut(QKeyEvent *event) const {
         auto modifiers = KeyboardModifierState::from_qt_modifiers(event->modifiers());
-        if (meta_pending || event->key() == Qt::Key_Escape) return true;
+        if (meta_pending || control_x_pending || event->key() == Qt::Key_Escape) return true;
         if (modifiers.alt && !modifiers.control && !modifiers.command)
             return event->key() == Qt::Key_B || event->key() == Qt::Key_F ||
                    event->key() == Qt::Key_Less || event->key() == Qt::Key_Greater;
         return modifiers.control && !modifiers.alt && !modifiers.command &&
             (event->key() == Qt::Key_A || event->key() == Qt::Key_E ||
              event->key() == Qt::Key_B || event->key() == Qt::Key_F || event->key() == Qt::Key_D ||
-             event->key() == Qt::Key_N || event->key() == Qt::Key_P);
+             event->key() == Qt::Key_N || event->key() == Qt::Key_P ||
+             event->key() == Qt::Key_Space || event->key() == Qt::Key_X || event->key() == Qt::Key_G);
     }
 
     bool key_press_event(QKeyEvent *event) {
@@ -4657,6 +4690,12 @@ class EmacsEditor : public QObject {
         if (key == Qt::Key_Control || key == Qt::Key_Shift || key == Qt::Key_Alt || key == Qt::Key_Meta)
             return false;
         auto modifiers = KeyboardModifierState::from_qt_modifiers(event->modifiers());
+        if (modifiers.control && !modifiers.command && key == Qt::Key_G) {
+            meta_pending = control_x_pending = false;
+            desired_column.reset();
+            deactivate_mark();
+            return true;
+        }
         if (key == Qt::Key_Escape) { meta_pending = true; return true; }
         const bool meta = modifiers.alt || meta_pending;
         meta_pending = false;
@@ -4665,6 +4704,27 @@ class EmacsEditor : public QObject {
         if (modifiers.command) return false;
         const auto value = text();
         const int pos = position();
+        if (mark_active && !modifiers.control && !meta) {
+            switch (key) {
+            case Qt::Key_Left: move_to(previous_character(value, pos)); return true;
+            case Qt::Key_Right: move_to(next_character(value, pos)); return true;
+            case Qt::Key_Up: move_vertical(false); return true;
+            case Qt::Key_Down: move_vertical(true); return true;
+            case Qt::Key_Home: move_to(line_start(value, pos)); return true;
+            case Qt::Key_End: move_to(line_end(value, pos)); return true;
+            default: break;
+            }
+        }
+        if (control_x_pending) {
+            control_x_pending = false;
+            if (modifiers.control && !meta && key == Qt::Key_X && mark >= 0) {
+                const int target = mark;
+                mark = pos;
+                mark_active = true;
+                move_to(target);
+            }
+            return true;
+        }
         if (meta && !modifiers.control) {
             switch (key) {
             case Qt::Key_B: move_to(word_target(false)); return true;
@@ -4684,8 +4744,19 @@ class EmacsEditor : public QObject {
             case Qt::Key_D: replace(pos, next_character(value, pos), ""); return true;
             case Qt::Key_N: move_vertical(true); return true;
             case Qt::Key_P: move_vertical(false); return true;
+            case Qt::Key_Space:
+                mark_active = !(mark_active && mark == pos);
+                mark = pos;
+                move_to(pos);
+                return true;
+            case Qt::Key_X: control_x_pending = true; return true;
             default: break;
             }
+        }
+        if (!modifiers.control && !meta &&
+            (!event->text().isEmpty() || key == Qt::Key_Backspace || key == Qt::Key_Delete)) {
+            // Fundamental-mode insertion leaves the region's text intact.
+            deactivate_mark();
         }
         return false; // Ordinary typing and native shortcuts stay with Qt.
     }

@@ -25,6 +25,8 @@ static QString contents(const VimLineEdit &widget) { return widget.text(); }
 static QString contents(const VimTextEdit &widget) { return widget.toPlainText(); }
 static int position(const VimLineEdit &widget) { return widget.cursorPosition(); }
 static int position(const VimTextEdit &widget) { return widget.textCursor().position(); }
+static QString selection(const VimLineEdit &widget) { return widget.selectedText(); }
+static QString selection(const VimTextEdit &widget) { return widget.textCursor().selectedText(); }
 
 template<class Widget> static void test_modes() {
     Widget widget;
@@ -40,6 +42,11 @@ template<class Widget> static void test_modes() {
     check(contents(widget) == "abc", "Read-only Emacs deletion changed text");
     control(widget, Qt::Key_F);
     check(position(widget) == 1, "Read-only navigation should still work");
+    control(widget, Qt::Key_Space);
+    control(widget, Qt::Key_F);
+    check(selection(widget) == "b", "Mark should extend a region during movement");
+    control(widget, Qt::Key_G);
+    check(selection(widget).isEmpty() && position(widget) == 2, "C-g should deactivate the region without moving point");
     QKeyEvent shortcut(QEvent::ShortcutOverride, Qt::Key_A, control_modifier());
     shortcut.ignore();
     QApplication::sendEvent(&widget, &shortcut);
