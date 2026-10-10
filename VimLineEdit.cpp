@@ -4968,6 +4968,23 @@ class EmacsEditor : public QObject {
         replace(pos, pos, QString(target_column - column, ' '));
     }
 
+    void host_command(int key) {
+        auto *single = qobject_cast<VimLineEdit *>(line);
+        auto *multiple = qobject_cast<VimTextEdit *>(multi);
+        if (key == Qt::Key_S) {
+            if (single) emit single->writeCommand();
+            else emit multiple->writeCommand();
+        } else if (key == Qt::Key_C) {
+            if (single) emit single->quitCommand();
+            else emit multiple->quitCommand();
+        } else if (key == Qt::Key_F && multiple) emit multiple->openFile();
+        else if (key == Qt::Key_Semicolon && !read_only()) {
+            int begin = mark_active ? std::min(mark, position()) : line_start(text(), position());
+            int end = mark_active ? std::max(mark, position()) : line_end(text(), position());
+            if (single) emit single->commentRequested(begin, end);
+            else emit multiple->commentRequested(begin, end);
+        }
+    }
     struct NamedCommand { const char *name; int key; bool control, meta, prefix; };
     static const std::vector<NamedCommand> &commands() {
         static const std::vector<NamedCommand> bindings = {
@@ -5004,6 +5021,9 @@ class EmacsEditor : public QObject {
             {"backward-up-list", Qt::Key_U, true, true, false}, {"down-list", Qt::Key_D, true, true, false},
             {"kill-sexp", Qt::Key_K, true, true, false}, {"mark-sexp", Qt::Key_Space, true, true, false},
             {"dabbrev-expand", Qt::Key_Slash, false, true, false}, {"completion-at-point", Qt::Key_Tab, false, true, false},
+            {"save-buffer", Qt::Key_S, true, false, true}, {"find-file", Qt::Key_F, true, false, true},
+            {"save-buffers-kill-terminal", Qt::Key_C, true, false, true}, {"kill-buffer", Qt::Key_K, false, false, true},
+            {"comment-dwim", Qt::Key_Semicolon, false, true, false},
             {"start-kbd-macro", Qt::Key_ParenLeft, false, false, true},
             {"end-kbd-macro", Qt::Key_ParenRight, false, false, true},
             {"call-last-kbd-macro", Qt::Key_E, false, false, true},
@@ -5729,7 +5749,7 @@ class EmacsEditor : public QObject {
             event->key() == Qt::Key_F || event->key() == Qt::Key_B || event->key() == Qt::Key_N || event->key() == Qt::Key_P ||
             event->key() == Qt::Key_U || event->key() == Qt::Key_D || event->key() == Qt::Key_K || event->key() == Qt::Key_Space || event->key() == Qt::Key_At)) return true;
         if (modifiers.alt && !modifiers.control && !modifiers.command)
-            return event->key() == Qt::Key_Slash || event->key() == Qt::Key_X || event->key() == Qt::Key_Q || event->key() == Qt::Key_Percent || event->key() == Qt::Key_A || event->key() == Qt::Key_E || event->key() == Qt::Key_K ||
+            return event->key() == Qt::Key_Semicolon || event->key() == Qt::Key_Slash || event->key() == Qt::Key_X || event->key() == Qt::Key_Q || event->key() == Qt::Key_Percent || event->key() == Qt::Key_A || event->key() == Qt::Key_E || event->key() == Qt::Key_K ||
                    event->key() == Qt::Key_BraceLeft || event->key() == Qt::Key_BraceRight || event->key() == Qt::Key_G || event->key() == Qt::Key_V ||
                    event->key() == Qt::Key_M || event->key() == Qt::Key_AsciiCircum || event->key() == Qt::Key_Space || event->key() == Qt::Key_Backslash ||
                    event->key() == Qt::Key_U || event->key() == Qt::Key_L || event->key() == Qt::Key_C ||
@@ -5871,6 +5891,8 @@ class EmacsEditor : public QObject {
         }
         if (control_x_pending) {
             control_x_pending = false;
+            if (modifiers.control && (key == Qt::Key_S || key == Qt::Key_F || key == Qt::Key_C)) { host_command(key); return true; }
+            if (!modifiers.control && key == Qt::Key_K) { host_command(Qt::Key_C); return true; }
             if (!modifiers.control && key == Qt::Key_R) { register_prefix = true; register_argument = explicit_argument; return true; }
             if (!modifiers.control && key == Qt::Key_Space) {
                 rectangle_active = !rectangle_active;
@@ -5919,6 +5941,7 @@ class EmacsEditor : public QObject {
         }
         if (meta && !modifiers.control) {
             switch (key) {
+            case Qt::Key_Semicolon: host_command(key); return true;
             case Qt::Key_Slash: complete_word(previous_action == LastAction::Completion, false); return true;
             case Qt::Key_Tab: complete_word(false, true); return true;
             case Qt::Key_X:

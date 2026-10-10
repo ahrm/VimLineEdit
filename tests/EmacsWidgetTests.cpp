@@ -143,6 +143,34 @@ static void test_completion_hook() {
     check(widget.requested == "comp" && widget.toPlainText() == "completed", "M-TAB should use the host completion hook");
 }
 
+template<class Widget> static void test_host_commands() {
+    Widget widget;
+    widget.set_keybinding_mode(KeybindingMode::Emacs);
+    int saves = 0, quits = 0;
+    QObject::connect(&widget, &Widget::writeCommand, [&]() { ++saves; });
+    QObject::connect(&widget, &Widget::quitCommand, [&]() { ++quits; });
+    control(widget, Qt::Key_X); control(widget, Qt::Key_S);
+    control(widget, Qt::Key_X); control(widget, Qt::Key_C);
+    check(saves == 1 && quits == 1, "Emacs file commands should emit existing host signals");
+    control(widget, Qt::Key_X); control(widget, Qt::Key_G);
+    control(widget, Qt::Key_S);
+    check(saves == 1, "Cancelling C-x must prevent a later accidental save");
+}
+static void test_open_command() {
+    VimTextEdit widget;
+    widget.set_keybinding_mode(KeybindingMode::Emacs);
+    int opens = 0;
+    int comment_begin = -1, comment_end = -1;
+    QObject::connect(&widget, &VimTextEdit::commentRequested, [&](int begin, int end) { comment_begin = begin; comment_end = end; });
+    QObject::connect(&widget, &VimTextEdit::openFile, [&]() { ++opens; });
+    control(widget, Qt::Key_X); control(widget, Qt::Key_F);
+    check(opens == 1, "C-x C-f should request an open through the host");
+    widget.setPlainText("line one\nline two");
+    QKeyEvent comment(QEvent::KeyPress, Qt::Key_Semicolon, Qt::AltModifier);
+    QApplication::sendEvent(&widget, &comment);
+    check(comment_begin == 0 && comment_end == 8, "M-; should pass the current line to the host comment hook");
+}
+
 int main(int argc, char **argv) {
     QApplication application(argc, argv);
     test_modes<VimLineEdit>();
@@ -150,5 +178,8 @@ int main(int argc, char **argv) {
     test_scrolling();
     test_shared_kill_ring();
     test_completion_hook();
+    test_host_commands<VimLineEdit>();
+    test_host_commands<VimTextEdit>();
+    test_open_command();
     return failures ? 1 : 0;
 }

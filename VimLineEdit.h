@@ -511,6 +511,8 @@ signals:
     void quitCommand();
     void forceQuitCommand();
     void writeCommand();
+    // Optional host hook; offsets delimit the active region or current line.
+    void commentRequested(int begin, int end);
 };
 
 class LineNumberArea : public QWidget {
@@ -567,6 +569,8 @@ signals:
     void quitCommand();
     void forceQuitCommand();
     void writeCommand();
+    // Optional host hook; offsets delimit the active region or current line.
+    void commentRequested(int begin, int end);
     void openFile();
     void focusGained();
     void focusLost();
