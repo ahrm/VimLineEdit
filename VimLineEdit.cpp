@@ -1254,7 +1254,7 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
         if (word_under_cursor.size() > 0){
             SearchState new_search_state;
             new_search_state.direction = cmd == VimLineEditCommand::SearchTextUnderCursor ?  FindDirection::Forward : FindDirection::Backward;
-            new_search_state.query = word_under_cursor;
+            new_search_state.query = "\\<" + QRegularExpression::escape(word_under_cursor) + "\\>";
             last_search_state = new_search_state;
             handle_search();
         }
@@ -2426,7 +2426,7 @@ QString VimEditor::get_word_under_cursor_bounds(int &start, int &end){
     }
 
     // include the following spaces
-    if (action_waiting_for_motion->surrounding_scope == SurroundingScope::Around) {
+    if (action_waiting_for_motion && action_waiting_for_motion->surrounding_scope == SurroundingScope::Around) {
         while (end < current_text.length() && current_text[end].isSpace()) {
             end++;
         }
