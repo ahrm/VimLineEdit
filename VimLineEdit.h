@@ -43,6 +43,8 @@ enum class VimLineEditCommand {
     MoveToEndOfWord,
     MoveToEndOfWordWithSymbols,
     MoveWordBackward,
+    MoveToPreviousWordEnd,
+    MoveToPreviousWORDEnd,
     MoveWordBackwardWithSymbols,
     DeleteChar,
     DeleteCharBackward,

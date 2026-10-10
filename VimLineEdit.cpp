@@ -649,6 +649,8 @@ void VimEditor::add_vim_keybindings() {
         KeyBinding{{KeyChord{"e", {}}}, VimLineEditCommand::MoveToEndOfWord},
         KeyBinding{{KeyChord{"E", {}}}, VimLineEditCommand::MoveToEndOfWordWithSymbols},
         KeyBinding{{KeyChord{"b", {}}}, VimLineEditCommand::MoveWordBackward},
+        KeyBinding{{KeyChord{"g", {}}, KeyChord{"e", {}}}, VimLineEditCommand::MoveToPreviousWordEnd},
+        KeyBinding{{KeyChord{"g", {}}, KeyChord{"E", {}}}, VimLineEditCommand::MoveToPreviousWORDEnd},
         KeyBinding{{KeyChord{"B", {}}}, VimLineEditCommand::MoveWordBackwardWithSymbols},
         KeyBinding{{KeyChord{"t", {}}}, VimLineEditCommand::FindForwardTo},
         KeyBinding{{KeyChord{"T", {}}}, VimLineEditCommand::FindBackwardTo},
@@ -1626,6 +1628,26 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<QChar> symb
     case VimLineEditCommand::Redo:
         for (int i = 0; i < num_repeats && history.current_index + 1 < static_cast<int>(history.states.size()); ++i) redo();
         break;
+    case VimLineEditCommand::MoveToPreviousWordEnd:
+    case VimLineEditCommand::MoveToPreviousWORDEnd: {
+        const QString &text = current_state.text;
+        auto category = [&](int pos) {
+            if (pos >= text.size() || text[pos].isSpace()) return 0;
+            return cmd == VimLineEditCommand::MoveToPreviousWORDEnd || text[pos].isLetterOrNumber() || text[pos] == '_' ? 1 : 2;
+        };
+        new_pos = old_pos;
+        for (int i = 0; i < num_repeats && new_pos > 0; ++i) {
+            int type = category(new_pos);
+            --new_pos;
+            while (new_pos > 0 && type != 0 && category(new_pos) == type) --new_pos;
+            while (new_pos > 0 && text[new_pos].isSpace()) --new_pos;
+        }
+        if (action_waiting_for_motion && action_waiting_for_motion->kind != ActionWaitingForMotionKind::Visual) {
+            handle_action_waiting_for_motion(new_pos, old_pos, 1);
+            new_pos = -1;
+        }
+        break;
+    }
     case VimLineEditCommand::MoveWordBackward:
         new_pos = old_pos;
         for (int i = 0; i < num_repeats; ++i) {
