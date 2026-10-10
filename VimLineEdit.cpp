@@ -328,18 +328,25 @@ bool VimEditor::key_press_event(QKeyEvent* event, bool& should_propagate) {
             else {
                 switch (event->key()) {
                 case Qt::Key_ParenLeft:
+                case Qt::Key_ParenRight:
                     action_waiting_for_motion->surrounding_kind = SurroundingKind::Parentheses;
                     break;
                 case Qt::Key_BraceLeft:
+                case Qt::Key_BraceRight:
                     action_waiting_for_motion->surrounding_kind = SurroundingKind::Braces;
                     break;
                 case Qt::Key_BracketLeft:
+                case Qt::Key_BracketRight:
                     action_waiting_for_motion->surrounding_kind = SurroundingKind::Brackets;
                     break;
                 case Qt::Key_Less:
+                case Qt::Key_Greater:
                     action_waiting_for_motion->surrounding_kind = SurroundingKind::AngleBrackets;
                     break;
                 case Qt::Key_QuoteLeft:
+                    action_waiting_for_motion->surrounding_kind = SurroundingKind::Backticks;
+                    break;
+                case Qt::Key_Apostrophe:
                     action_waiting_for_motion->surrounding_kind = SurroundingKind::SingleQuotes;
                     break;
                 case Qt::Key_QuoteDbl:
