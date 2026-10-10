@@ -4557,6 +4557,9 @@ class EmacsEditor : public QObject {
     std::deque<int> mark_ring;
     bool mark_active = false;
     bool control_x_pending = false;
+    int quoted_count = 0;
+    int spacing_begin = -1, spacing_end = -1, spacing_step = 0;
+    QString original_spacing;
     QString observed_text;
     std::optional<std::pair<int, int>> pending_edit;
     enum class LastAction { Other, Kill, Yank };
@@ -4704,6 +4707,47 @@ class EmacsEditor : public QObject {
         }
         pending_edit.reset();
         deactivate_mark();
+    }
+    void horizontal_space(bool cycle, int count) {
+        const auto value = text();
+        int pos = position(), begin = pos, end = pos;
+        while (begin > 0 && (value[begin - 1] == ' ' || value[begin - 1] == '\t')) --begin;
+        while (end < value.size() && (value[end] == ' ' || value[end] == '\t')) ++end;
+        QString replacement;
+        if (cycle) {
+            if (spacing_begin != begin || spacing_end != end) {
+                original_spacing = value.mid(begin, end - begin);
+                spacing_step = 0;
+            }
+            replacement = spacing_step == 0 ? QString(std::max(0, count), ' ') : spacing_step == 1 ? "" : original_spacing;
+            spacing_step = (spacing_step + 1) % 3;
+        }
+        replace(begin, end, replacement);
+        spacing_begin = begin; spacing_end = begin + replacement.size();
+    }
+    void join_line(bool following) {
+        const auto value = text();
+        int begin = following ? line_end(value, position()) : line_start(value, position()) - 1;
+        if (begin < 0 || begin >= value.size()) return;
+        int end = begin + 1;
+        while (begin > 0 && (value[begin - 1] == ' ' || value[begin - 1] == '\t')) --begin;
+        while (end < value.size() && (value[end] == ' ' || value[end] == '\t')) ++end;
+        QString separator = begin > 0 && end < value.size() && value[begin - 1] != '(' && value[end] != ')' ? " " : "";
+        replace(begin, end, separator);
+        move_to(begin);
+    }
+    void delete_blank_lines() {
+        const auto value = text();
+        auto blank = [&](int p) { return value.mid(p, line_end(value, p) - p).trimmed().isEmpty(); };
+        int begin = line_start(value, position()), end = begin;
+        bool on_blank = blank(begin);
+        if (on_blank) {
+            while (begin > 0 && blank(line_start(value, begin - 1))) begin = line_start(value, begin - 1);
+        } else begin = end = std::min(int(value.size()), line_end(value, begin) + 1);
+        while (end < value.size() && blank(end)) end = std::min(int(value.size()), line_end(value, end) + 1);
+        int first_end = std::min(int(value.size()), line_end(value, begin) + 1);
+        replace(begin, end, on_blank && end > first_end ? "\n" : "");
+        move_to(on_blank ? begin : std::min(position(), begin));
     }
     void change_case(int key, int count, bool region = false) {
         if (region && mark < 0) return;
@@ -4928,6 +4972,7 @@ class EmacsEditor : public QObject {
         clear_argument();
         desired_column.reset();
         control_x_pending = false;
+        quoted_count = 0;
         mark = -1;
         mark_ring.clear();
         mark_active = false;
@@ -4939,9 +4984,10 @@ class EmacsEditor : public QObject {
 
     bool handles_shortcut(QKeyEvent *event) const {
         auto modifiers = KeyboardModifierState::from_qt_modifiers(event->modifiers());
-        if (argument || search || meta_pending || control_x_pending || event->key() == Qt::Key_Escape) return true;
+        if (quoted_count || argument || search || meta_pending || control_x_pending || event->key() == Qt::Key_Escape) return true;
         if (modifiers.alt && !modifiers.control && !modifiers.command)
-            return event->key() == Qt::Key_U || event->key() == Qt::Key_L || event->key() == Qt::Key_C ||
+            return event->key() == Qt::Key_M || event->key() == Qt::Key_AsciiCircum || event->key() == Qt::Key_Space || event->key() == Qt::Key_Backslash ||
+                   event->key() == Qt::Key_U || event->key() == Qt::Key_L || event->key() == Qt::Key_C ||
                    event->key() == Qt::Key_T || event->key() == Qt::Key_At || event->key() == Qt::Key_H ||
                    event->key() == Qt::Key_B || event->key() == Qt::Key_F ||
                    event->key() == Qt::Key_Less || event->key() == Qt::Key_Greater ||
@@ -4949,7 +4995,7 @@ class EmacsEditor : public QObject {
                    event->key() == Qt::Key_W || event->key() == Qt::Key_Y ||
                    event->key() == Qt::Key_Minus || (event->key() >= Qt::Key_0 && event->key() <= Qt::Key_9);
         return modifiers.control && !modifiers.alt && !modifiers.command &&
-            (event->key() == Qt::Key_T || event->key() == Qt::Key_U || event->key() == Qt::Key_A || event->key() == Qt::Key_E ||
+            (event->key() == Qt::Key_O || event->key() == Qt::Key_Q || event->key() == Qt::Key_T || event->key() == Qt::Key_U || event->key() == Qt::Key_A || event->key() == Qt::Key_E ||
              event->key() == Qt::Key_B || event->key() == Qt::Key_F || event->key() == Qt::Key_D ||
              event->key() == Qt::Key_N || event->key() == Qt::Key_P ||
              event->key() == Qt::Key_Space || event->key() == Qt::Key_X || event->key() == Qt::Key_G ||
@@ -4964,6 +5010,16 @@ class EmacsEditor : public QObject {
         if (key == Qt::Key_Control || key == Qt::Key_Shift || key == Qt::Key_Alt || key == Qt::Key_Meta)
             return false;
         auto modifiers = KeyboardModifierState::from_qt_modifiers(event->modifiers());
+        if (quoted_count) {
+            QString inserted = event->text();
+            if (modifiers.control && key >= Qt::Key_A && key <= Qt::Key_Z) inserted = QChar(key - Qt::Key_A + 1);
+            else if (key == Qt::Key_Tab) inserted = "\t";
+            else if (key == Qt::Key_Return) inserted = "\n";
+            else if (key == Qt::Key_Escape) inserted = QChar(27);
+            replace(position(), position(), inserted.repeated(quoted_count));
+            quoted_count = 0;
+            return true;
+        }
         if (search && search_key(event, modifiers)) return true;
         if (modifiers.control && !modifiers.command && key == Qt::Key_G) {
             meta_pending = control_x_pending = false;
@@ -5004,6 +5060,7 @@ class EmacsEditor : public QObject {
         clear_argument();
         const LastAction previous_action = last_action;
         last_action = LastAction::Other;
+        if (!(meta && key == Qt::Key_Space)) spacing_begin = -1;
         const bool vertical = modifiers.control && !meta && (key == Qt::Key_N || key == Qt::Key_P);
         if (!vertical) desired_column.reset();
         if (modifiers.command) return false;
@@ -5022,6 +5079,7 @@ class EmacsEditor : public QObject {
         }
         if (control_x_pending) {
             control_x_pending = false;
+            if (modifiers.control && key == Qt::Key_O) { delete_blank_lines(); return true; }
             if (modifiers.control && key == Qt::Key_T) { transpose(2, count); return true; }
             if (modifiers.control && (key == Qt::Key_U || key == Qt::Key_L)) { change_case(key, count, true); return true; }
             if (!modifiers.control && key == Qt::Key_H) {
@@ -5039,6 +5097,14 @@ class EmacsEditor : public QObject {
         }
         if (meta && !modifiers.control) {
             switch (key) {
+            case Qt::Key_M: {
+                int target = line_start(value, pos);
+                while (target < value.size() && (value[target] == ' ' || value[target] == '\t')) ++target;
+                move_to(target); return true;
+            }
+            case Qt::Key_AsciiCircum: join_line(explicit_argument); return true;
+            case Qt::Key_Space: horizontal_space(true, count); return true;
+            case Qt::Key_Backslash: horizontal_space(false, count); return true;
             case Qt::Key_U:
             case Qt::Key_L:
             case Qt::Key_C: change_case(key, count); return true;
@@ -5081,6 +5147,10 @@ class EmacsEditor : public QObject {
         }
         if (modifiers.control && !meta) {
             switch (key) {
+            case Qt::Key_Q: quoted_count = std::max(1, count); return true;
+            case Qt::Key_O:
+                if (multi) { replace(pos, pos, QString(std::max(0, count), '\n')); move_to(pos); }
+                return true;
             case Qt::Key_T: transpose(0, count); return true;
             case Qt::Key_A:
                 move_to(line_start(value, pos)); return true;
