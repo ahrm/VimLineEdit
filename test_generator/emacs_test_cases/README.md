@@ -12,7 +12,7 @@ preserve all whitespace, including final newlines.
 Control keys use their actual bytes (`C-a` = `0x01`, `C-SPC` = `0x00`,
 `C-_`/undo = `0x1f`). Meta uses an Escape prefix (`M-f` = `0x1b` then `f`).
 Return is CR or LF; Backspace is DEL (`0x7f`). The decoder also accepts Vim's
-three-byte codes for Backspace, arrows, Home, End, and Delete. Unsupported
+three-byte codes for Backspace, arrows, Home, End, Delete, F3, and F4. Unsupported
 special codes, invalid UTF-8, and incomplete Meta prefixes fail explicitly.
 Don't append a newline to a keystroke file unless it is part of the input.
 
@@ -36,6 +36,9 @@ Transient Mark mode enabled, electric indentation and clipboard sharing
 disabled, and a fresh kill ring. Consecutive typed characters share an undo
 unit; other commands create undo boundaries. Only use trusted editing input,
 not file/process/exit commands. Finish searches with Return or `C-g`.
+Macro-recording fixtures use the normal Emacs command loop in a POSIX pseudo-terminal
+instead, since batch macro replay cannot itself record a macro. This path requires
+terminal access; reference errors and timeouts fail the test.
 
 Select Emacs bindings with `set_keybinding_mode(KeybindingMode::Emacs)` on
 either widget. Cases 0–2 also run in standard Qt mode to check the harness.
@@ -52,3 +55,10 @@ either widget. Cases 0–2 also run in standard Qt mode to check the harness.
 | 20–24 | Consecutive kills, backward word kill, region copy, undo grouping |
 | 25–30 | Reverse/repeated search, cancellation, query deletion, failing search, smart case |
 | 31–32 | Mark positions after inserting or deleting repeated characters |
+| 33–38 | Prefix arguments, selection shortcuts, mark ring |
+| 39–47 | Transposition, case changes, line/whitespace editing, quoted insertion |
+| 48–58 | Sentence/paragraph navigation, goto-line, repeat, extended search and replacement |
+| 59–67 | Filling, indentation, named commands and command completion |
+| 68–73 | Keyboard macros and balanced expressions |
+| 74–82 | Rectangles, text/position registers and word expansion |
+| 83–96 | Prefix, paragraph, Unicode, empty-regexp and named-command regressions |

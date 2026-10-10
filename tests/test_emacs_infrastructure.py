@@ -73,6 +73,15 @@ class InfrastructureTest(unittest.TestCase):
         result = self.run_compare("--mode", "standard")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
+    def test_interactive_reference_records_and_replays_macros(self):
+        self.path.write_bytes(b"\x80k3hello\x80k4\x80k4")
+        self.assertEqual(self.save_reference(), "hellohello")
+
+    def test_interactive_command_errors_are_failures(self):
+        self.path.write_bytes(b"\x80k4")  # No macro has been defined.
+        with self.assertRaises(ValueError):
+            self.save_reference()
+
     def test_malformed_input_is_rejected(self):
         for keys in (b"\x80zz", b"\x80k", b"\xff", b"\x1b"):
             self.path.write_bytes(keys)

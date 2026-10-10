@@ -42,6 +42,10 @@
     (add-hook 'pre-command-hook #'reference-undo-boundary nil t)
     (if (not noninteractive)
         (progn
+          (setq command-error-function
+                (lambda (data _context _caller)
+                  (princ (format "Reference replay failed: %s\n" (error-message-string data)))
+                  (kill-emacs 1)))
           (global-set-key [reference-finish] #'reference-finish)
           ;; Let each command (including macro playback) finish before queuing
           ;; more input: unread events otherwise take priority over macro keys.
