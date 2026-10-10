@@ -1711,7 +1711,8 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
             line_end = get_line_end_position(line_end + 1);
         }
 
-        set_last_deleted_text(current_state.text.mid(line_start, line_end - line_start), current_paste_register, true);
+        set_last_deleted_text(current_state.text.mid(line_start, line_end - line_start), current_paste_register, true,
+                              cmd == VimLineEditCommand::YankCurrentLine);
 
         if (cmd != VimLineEditCommand::YankCurrentLine){
 
@@ -3317,30 +3318,20 @@ void EscapeLineEdit::keyPressEvent(QKeyEvent *event) {
     QLineEdit::keyPressEvent(event);
 }
 
-void VimEditor::set_last_deleted_text(QString text, std::optional<char> reg, bool is_line){
-    if (reg.has_value()){
-        if (reg.value() == '+' || reg.value() == '*'){
-            // set the contents of the system clipboard
-            QClipboard *clipboard = QApplication::clipboard();
-            clipboard->setText(text);
-            return;
-        }
-        else{
-            LastDeletedTextState state;
-            state.text = text;
-            state.is_line = is_line;
-            paste_registers[reg.value()] = state;
-        }
+void VimEditor::set_last_deleted_text(QString text, std::optional<char> reg, bool is_line, bool is_yank) {
+    if (reg == '_') return;
+    LastDeletedTextState state{text, is_line};
+    is_yank = is_yank || (action_waiting_for_motion && action_waiting_for_motion->kind == ActionWaitingForMotionKind::Yank);
+    if (is_yank && (!reg || reg == '"')) paste_registers['0'] = state;
+    last_deleted_text_ = state;
+    if (reg && *reg != '"') {
+        if (*reg == '+' || *reg == '*') QApplication::clipboard()->setText(text);
+        else paste_registers[*reg] = state;
     }
-    else{
-        last_deleted_text_.text = text;
-        last_deleted_text_.is_line = is_line;
-    }
-
 }
 
 std::optional<LastDeletedTextState> VimEditor::get_last_deleted_text(std::optional<char> reg){
-    if (reg.has_value()){
+    if (reg.has_value() && *reg != '"'){
         if (reg.value() == '+' || reg.value() == '*'){
             // return the contents of the system clipboard
             QClipboard *clipboard = QApplication::clipboard();

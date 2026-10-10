@@ -440,7 +440,7 @@ class VimEditor {
     void handle_search(bool reverse = false);
     void highlight_matches(QString pattern);
     void scroll_to_first_match(const QString &new_text);
-    void set_last_deleted_text(QString text, std::optional<char> reg, bool is_line = false);
+    void set_last_deleted_text(QString text, std::optional<char> reg, bool is_line = false, bool is_yank = false);
     std::optional<LastDeletedTextState> get_last_deleted_text(std::optional<char> reg);
 
     void handle_number_increment_decrement(bool increment, int count = 1, bool progressive = false);
