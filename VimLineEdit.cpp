@@ -264,7 +264,37 @@ void VimEditor::scroll_to_first_match(const QString &new_text) {
     }
 }
 
-bool VimEditor::key_press_event(QKeyEvent* event, bool& should_propagate) {
+bool VimEditor::key_press_event(QKeyEvent *event, bool &should_propagate) {
+    if (replaying_change) return process_key_press_event(event, should_propagate);
+    bool was_normal = current_mode == VimMode::Normal;
+    if (!recording_change && was_normal) {
+        recording_change = true;
+        change_start_text = adapter->get_text();
+        change_keys.clear();
+    }
+    if (recording_change) change_keys.emplace_back(event->clone());
+    bool result = process_key_press_event(event, should_propagate);
+    if (pending_text_command) {
+        // The command-line widget owns its own key events.
+        recording_change = false;
+        change_keys.clear();
+    } else if (current_mode == VimMode::Normal && !action_waiting_for_motion &&
+               !pending_symbol_command && !current_node && current_command_repeat_number.isEmpty() &&
+               !current_paste_register) {
+        auto modifiers = KeyboardModifierState::from_qt_modifiers(event->modifiers());
+        bool history_command = was_normal && (event->text() == "u" ||
+            (event->key() == Qt::Key_R && modifiers.control));
+        bool dot_command = was_normal && event->text() == ".";
+        if (recording_change && !history_command && !dot_command && adapter->get_text() != change_start_text) {
+            last_change_keys = std::move(change_keys);
+        }
+        recording_change = false;
+        change_keys.clear();
+    }
+    return result;
+}
+
+bool VimEditor::process_key_press_event(QKeyEvent* event, bool& should_propagate) {
 
     should_propagate = false;
     
@@ -627,6 +657,7 @@ void VimEditor::add_vim_keybindings() {
         KeyBinding{{KeyChord{"p", {}}}, VimLineEditCommand::PasteForward},
         KeyBinding{{KeyChord{"P", {}}}, VimLineEditCommand::PasteBackward},
         KeyBinding{{KeyChord{"u", {}}}, VimLineEditCommand::Undo},
+        KeyBinding{{KeyChord{".", {}}}, VimLineEditCommand::RepeatLastChange},
         KeyBinding{{KeyChord{Qt::Key_R, CONTROL}}, VimLineEditCommand::Redo},
         KeyBinding{{KeyChord{"o", {}}}, VimLineEditCommand::InsertLineBelow},
         KeyBinding{{KeyChord{"O", {}}}, VimLineEditCommand::InsertLineAbove},
@@ -986,6 +1017,7 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
         case VimLineEditCommand::ChangeToEndOfLine:
         case VimLineEditCommand::PasteForward:
         case VimLineEditCommand::PasteBackward:
+        case VimLineEditCommand::RepeatLastChange:
         case VimLineEditCommand::Undo:
         case VimLineEditCommand::Redo:
         case VimLineEditCommand::InsertLineBelow:
@@ -1529,6 +1561,24 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
             new_pos = next;
         }
         break;
+    case VimLineEditCommand::RepeatLastChange: {
+        if (last_change_keys.empty() || replaying_change) break;
+        std::vector<std::unique_ptr<QKeyEvent>> events;
+        size_t first = 0;
+        if (has_explicit_count) {
+            while (first < last_change_keys.size() && last_change_keys[first]->text().size() == 1 &&
+                   last_change_keys[first]->text().at(0).isDigit()) ++first;
+            for (QChar digit : QString::number(num_repeats)) {
+                events.emplace_back(new QKeyEvent(QEvent::KeyPress, digit.unicode(), Qt::NoModifier, QString(digit)));
+            }
+        }
+        for (size_t i = first; i < last_change_keys.size(); ++i) events.emplace_back(last_change_keys[i]->clone());
+        replaying_change = true;
+        for (const auto &event : events) QApplication::sendEvent(editor_widget, event.get());
+        replaying_change = false;
+        if (has_explicit_count) last_change_keys = std::move(events);
+        break;
+    }
     case VimLineEditCommand::Undo:
         undo();
         break;

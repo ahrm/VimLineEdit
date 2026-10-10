@@ -67,3 +67,14 @@ modifier convention as the other existing control-key tests.
 | 109 | Star search matches whole words | `*x` |
 | 110 | Register 0 contains the most recent yank | `yiw$"0p` |
 | 111 | Counted x stores all deleted characters for paste | `3xp` |
+
+## Command interaction cases
+
+| Case | Behavior |
+| --- | --- |
+| 112 | Dot repeats a change and its inserted text |
+| 113 | Dot retains the previous command count |
+| 114 | An explicit dot count replaces the old count and persists |
+| 115 | Dot repeats an insert session at a new position |
+| 116 | Undo does not replace the last change for dot |
+| 117 | Redo does not replace the last change for dot |

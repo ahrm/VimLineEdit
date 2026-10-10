@@ -70,6 +70,7 @@ enum class VimLineEditCommand {
     ChangeToEndOfLine,
     PasteForward,
     PasteBackward,
+    RepeatLastChange,
     Undo,
     Redo,
     InsertLineBelow,
@@ -349,6 +350,12 @@ class VimEditor {
     QString current_command_repeat_number = "";
     int pending_operator_count = 1;
     int insert_repeat_count = 1;
+    bool replaying_change = false;
+    bool recording_change = false;
+    QString change_start_text;
+    std::vector<std::unique_ptr<QKeyEvent>> change_keys;
+    std::vector<std::unique_ptr<QKeyEvent>> last_change_keys;
+    bool process_key_press_event(QKeyEvent *event, bool &should_propagate);
     bool replacing = false;
     std::vector<HistoryState> replace_steps;
 
