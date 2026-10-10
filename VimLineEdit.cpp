@@ -4560,6 +4560,35 @@ class EmacsEditor : public QObject {
     int quoted_count = 0;
     int spacing_begin = -1, spacing_end = -1, spacing_step = 0;
     QString original_spacing;
+    struct RecordedCommand {
+        int key;
+        Qt::KeyboardModifiers modifiers;
+        QString text;
+        bool control_x;
+        std::optional<int> argument;
+    };
+    std::optional<RecordedCommand> repeated_command;
+    bool repeating = false, repeat_pending = false;
+
+    void undo(int count, bool redo = false) {
+        if (read_only()) return;
+        deactivate_mark();
+        for (int i = 0; i < std::abs(count); ++i) {
+            if (line) { if (redo) line->redo(); else line->undo(); }
+            else { if (redo) multi->redo(); else multi->undo(); }
+        }
+    }
+    void repeat_command(std::optional<int> count) {
+        if (!repeated_command || repeating) return;
+        const auto command = *repeated_command;
+        QKeyEvent event(QEvent::KeyPress, command.key, command.modifiers, command.text);
+        argument = count ? count : command.argument;
+        control_x_pending = command.control_x;
+        repeating = true;
+        key_press_event(&event);
+        repeating = false;
+        repeat_pending = true;
+    }
     QString observed_text;
     std::optional<std::pair<int, int>> pending_edit;
     enum class LastAction { Other, Kill, Yank };
@@ -5060,6 +5089,8 @@ class EmacsEditor : public QObject {
         desired_column.reset();
         control_x_pending = false;
         quoted_count = 0;
+        repeated_command.reset();
+        repeat_pending = false;
         mark = -1;
         mark_ring.clear();
         mark_active = false;
@@ -5084,7 +5115,7 @@ class EmacsEditor : public QObject {
                    event->key() == Qt::Key_W || event->key() == Qt::Key_Y ||
                    event->key() == Qt::Key_Minus || (event->key() >= Qt::Key_0 && event->key() <= Qt::Key_9);
         return modifiers.control && !modifiers.alt && !modifiers.command &&
-            (event->key() == Qt::Key_V || event->key() == Qt::Key_L || event->key() == Qt::Key_O || event->key() == Qt::Key_Q || event->key() == Qt::Key_T || event->key() == Qt::Key_U || event->key() == Qt::Key_A || event->key() == Qt::Key_E ||
+            (event->key() == Qt::Key_Question || event->key() == Qt::Key_V || event->key() == Qt::Key_L || event->key() == Qt::Key_O || event->key() == Qt::Key_Q || event->key() == Qt::Key_T || event->key() == Qt::Key_U || event->key() == Qt::Key_A || event->key() == Qt::Key_E ||
              event->key() == Qt::Key_B || event->key() == Qt::Key_F || event->key() == Qt::Key_D ||
              event->key() == Qt::Key_N || event->key() == Qt::Key_P ||
              event->key() == Qt::Key_Space || event->key() == Qt::Key_X || event->key() == Qt::Key_G ||
@@ -5094,11 +5125,27 @@ class EmacsEditor : public QObject {
     }
 
     bool key_press_event(QKeyEvent *event) {
+        const auto before = text();
+        const auto modifiers = KeyboardModifierState::from_qt_modifiers(event->modifiers());
+        RecordedCommand command{event->key(), event->modifiers() | (meta_pending ? Qt::AltModifier : Qt::NoModifier), event->text(), control_x_pending, argument};
+        const bool eligible = !repeating && !prompt_callback && !search &&
+            (modifiers.control || modifiers.alt || meta_pending || event->key() == Qt::Key_Backspace || event->key() == Qt::Key_Delete) &&
+            event->key() != Qt::Key_Underscore && event->key() != Qt::Key_Slash && event->key() != Qt::Key_Question &&
+            !(control_x_pending && (event->key() == Qt::Key_U || event->key() == Qt::Key_Z));
+        bool handled = execute_key(event);
+        if (eligible && text() != before) repeated_command = command;
+        return handled;
+    }
+    bool execute_key(QKeyEvent *event) {
         pending_edit.reset();
         const int key = event->key();
         if (key == Qt::Key_Control || key == Qt::Key_Shift || key == Qt::Key_Alt || key == Qt::Key_Meta)
             return false;
         auto modifiers = KeyboardModifierState::from_qt_modifiers(event->modifiers());
+        if (repeat_pending && key == Qt::Key_Z && !modifiers.control && !modifiers.alt) {
+            repeat_command(std::nullopt); return true;
+        }
+        repeat_pending = false;
         if (prompt_callback) return prompt_key(event, modifiers);
         if (quoted_count) {
             QString inserted = event->text();
@@ -5176,6 +5223,8 @@ class EmacsEditor : public QObject {
         }
         if (control_x_pending) {
             control_x_pending = false;
+            if (!modifiers.control && key == Qt::Key_U) { undo(count); return true; }
+            if (!modifiers.control && key == Qt::Key_Z) { repeat_command(explicit_argument ? std::optional<int>(count) : std::nullopt); return true; }
             if (modifiers.control && key == Qt::Key_O) { delete_blank_lines(); return true; }
             if (modifiers.control && key == Qt::Key_T) { transpose(2, count); return true; }
             if (modifiers.control && (key == Qt::Key_U || key == Qt::Key_L)) { change_case(key, count, true); return true; }
@@ -5316,16 +5365,9 @@ class EmacsEditor : public QObject {
             case Qt::Key_Y: yank(false); return true;
             case Qt::Key_S: begin_search(true); return true;
             case Qt::Key_R: begin_search(false); return true;
+            case Qt::Key_Question: undo(count, true); return true;
             case Qt::Key_Underscore:
-            case Qt::Key_Slash:
-                if (!read_only()) {
-                    deactivate_mark();
-                    for (int i = 0; i < std::abs(count); ++i) {
-                        if (line) line->undo();
-                        else multi->undo();
-                    }
-                }
-                return true;
+            case Qt::Key_Slash: undo(count); return true;
             default: break;
             }
         }

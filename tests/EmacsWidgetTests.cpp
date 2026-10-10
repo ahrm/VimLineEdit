@@ -62,6 +62,15 @@ template<class Widget> static void test_modes() {
     check(contents(widget) == "abc" && position(widget) == 2, "Read-only search should move point without editing");
     auto *prompt = widget.template findChild<QLabel *>("emacsSearchPrompt");
     check(prompt && !prompt->isHidden() && prompt->text().contains("b"), "Search should display its query");
+    widget.setReadOnly(false);
+    control(widget, Qt::Key_G);
+    control(widget, Qt::Key_A);
+    control(widget, Qt::Key_D);
+    control(widget, Qt::Key_Underscore);
+    control(widget, Qt::Key_Question);
+    check(contents(widget) == "bc", "C-? should redo the deletion");
+    control(widget, Qt::Key_Underscore);
+    control(widget, Qt::Key_S);
     widget.set_vim_enabled(false);
     check(prompt && prompt->isHidden(), "Changing modes should close the search prompt");
     check(widget.get_keybinding_mode() == KeybindingMode::Standard, "Legacy disable selects standard mode");
