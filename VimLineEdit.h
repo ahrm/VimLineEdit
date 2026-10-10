@@ -45,6 +45,7 @@ enum class VimLineEditCommand {
     MoveWordBackward,
     MoveWordBackwardWithSymbols,
     DeleteChar,
+    DeleteCharBackward,
     ReplaceChar,
     EnterReplaceMode,
     Indent,

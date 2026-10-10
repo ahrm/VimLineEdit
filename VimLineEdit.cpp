@@ -653,6 +653,9 @@ void VimEditor::add_vim_keybindings() {
         KeyBinding{{KeyChord{"t", {}}}, VimLineEditCommand::FindForwardTo},
         KeyBinding{{KeyChord{"T", {}}}, VimLineEditCommand::FindBackwardTo},
         KeyBinding{{KeyChord{"x", {}}}, VimLineEditCommand::DeleteChar},
+        KeyBinding{{KeyChord{"X", {}}}, VimLineEditCommand::DeleteCharBackward},
+        KeyBinding{{KeyChord{"S", {}}}, VimLineEditCommand::ChangeCurrentLine},
+        KeyBinding{{KeyChord{"Y", {}}}, VimLineEditCommand::YankCurrentLine},
         KeyBinding{{KeyChord{"r", {}}}, VimLineEditCommand::ReplaceChar},
         KeyBinding{{KeyChord{"R", {}}}, VimLineEditCommand::EnterReplaceMode},
         KeyBinding{{KeyChord{">", {}}}, VimLineEditCommand::Indent},
@@ -846,6 +849,7 @@ QString to_string(VimLineEditCommand cmd) {
         return "MoveWordBackward";
     case VimLineEditCommand::MoveWordBackwardWithSymbols:
         return "MoveWordBackwardWithSymbols";
+    case VimLineEditCommand::DeleteCharBackward:
     case VimLineEditCommand::DeleteChar:
         return "DeleteChar";
     case VimLineEditCommand::Delete:
@@ -1024,7 +1028,8 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<QChar> symb
         case VimLineEditCommand::JoinLinesWithoutSpace:
         case VimLineEditCommand::EnterReplaceMode:
         case VimLineEditCommand::ReplaceChar:
-        case VimLineEditCommand::DeleteChar:
+        case VimLineEditCommand::DeleteCharBackward:
+    case VimLineEditCommand::DeleteChar:
         case VimLineEditCommand::Delete:
         case VimLineEditCommand::Change:
         case VimLineEditCommand::DeleteToEndOfLine:
@@ -1750,6 +1755,7 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<QChar> symb
         break;
     }
     case VimLineEditCommand::DeleteCharAndEnterInsertMode:
+    case VimLineEditCommand::DeleteCharBackward:
     case VimLineEditCommand::DeleteChar:
         push_history(current_state);
         // if we have a text selection, delete it instead of the character under the cursor
@@ -1761,12 +1767,15 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<QChar> symb
             break;
         }
         else{
-            int end = std::min(get_line_end_position(old_pos), old_pos + num_repeats);
-            if (end > old_pos) {
-                set_last_deleted_text(current_state.text.mid(old_pos, end - old_pos), current_paste_register);
-                remove_text(old_pos, end - old_pos);
-                int cursor = old_pos;
-                if (cmd == VimLineEditCommand::DeleteChar) {
+            int begin = cmd == VimLineEditCommand::DeleteCharBackward ?
+                std::max(get_line_start_position(old_pos), old_pos - num_repeats) : old_pos;
+            int end = cmd == VimLineEditCommand::DeleteCharBackward ? old_pos :
+                old_pos + std::min(get_line_end_position(old_pos) - old_pos, num_repeats);
+            if (end > begin) {
+                set_last_deleted_text(current_state.text.mid(begin, end - begin), current_paste_register);
+                remove_text(begin, end - begin);
+                int cursor = begin;
+                if (cmd != VimLineEditCommand::DeleteCharAndEnterInsertMode) {
                     cursor = std::min(cursor, std::max(get_line_start_position(cursor), get_line_end_position(cursor) - 1));
                 }
                 set_cursor_position(cursor);
