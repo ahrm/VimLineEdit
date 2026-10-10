@@ -4554,6 +4554,7 @@ class EmacsEditor : public QObject {
     }
     std::optional<int> desired_column;
     int mark = -1;
+    std::deque<int> mark_ring;
     bool mark_active = false;
     bool control_x_pending = false;
     QString observed_text;
@@ -4661,6 +4662,27 @@ class EmacsEditor : public QObject {
             multi->setTextCursor(cursor);
         }
     }
+    void push_mark(int pos) {
+        if (mark >= 0) {
+            mark_ring.push_front(mark);
+            if (mark_ring.size() > 16) mark_ring.pop_back();
+        }
+        mark = pos;
+    }
+    int paragraph_target(int pos, bool forward) const {
+        const auto value = text();
+        auto blank = [&](int p) { return value.mid(p, line_end(value, p) - p).trimmed().isEmpty(); };
+        int target = line_start(value, pos);
+        if (forward) {
+            while (target < value.size() && blank(target)) target = std::min(int(value.size()), line_end(value, target) + 1);
+            while (target < value.size() && !blank(target)) target = std::min(int(value.size()), line_end(value, target) + 1);
+        } else {
+            if (target > 0) target = line_start(value, target - 1);
+            while (target > 0 && blank(target)) target = line_start(value, target - 1);
+            while (target > 0 && !blank(line_start(value, target - 1))) target = line_start(value, target - 1);
+        }
+        return target;
+    }
     void deactivate_mark() {
         mark_active = false;
         move_to(position());
@@ -4760,7 +4782,7 @@ class EmacsEditor : public QObject {
         if (cancel) move_to(search->origin);
         else {
             if (!search->query.isEmpty()) previous_search = search->query;
-            mark = search->origin;
+            push_mark(search->origin);
         }
         search.reset();
         search_steps.clear();
@@ -4836,7 +4858,11 @@ class EmacsEditor : public QObject {
                     --old_end; --new_end;
                 }
             }
-            if (mark > begin) mark = mark <= old_end ? begin : mark + new_end - old_end;
+            auto rebase = [&](int &point) {
+                if (point > begin) point = point <= old_end ? begin : point + new_end - old_end;
+            };
+            rebase(mark);
+            for (int &point : mark_ring) rebase(point);
             observed_text = current;
             last_action = LastAction::Other;
         };
@@ -4851,6 +4877,7 @@ class EmacsEditor : public QObject {
         desired_column.reset();
         control_x_pending = false;
         mark = -1;
+        mark_ring.clear();
         mark_active = false;
         last_action = LastAction::Other;
         move_to(position());
@@ -4862,7 +4889,8 @@ class EmacsEditor : public QObject {
         auto modifiers = KeyboardModifierState::from_qt_modifiers(event->modifiers());
         if (argument || search || meta_pending || control_x_pending || event->key() == Qt::Key_Escape) return true;
         if (modifiers.alt && !modifiers.control && !modifiers.command)
-            return event->key() == Qt::Key_B || event->key() == Qt::Key_F ||
+            return event->key() == Qt::Key_At || event->key() == Qt::Key_H ||
+                   event->key() == Qt::Key_B || event->key() == Qt::Key_F ||
                    event->key() == Qt::Key_Less || event->key() == Qt::Key_Greater ||
                    event->key() == Qt::Key_D || event->key() == Qt::Key_Backspace ||
                    event->key() == Qt::Key_W || event->key() == Qt::Key_Y ||
@@ -4941,6 +4969,11 @@ class EmacsEditor : public QObject {
         }
         if (control_x_pending) {
             control_x_pending = false;
+            if (!modifiers.control && key == Qt::Key_H) {
+                push_mark(value.size());
+                mark_active = true;
+                move_to(0);
+            }
             if (modifiers.control && !meta && key == Qt::Key_X && mark >= 0) {
                 const int target = mark;
                 mark = pos;
@@ -4953,8 +4986,24 @@ class EmacsEditor : public QObject {
             switch (key) {
             case Qt::Key_B: move_to(words_target(-count)); return true;
             case Qt::Key_F: move_to(words_target(count)); return true;
-            case Qt::Key_Less: move_to(0); return true;
-            case Qt::Key_Greater: move_to(value.size()); return true;
+            case Qt::Key_Less: push_mark(pos); move_to(0); return true;
+            case Qt::Key_Greater: push_mark(pos); move_to(value.size()); return true;
+            case Qt::Key_At: {
+                int target = mark_active ? mark : pos;
+                for (int i = 0; i < std::abs(count); ++i) target = word_target(count > 0, target);
+                if (!mark_active) push_mark(target); else mark = target;
+                mark_active = true;
+                move_to(pos);
+                return true;
+            }
+            case Qt::Key_H: {
+                int begin = paragraph_target(pos, false);
+                int end = paragraph_target(begin, true);
+                push_mark(end);
+                mark_active = true;
+                move_to(begin);
+                return true;
+            }
             case Qt::Key_D:
             case Qt::Key_Backspace: {
                 int target = words_target(key == Qt::Key_D ? count : -count);
@@ -4989,8 +5038,19 @@ class EmacsEditor : public QObject {
                 for (int i = 0; i < std::abs(count); ++i) move_vertical((key == Qt::Key_N) == (count > 0));
                 return true;
             case Qt::Key_Space:
+                if (explicit_argument && mark >= 0) {
+                    int target = mark;
+                    if (!mark_ring.empty()) {
+                        mark_ring.push_back(mark);
+                        mark = mark_ring.front();
+                        mark_ring.pop_front();
+                    }
+                    mark_active = false;
+                    move_to(target);
+                    return true;
+                }
                 mark_active = !(mark_active && mark == pos);
-                mark = pos;
+                push_mark(pos);
                 move_to(pos);
                 return true;
             case Qt::Key_X: control_x_pending = true; return true;
