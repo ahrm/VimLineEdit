@@ -97,6 +97,7 @@ enum class VimLineEditCommand {
     InsertLastInsertModeText,
     SetMark,
     GotoMark,
+    GotoMarkLine,
     RecordMacro,
     RepeatMacro,
     SearchTextUnderCursor,

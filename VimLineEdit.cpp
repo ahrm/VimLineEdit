@@ -695,6 +695,7 @@ void VimEditor::add_vim_keybindings() {
         KeyBinding{{KeyChord{Qt::Key_X, CONTROL}}, VimLineEditCommand::DecrementNextNumberOnCurrentLine},
         KeyBinding{{KeyChord{"m", {}}}, VimLineEditCommand::SetMark},
         KeyBinding{{KeyChord{"`", {}}}, VimLineEditCommand::GotoMark},
+        KeyBinding{{KeyChord{"'", {}}}, VimLineEditCommand::GotoMarkLine},
         KeyBinding{{KeyChord{"q", {}}}, VimLineEditCommand::RecordMacro},
         KeyBinding{{KeyChord{"\"", {}}}, VimLineEditCommand::SelectPasteRegister},
         KeyBinding{{KeyChord{"@", {}}}, VimLineEditCommand::RepeatMacro},
@@ -926,6 +927,7 @@ QString to_string(VimLineEditCommand cmd) {
         return "InsertLastInsertModeText";
     case VimLineEditCommand::SetMark:
         return "SetMark";
+    case VimLineEditCommand::GotoMarkLine:
     case VimLineEditCommand::GotoMark:
         return "GotoMark";
     case VimLineEditCommand::RecordMacro:
@@ -982,6 +984,7 @@ bool is_jump_command(VimLineEditCommand cmd) {
     case VimLineEditCommand::GotoMatchingBracket:
     case VimLineEditCommand::MoveToTheNextParagraph:
     case VimLineEditCommand::MoveToThePreviousParagraph:
+    case VimLineEditCommand::GotoMarkLine:
     case VimLineEditCommand::GotoMark:
         return true;
     default:
@@ -997,6 +1000,7 @@ bool VimEditor::requires_symbol(VimLineEditCommand cmd) {
     case VimLineEditCommand::FindForwardTo:
     case VimLineEditCommand::FindBackwardTo:
     case VimLineEditCommand::SetMark:
+    case VimLineEditCommand::GotoMarkLine:
     case VimLineEditCommand::GotoMark:
     case VimLineEditCommand::RepeatMacro:
     case VimLineEditCommand::SelectPasteRegister:
@@ -1864,11 +1868,16 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<QChar> symb
         marks[symbol->unicode()] = mark;
         break;
     }
+    case VimLineEditCommand::GotoMarkLine:
     case VimLineEditCommand::GotoMark: {
         if (marks.find(symbol->unicode()) != marks.end()) {
             Mark mark = marks[symbol->unicode()];
             // move the cursor to the mark location
             new_pos = mark.position;
+            if (cmd == VimLineEditCommand::GotoMarkLine) {
+                new_pos = get_line_start_position(new_pos);
+                while (new_pos < get_line_end_position(new_pos) && current_state.text[new_pos].isSpace()) ++new_pos;
+            }
         }
         break;
     }
@@ -2318,7 +2327,7 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<QChar> symb
         if (action_waiting_for_motion.has_value() && action_waiting_for_motion->kind != ActionWaitingForMotionKind::Visual) {
             bool linewise = cmd == VimLineEditCommand::MoveUp || cmd == VimLineEditCommand::MoveDown ||
                             cmd == VimLineEditCommand::GotoBegin || cmd == VimLineEditCommand::GotoEnd ||
-                            cmd == VimLineEditCommand::TransformCurrentLine;
+                            cmd == VimLineEditCommand::TransformCurrentLine || cmd == VimLineEditCommand::GotoMarkLine;
             handle_action_waiting_for_motion(old_pos, new_pos, delete_pos_offset, linewise);
         }
         else if (current_mode == VimMode::Visual) {
