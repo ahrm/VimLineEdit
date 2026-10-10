@@ -1351,6 +1351,7 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
             new_pos = next;
         }
         if (change_word) {
+            new_pos = std::min(new_pos, static_cast<int>(current_state.text.size()) - 1);
             const QString &text = current_state.text;
             bool word = text[new_pos].isLetterOrNumber() || text[new_pos] == '_';
             while (new_pos + 1 < text.size() && !text[new_pos + 1].isSpace() &&
@@ -1888,7 +1889,7 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
     }
 
     QString updated_text = adapter->get_text();
-    if (cmd != VimLineEditCommand::EnterNormalMode && current_mode == VimMode::Normal && updated_text.size() > 0 && new_pos == updated_text.size()) {
+    if (cmd != VimLineEditCommand::EnterNormalMode && current_mode == VimMode::Normal && !action_waiting_for_motion && updated_text.size() > 0 && new_pos == updated_text.size()) {
         if (new_pos > 0 && updated_text[new_pos - 1] != '\n') {
             new_pos = updated_text.size() - 1;
         }
@@ -1971,8 +1972,9 @@ int VimEditor::calculate_move_word_forward(bool with_symbols, int pos) const {
     const QString t = adapter->get_text();
     int len = t.length();
 
+    bool operating = action_waiting_for_motion && action_waiting_for_motion->kind != ActionWaitingForMotionKind::Visual;
     if (pos >= len - 1) {
-        return pos;
+        return operating ? len : std::max(0, len - 1);
     }
 
     int next_pos = pos;
@@ -1999,7 +2001,7 @@ int VimEditor::calculate_move_word_forward(bool with_symbols, int pos) const {
     if (next_pos < len) {
         return next_pos;
     }
-    return pos;
+    return operating ? len : std::max(0, len - 1);
 }
 
 int VimEditor::calculate_move_to_end_of_word(bool with_symbols, int pos) const {
