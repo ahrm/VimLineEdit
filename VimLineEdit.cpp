@@ -1339,21 +1339,28 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
         new_pos = calculate_move_down_on_screen();
         break;
     case VimLineEditCommand::MoveWordForward:
+    case VimLineEditCommand::MoveWordForwardWithSymbols: {
+        bool with_symbols = cmd == VimLineEditCommand::MoveWordForwardWithSymbols;
+        bool change_word = action_waiting_for_motion &&
+                           action_waiting_for_motion->kind == ActionWaitingForMotionKind::Change &&
+                           old_pos < current_state.text.size() && !current_state.text[old_pos].isSpace();
         new_pos = old_pos;
-        for (int i = 0; i < num_repeats; ++i) {
-            int next = calculate_move_word_forward(false, new_pos);
+        for (int i = 0; i < num_repeats - (change_word ? 1 : 0); ++i) {
+            int next = calculate_move_word_forward(with_symbols, new_pos);
             if (next == new_pos) break;
             new_pos = next;
         }
-        break;
-    case VimLineEditCommand::MoveWordForwardWithSymbols:
-        new_pos = old_pos;
-        for (int i = 0; i < num_repeats; ++i) {
-            int next = calculate_move_word_forward(true, new_pos);
-            if (next == new_pos) break;
-            new_pos = next;
+        if (change_word) {
+            const QString &text = current_state.text;
+            bool word = text[new_pos].isLetterOrNumber() || text[new_pos] == '_';
+            while (new_pos + 1 < text.size() && !text[new_pos + 1].isSpace() &&
+                   (with_symbols || (text[new_pos + 1].isLetterOrNumber() || text[new_pos + 1] == '_') == word)) {
+                ++new_pos;
+            }
+            delete_pos_offset = 1;
         }
         break;
+    }
     case VimLineEditCommand::MoveToEndOfWord:
         delete_pos_offset = 1;
         new_pos = old_pos;
@@ -2927,7 +2934,7 @@ void VimEditor::handle_action_waiting_for_motion(int old_pos, int new_pos, int d
         if (action_waiting_for_motion.value().kind == ActionWaitingForMotionKind::Delete ||
             action_waiting_for_motion.value().kind == ActionWaitingForMotionKind::Change) {
             // delete from old_pos to new_pos
-            if (old_pos < new_pos) {
+            if (old_pos < new_pos || (old_pos == new_pos && delete_pos_offset > 0)) {
                 set_last_deleted_text(
                     current_text.mid(old_pos, new_pos + delete_pos_offset - old_pos), current_paste_register);
                 remove_text(old_pos, new_pos + delete_pos_offset - old_pos);
