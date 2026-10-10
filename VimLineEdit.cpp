@@ -4724,7 +4724,8 @@ class EmacsEditor : public QObject {
              event->key() == Qt::Key_B || event->key() == Qt::Key_F || event->key() == Qt::Key_D ||
              event->key() == Qt::Key_N || event->key() == Qt::Key_P ||
              event->key() == Qt::Key_Space || event->key() == Qt::Key_X || event->key() == Qt::Key_G ||
-             event->key() == Qt::Key_K || event->key() == Qt::Key_W || event->key() == Qt::Key_Y);
+             event->key() == Qt::Key_K || event->key() == Qt::Key_W || event->key() == Qt::Key_Y ||
+             event->key() == Qt::Key_Underscore || event->key() == Qt::Key_Slash);
     }
 
     bool key_press_event(QKeyEvent *event) {
@@ -4815,6 +4816,14 @@ class EmacsEditor : public QObject {
                                     previous_action == LastAction::Kill);
                 return true;
             case Qt::Key_Y: yank(false); return true;
+            case Qt::Key_Underscore:
+            case Qt::Key_Slash:
+                if (!read_only()) {
+                    deactivate_mark();
+                    if (line) line->undo();
+                    else multi->undo();
+                }
+                return true;
             default: break;
             }
         }
