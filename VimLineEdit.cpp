@@ -4557,6 +4557,91 @@ class EmacsEditor : public QObject {
     std::deque<int> mark_ring;
     bool mark_active = false;
     bool control_x_pending = false;
+    bool rectangle_active = false, register_prefix = false;
+    static QStringList &killed_rectangle() { static QStringList rows; return rows; }
+
+    static int column_at(const QString &value, int pos) {
+        int column = 0;
+        for (int i = line_start(value, pos); i < pos; i = next_character(value, i))
+            column += value[i] == '\t' ? 8 - column % 8 : 1;
+        return column;
+    }
+    static QString column_slice(const QString &row, int begin, int end, bool pad = false) {
+        QString result;
+        int column = 0;
+        for (int i = 0; i < row.size(); i = next_character(row, i)) {
+            int width = row[i] == '\t' ? 8 - column % 8 : 1;
+            if (column + width > begin && column < end) {
+                if (row[i] == '\t') result += QString(std::min(end, column + width) - std::max(begin, column), ' ');
+                else result += row.mid(i, next_character(row, i) - i);
+            }
+            column += width;
+        }
+        if (pad && column < end) result += QString(end - std::max(begin, column), ' ');
+        return result;
+    }
+    void rectangle_edit(bool copy, bool remove, const QString &inserted = QString()) {
+        if (mark < 0 || (read_only() && remove)) return;
+        const auto value = text();
+        int pos = position();
+        int begin = line_start(value, std::min(pos, mark)), end = line_end(value, std::max(pos, mark));
+        int left = std::min(column_at(value, pos), column_at(value, mark));
+        int right = std::max(column_at(value, pos), column_at(value, mark));
+        QStringList rows = value.mid(begin, end - begin).split('\n'), copied;
+        for (auto &row : rows) {
+            copied << column_slice(row, left, right, true);
+            if (remove) {
+                QString prefix = column_slice(row, 0, left, !inserted.isNull());
+                row = prefix + inserted + column_slice(row, right, INT_MAX);
+            }
+        }
+        if (copy) killed_rectangle() = copied;
+        if (remove) {
+            int target_row = value.mid(begin, pos - begin).count('\n');
+            replace(begin, end, rows.join("\n"));
+            int target = begin;
+            for (int i = 0; i < target_row; ++i) target += rows[i].size() + 1;
+            target += column_slice(rows[target_row], 0, left).size();
+            move_to(target);
+        } else deactivate_mark();
+    }
+    void yank_rectangle() {
+        if (read_only() || killed_rectangle().isEmpty()) return;
+        int pos = position(), column = column_at(text(), pos);
+        push_mark(pos);
+        int target = pos;
+        for (int i = 0; i < killed_rectangle().size(); ++i) {
+            auto value = text();
+            int begin = line_start(value, target), end = line_end(value, target);
+            QString row = value.mid(begin, end - begin);
+            QString prefix = column_slice(row, 0, column, true);
+            QString suffix = column_slice(row, column, INT_MAX);
+            replace(begin, end, prefix + killed_rectangle()[i] + suffix);
+            target = begin + prefix.size() + killed_rectangle()[i].size();
+            if (i + 1 < killed_rectangle().size()) {
+                end = line_end(text(), target);
+                if (end == text().size()) replace(end, end, "\n");
+                target = end + 1;
+            }
+        }
+        move_to(target);
+    }
+    bool rectangle_command(int key, bool meta) {
+        switch (key) {
+        case Qt::Key_K: rectangle_edit(true, true); return true;
+        case Qt::Key_W: if (meta) { rectangle_edit(true, false); return true; } return false;
+        case Qt::Key_D: rectangle_edit(false, true); return true;
+        case Qt::Key_C: {
+            if (mark >= 0) rectangle_edit(false, true, QString(std::abs(column_at(text(), mark) - column_at(text(), position())), ' '));
+            return true;
+        }
+        case Qt::Key_Y: yank_rectangle(); return true;
+        case Qt::Key_T:
+            request_text("String rectangle: ", [this](const QString &input) { rectangle_edit(false, true, input); });
+            return true;
+        default: return false;
+        }
+    }
     int quoted_count = 0;
     int spacing_begin = -1, spacing_end = -1, spacing_step = 0;
     QString original_spacing;
@@ -5092,6 +5177,32 @@ class EmacsEditor : public QObject {
                 cursor.setPosition(mark);
                 cursor.setPosition(pos, QTextCursor::KeepAnchor);
             } else cursor.setPosition(pos);
+            if (rectangle_active && mark >= 0) {
+                cursor.clearSelection();
+                QList<QTextEdit::ExtraSelection> selections;
+                const auto value = text();
+                int begin = line_start(value, std::min(pos, mark)), end = line_end(value, std::max(pos, mark));
+                int left = std::min(column_at(value, pos), column_at(value, mark));
+                int right = std::max(column_at(value, pos), column_at(value, mark));
+                for (int row = begin; row <= end;) {
+                    QString contents = value.mid(row, line_end(value, row) - row);
+                    int a = 0, b = 0;
+                    while (a < contents.size() && column_at(contents, a) < left) a = next_character(contents, a);
+                    b = a;
+                    while (b < contents.size() && column_at(contents, b) < right) b = next_character(contents, b);
+                    QTextEdit::ExtraSelection selection;
+                    selection.cursor = multi->textCursor();
+                    selection.cursor.setPosition(row + a);
+                    selection.cursor.setPosition(row + b, QTextCursor::KeepAnchor);
+                    selection.format.setBackground(multi->palette().highlight());
+                    selection.format.setForeground(multi->palette().highlightedText());
+                    selections << selection;
+                    int next = line_end(value, row) + 1;
+                    if (next > value.size()) break;
+                    row = next;
+                }
+                multi->setExtraSelections(selections);
+            }
             multi->setTextCursor(cursor);
         }
     }
@@ -5118,6 +5229,8 @@ class EmacsEditor : public QObject {
     }
     void deactivate_mark() {
         mark_active = false;
+        rectangle_active = false;
+        if (multi) multi->setExtraSelections({});
         move_to(position());
     }
     void replace(int begin, int end, const QString &replacement) {
@@ -5518,6 +5631,8 @@ class EmacsEditor : public QObject {
         clear_argument();
         desired_column.reset();
         control_x_pending = false;
+        register_prefix = rectangle_active = false;
+        if (multi) multi->setExtraSelections({});
         quoted_count = 0;
         repeated_command.reset();
         repeat_pending = false;
@@ -5534,7 +5649,7 @@ class EmacsEditor : public QObject {
 
     bool handles_shortcut(QKeyEvent *event) const {
         auto modifiers = KeyboardModifierState::from_qt_modifiers(event->modifiers());
-        if (replacement || prompt_callback || goto_pending || quoted_count || argument || search || meta_pending || control_x_pending || event->key() == Qt::Key_Escape) return true;
+        if (register_prefix || replacement || prompt_callback || goto_pending || quoted_count || argument || search || meta_pending || control_x_pending || event->key() == Qt::Key_Escape) return true;
         if (event->key() == Qt::Key_Tab || event->key() == Qt::Key_F3 || event->key() == Qt::Key_F4) return true;
         if (modifiers.alt && modifiers.control && (event->key() == Qt::Key_S || event->key() == Qt::Key_R || event->key() == Qt::Key_Percent || event->key() == Qt::Key_Backslash ||
             event->key() == Qt::Key_F || event->key() == Qt::Key_B || event->key() == Qt::Key_N || event->key() == Qt::Key_P ||
@@ -5600,7 +5715,7 @@ class EmacsEditor : public QObject {
         if (modifiers.control && !modifiers.command && key == Qt::Key_G) {
             meta_pending = control_x_pending = false;
             clear_argument();
-            goto_pending = false;
+            goto_pending = register_prefix = false;
             recording_macro = false;
             recording.clear();
             if (search_label) search_label->hide();
@@ -5640,6 +5755,11 @@ class EmacsEditor : public QObject {
         clear_argument();
         const LastAction previous_action = last_action;
         last_action = LastAction::Other;
+        if (register_prefix) {
+            register_prefix = false;
+            rectangle_command(key, meta);
+            return true;
+        }
         if (key == Qt::Key_F3) { start_macro(explicit_argument); return true; }
         if (key == Qt::Key_F4) {
             if (recording_macro) end_macro(1); else play_macro(count);
@@ -5670,6 +5790,12 @@ class EmacsEditor : public QObject {
         }
         if (control_x_pending) {
             control_x_pending = false;
+            if (!modifiers.control && key == Qt::Key_R) { register_prefix = true; return true; }
+            if (!modifiers.control && key == Qt::Key_Space) {
+                rectangle_active = !rectangle_active;
+                if (rectangle_active) { push_mark(pos); mark_active = true; } else deactivate_mark();
+                move_to(pos); return true;
+            }
             if (!modifiers.control && key == Qt::Key_ParenLeft) { start_macro(explicit_argument); return true; }
             if (!modifiers.control && key == Qt::Key_ParenRight) { end_macro(2); return true; }
             if (!modifiers.control && key == Qt::Key_E) { play_macro(count); return true; }
@@ -5771,6 +5897,7 @@ class EmacsEditor : public QObject {
                 return true;
             }
             case Qt::Key_W:
+                if (rectangle_active) { rectangle_edit(true, false); return true; }
                 if (mark >= 0) {
                     save_kill(value.mid(std::min(mark, pos), std::abs(pos - mark)), false, false);
                     publish_kill();
@@ -5836,6 +5963,7 @@ class EmacsEditor : public QObject {
                 return true;
             }
             case Qt::Key_W:
+                if (rectangle_active) { rectangle_edit(true, true); return true; }
                 if (mark >= 0) kill(std::min(mark, pos), std::max(mark, pos), pos < mark,
                                     previous_action == LastAction::Kill);
                 return true;
