@@ -25,6 +25,7 @@ static int key_code(const QString &key) {
         {"DEL", Qt::Key_Backspace}, {"DELETE", Qt::Key_Delete},
         {"LEFT", Qt::Key_Left}, {"RIGHT", Qt::Key_Right},
         {"UP", Qt::Key_Up}, {"DOWN", Qt::Key_Down},
+        {"F3", Qt::Key_F3}, {"F4", Qt::Key_F4},
         {"HOME", Qt::Key_Home}, {"END", Qt::Key_End},
     };
     if (special.contains(key)) return special.value(key);

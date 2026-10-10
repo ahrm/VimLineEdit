@@ -14,7 +14,7 @@ HERE = Path(__file__).resolve().parent
 CASES = HERE / "emacs_test_cases"
 # Vim's three-byte special-key encoding, also accepted by these fixtures.
 SPECIAL_KEYS = {b"kb": "DEL", b"kl": "LEFT", b"kr": "RIGHT", b"ku": "UP",
-                b"kd": "DOWN", b"kh": "HOME", b"@7": "END", b"kD": "DELETE"}
+                b"kd": "DOWN", b"kh": "HOME", b"@7": "END", b"kD": "DELETE", b"k3": "F3", b"k4": "F4"}
 
 
 def read_keys(path):
@@ -59,6 +59,43 @@ def read_keys(path):
     return events
 
 
+def terminal_reference(emacs, env):
+    """Use Emacs's command loop when the fixture itself records a macro."""
+    import pty
+    import fcntl
+    import termios
+    import select
+    import time
+    master, slave = pty.openpty()
+    def controlling_terminal():
+        os.setsid()
+        fcntl.ioctl(slave, termios.TIOCSCTTY, 0)
+
+    process = subprocess.Popen([emacs, "-Q", "-nw", "--load", str(HERE / "emacs_reference.el")],
+                               stdin=slave, stdout=slave, stderr=slave,
+                               env=dict(env, TERM="xterm"), preexec_fn=controlling_terminal)
+    os.close(slave)
+    output = bytearray()
+    deadline = time.monotonic() + 20
+    try:
+        while process.poll() is None:
+            if time.monotonic() > deadline:
+                raise ValueError("Interactive Emacs reference timed out")
+            if select.select([master], [], [], 0.1)[0]:
+                try:
+                    output.extend(os.read(master, 65536))
+                except OSError:
+                    break
+        process.wait(timeout=2)
+        if process.returncode:
+            raise ValueError("Interactive Emacs failed: " + output.decode("utf-8", errors="replace"))
+    finally:
+        if process.poll() is None:
+            process.kill()
+            process.wait()
+        os.close(master)
+
+
 def reference(events, emacs):
     with tempfile.TemporaryDirectory(prefix="emacs-reference-") as directory:
         input_path = Path(directory) / "input.json"
@@ -66,10 +103,16 @@ def reference(events, emacs):
         input_path.write_text(json.dumps(events, ensure_ascii=False), encoding="utf-8")
         env = dict(os.environ, EMACS_FIXTURE_INPUT=str(input_path),
                    EMACS_FIXTURE_OUTPUT=str(output_path))
-        result = subprocess.run([emacs, "--batch", "-Q", "--load", str(HERE / "emacs_reference.el")],
-                                env=env, capture_output=True, text=True, timeout=20)
-        if result.returncode or not output_path.exists():
-            raise ValueError(f"Emacs failed\n{result.stdout}{result.stderr}")
+        records_macro = any(event["key"] in ("F3", "F4") for event in events) or any(
+            first["key"] == "x" and "control" in first["modifiers"] and second["key"] == "("
+            for first, second in zip(events, events[1:]))
+        if records_macro:
+            terminal_reference(emacs, env)
+        else:
+            result = subprocess.run([emacs, "--batch", "-Q", "--load", str(HERE / "emacs_reference.el")],
+                                    env=env, capture_output=True, text=True, timeout=20)
+            if result.returncode or not output_path.exists():
+                raise ValueError(f"Emacs failed\n{result.stdout}{result.stderr}")
         return output_path.read_bytes().decode("utf-8")
 
 

@@ -4569,6 +4569,36 @@ class EmacsEditor : public QObject {
     };
     std::optional<RecordedCommand> repeated_command;
     bool repeating = false, repeat_pending = false;
+    struct MacroKey { int key; Qt::KeyboardModifiers modifiers; QString text; };
+    std::vector<MacroKey> macro, recording;
+    bool recording_macro = false, playing_macro = false;
+
+    void start_macro(bool append) {
+        if (playing_macro) return;
+        recording = append ? macro : std::vector<MacroKey>{};
+        recording_macro = true;
+    }
+    void end_macro(int prefix_keys) {
+        if (!recording_macro) return;
+        for (int i = 0; i < prefix_keys && !recording.empty(); ++i) recording.pop_back();
+        macro = recording;
+        recording.clear();
+        recording_macro = false;
+    }
+    void play_macro(int count) {
+        if (playing_macro || recording_macro || macro.empty()) return;
+        playing_macro = true;
+        const auto keys = macro;
+        count = std::max(0, std::min(count, 10000 / std::max(1, int(keys.size()))));
+        auto cursor = multi ? multi->textCursor() : QTextCursor();
+        if (multi) cursor.beginEditBlock();
+        for (int i = 0; i < count; ++i) for (const auto &key : keys) {
+            QKeyEvent event(QEvent::KeyPress, key.key, key.modifiers, key.text);
+            QApplication::sendEvent(parent(), &event);
+        }
+        if (multi) cursor.endEditBlock();
+        playing_macro = false;
+    }
 
     void undo(int count, bool redo = false) {
         if (read_only()) return;
@@ -4814,6 +4844,9 @@ class EmacsEditor : public QObject {
             {"query-replace-regexp", Qt::Key_Percent, true, true, false}, {"fill-paragraph", Qt::Key_Q, false, true, false},
             {"set-fill-column", Qt::Key_F, false, false, true}, {"indent-region", Qt::Key_Backslash, true, true, false},
             {"indent-for-tab-command", Qt::Key_Tab, false, false, false},
+            {"start-kbd-macro", Qt::Key_ParenLeft, false, false, true},
+            {"end-kbd-macro", Qt::Key_ParenRight, false, false, true},
+            {"call-last-kbd-macro", Qt::Key_E, false, false, true},
         };
         return bindings;
     }
@@ -5401,6 +5434,8 @@ class EmacsEditor : public QObject {
         quoted_count = 0;
         repeated_command.reset();
         repeat_pending = false;
+        recording_macro = false;
+        recording.clear();
         mark = -1;
         mark_ring.clear();
         mark_active = false;
@@ -5413,7 +5448,7 @@ class EmacsEditor : public QObject {
     bool handles_shortcut(QKeyEvent *event) const {
         auto modifiers = KeyboardModifierState::from_qt_modifiers(event->modifiers());
         if (replacement || prompt_callback || goto_pending || quoted_count || argument || search || meta_pending || control_x_pending || event->key() == Qt::Key_Escape) return true;
-        if (event->key() == Qt::Key_Tab) return true;
+        if (event->key() == Qt::Key_Tab || event->key() == Qt::Key_F3 || event->key() == Qt::Key_F4) return true;
         if (modifiers.alt && modifiers.control && (event->key() == Qt::Key_S || event->key() == Qt::Key_R || event->key() == Qt::Key_Percent || event->key() == Qt::Key_Backslash)) return true;
         if (modifiers.alt && !modifiers.control && !modifiers.command)
             return event->key() == Qt::Key_X || event->key() == Qt::Key_Q || event->key() == Qt::Key_Percent || event->key() == Qt::Key_A || event->key() == Qt::Key_E || event->key() == Qt::Key_K ||
@@ -5437,6 +5472,8 @@ class EmacsEditor : public QObject {
     }
 
     bool key_press_event(QKeyEvent *event) {
+        if (recording_macro && !playing_macro && event->key() != Qt::Key_Control && event->key() != Qt::Key_Shift && event->key() != Qt::Key_Alt && event->key() != Qt::Key_Meta)
+            recording.push_back({event->key(), event->modifiers(), event->text()});
         const auto before = text();
         const auto modifiers = KeyboardModifierState::from_qt_modifiers(event->modifiers());
         RecordedCommand command{event->key(), event->modifiers() | (meta_pending ? Qt::AltModifier : Qt::NoModifier), event->text(), control_x_pending, argument};
@@ -5475,6 +5512,8 @@ class EmacsEditor : public QObject {
             meta_pending = control_x_pending = false;
             clear_argument();
             goto_pending = false;
+            recording_macro = false;
+            recording.clear();
             if (search_label) search_label->hide();
             desired_column.reset();
             deactivate_mark();
@@ -5512,6 +5551,11 @@ class EmacsEditor : public QObject {
         clear_argument();
         const LastAction previous_action = last_action;
         last_action = LastAction::Other;
+        if (key == Qt::Key_F3) { start_macro(explicit_argument); return true; }
+        if (key == Qt::Key_F4) {
+            if (recording_macro) end_macro(1); else play_macro(count);
+            return true;
+        }
         if (goto_pending) {
             goto_pending = false;
             if (key == Qt::Key_G) request_text("Goto line: ", [this](const QString &input) { goto_line(input); });
@@ -5537,6 +5581,9 @@ class EmacsEditor : public QObject {
         }
         if (control_x_pending) {
             control_x_pending = false;
+            if (!modifiers.control && key == Qt::Key_ParenLeft) { start_macro(explicit_argument); return true; }
+            if (!modifiers.control && key == Qt::Key_ParenRight) { end_macro(2); return true; }
+            if (!modifiers.control && key == Qt::Key_E) { play_macro(count); return true; }
             if (!modifiers.control && key == Qt::Key_F) {
                 if (explicit_argument) fill_column = std::max(1, count);
                 else request_text("Fill column: ", [this](const QString &input) {

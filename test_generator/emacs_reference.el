@@ -10,7 +10,7 @@
                                     ("LEFT" . left) ("RIGHT" . right)
                                     ("UP" . up) ("DOWN" . down)
                                     ("HOME" . home) ("END" . end)
-                                    ("DELETE" . delete))))))
+                                    ("DELETE" . delete) ("F3" . f3) ("F4" . f4))))))
     (event-convert-list (append modifiers (list (or special (string-to-char key)))))))
 
 (defun reference-undo-boundary ()
@@ -40,6 +40,17 @@
     (buffer-enable-undo)
     (setq buffer-undo-list nil)
     (add-hook 'pre-command-hook #'reference-undo-boundary nil t)
+    (if (not noninteractive)
+        (progn
+          (global-set-key [reference-finish] #'reference-finish)
+          ;; Let each command (including macro playback) finish before queuing
+          ;; more input: unread events otherwise take priority over macro keys.
+          (setq keys (append keys '(reference-finish)))
+          (run-at-time 0 0.02
+                       (lambda ()
+                         (when (and keys (not unread-command-events)
+                                    (not executing-kbd-macro))
+                           (setq unread-command-events (list (cons t (pop keys))))))))
     ;; Resume only when a command really quits. Splitting at every C-g also
     ;; exits a failing isearch, where C-g should merely remove failed input.
     (let ((remaining (vconcat keys)) (consumed 0))
@@ -51,14 +62,22 @@
           (quit
            (unless (> consumed 0) (error "Quit without consuming input"))
            (setq remaining (substring remaining consumed) consumed 0)))))
-    (when (or (active-minibuffer-window)
-              (bound-and-true-p isearch-mode)
-              (not (equal (buffer-name) " *editing-reference*")))
-      (error "Fixture left the editing buffer or an unfinished search"))
-    (let ((coding-system-for-write 'utf-8-unix))
-      (write-region (point-min) (point-max) (getenv "EMACS_FIXTURE_OUTPUT") nil 'silent))))
+    (reference-save))))
+
+(defun reference-save ()
+  (when (or (active-minibuffer-window) (bound-and-true-p isearch-mode)
+            (not (equal (buffer-name) " *editing-reference*")))
+    (error "Fixture left the editing buffer or an unfinished search"))
+  (let ((coding-system-for-write 'utf-8-unix))
+    (write-region (point-min) (point-max) (getenv "EMACS_FIXTURE_OUTPUT") nil 'silent)))
+
+(defun reference-finish ()
+  (interactive)
+  (reference-save)
+  (kill-emacs 0))
 
 (condition-case err
-    (reference-run)
+    (if noninteractive (reference-run)
+      (add-hook 'emacs-startup-hook #'reference-run))
   (error (princ (format "Reference replay failed: %s\n" (error-message-string err)))
          (kill-emacs 1)))
