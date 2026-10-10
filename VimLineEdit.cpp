@@ -3571,6 +3571,16 @@ void VimEditor::set_last_deleted_text(QString text, std::optional<char> reg, boo
             paste_registers['-'] = state;
         }
     }
+    if (reg && *reg >= 'A' && *reg <= 'Z') {
+        int name = *reg - 'A' + 'a';
+        auto previous = paste_registers.find(name);
+        if (previous != paste_registers.end()) {
+            state.text = previous->second.text + (previous->second.is_line ? "\n" : "") + state.text;
+            state.is_line = previous->second.is_line || state.is_line;
+            state.block_width = 0;
+        }
+        reg = static_cast<char>(name);
+    }
     last_deleted_text_ = state;
     if (reg && *reg != '"') {
         if (*reg == '+' || *reg == '*') QApplication::clipboard()->setText(text);
@@ -3579,6 +3589,7 @@ void VimEditor::set_last_deleted_text(QString text, std::optional<char> reg, boo
 }
 
 std::optional<LastDeletedTextState> VimEditor::get_last_deleted_text(std::optional<char> reg){
+    if (reg && *reg >= 'A' && *reg <= 'Z') reg = static_cast<char>(*reg - 'A' + 'a');
     if (reg.has_value() && *reg != '"'){
         if (reg.value() == '+' || reg.value() == '*'){
             // return the contents of the system clipboard
