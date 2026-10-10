@@ -1601,8 +1601,15 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
             break;
         }
         else{
-            for (int i = 0; i < num_repeats; i++){
-                delete_char(num_repeats == 1);
+            int end = std::min(get_line_end_position(old_pos), old_pos + num_repeats);
+            if (end > old_pos) {
+                set_last_deleted_text(current_state.text.mid(old_pos, end - old_pos), current_paste_register);
+                remove_text(old_pos, end - old_pos);
+                int cursor = old_pos;
+                if (cmd == VimLineEditCommand::DeleteChar) {
+                    cursor = std::min(cursor, std::max(get_line_start_position(cursor), get_line_end_position(cursor) - 1));
+                }
+                set_cursor_position(cursor);
             }
             if (cmd == VimLineEditCommand::DeleteCharAndEnterInsertMode) {
                 set_mode(VimMode::Insert);
