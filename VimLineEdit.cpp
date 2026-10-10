@@ -1587,7 +1587,25 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<QChar> symb
                 events.emplace_back(new QKeyEvent(QEvent::KeyPress, digit.unicode(), Qt::NoModifier, QString(digit)));
             }
         }
-        for (size_t i = first; i < last_change_keys.size(); ++i) events.emplace_back(last_change_keys[i]->clone());
+        size_t motion_count_begin = last_change_keys.size(), motion_count_end = motion_count_begin;
+        if (has_explicit_count && first < last_change_keys.size()) {
+            size_t command = first;
+            if (last_change_keys[command]->text() == "\"") command += 2;
+            if (command < last_change_keys.size()) {
+                QString key = last_change_keys[command]->text();
+                if (key.size() == 1 && QString("dcy<>=").contains(key)) motion_count_begin = command + 1;
+                if (key == "g" && command + 1 < last_change_keys.size() &&
+                    (last_change_keys[command + 1]->text() == "u" || last_change_keys[command + 1]->text() == "U")) {
+                    motion_count_begin = command + 2;
+                }
+            }
+            motion_count_end = motion_count_begin;
+            while (motion_count_end < last_change_keys.size() && last_change_keys[motion_count_end]->text().size() == 1 &&
+                   last_change_keys[motion_count_end]->text().at(0).isDigit()) ++motion_count_end;
+        }
+        for (size_t i = first; i < last_change_keys.size(); ++i) {
+            if (i < motion_count_begin || i >= motion_count_end) events.emplace_back(last_change_keys[i]->clone());
+        }
         replaying_change = true;
         for (const auto &event : events) {
             QWidget *target = pending_text_command ? command_line_edit : editor_widget;
