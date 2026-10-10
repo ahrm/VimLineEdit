@@ -126,11 +126,29 @@ static void test_shared_kill_ring() {
     check(second.toPlainText() == "shared textshared text", "M-y should rotate from external clipboard into the shared ring");
 }
 
+static void test_completion_hook() {
+    class CompletingEdit : public VimTextEdit {
+    public:
+        QString requested;
+        QStringList get_autocomplete_suggestions(const QString &word) override {
+            requested = word;
+            return {"completed"};
+        }
+    } widget;
+    widget.set_keybinding_mode(KeybindingMode::Emacs);
+    widget.setPlainText("comp");
+    control(widget, Qt::Key_E);
+    QKeyEvent complete(QEvent::KeyPress, Qt::Key_Tab, Qt::AltModifier);
+    QApplication::sendEvent(&widget, &complete);
+    check(widget.requested == "comp" && widget.toPlainText() == "completed", "M-TAB should use the host completion hook");
+}
+
 int main(int argc, char **argv) {
     QApplication application(argc, argv);
     test_modes<VimLineEdit>();
     test_modes<VimTextEdit>();
     test_scrolling();
     test_shared_kill_ring();
+    test_completion_hook();
     return failures ? 1 : 0;
 }

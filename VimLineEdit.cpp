@@ -4735,7 +4735,7 @@ class EmacsEditor : public QObject {
     }
     QString observed_text;
     std::optional<std::pair<int, int>> pending_edit;
-    enum class LastAction { Other, Kill, Yank };
+    enum class LastAction { Other, Kill, Yank, Completion };
     LastAction last_action = LastAction::Other;
     static std::deque<QString> &kill_ring() {
         static std::deque<QString> entries;
@@ -4748,6 +4748,47 @@ class EmacsEditor : public QObject {
     int yank_index = 0;
     int yank_begin = -1, yank_end = -1;
     QString yanked_text;
+    int completion_begin = -1, completion_end = -1, completion_index = 0;
+    QStringList completion_candidates;
+    QString completion_text;
+
+    void complete_word(bool cycle, bool host) {
+        if (read_only()) return;
+        const auto value = text();
+        int pos = position(), begin = pos;
+        while (begin > 0 && (word_character(value, previous_character(value, begin)) || value[begin - 1] == '_')) begin = previous_character(value, begin);
+        QString prefix = value.mid(begin, pos - begin);
+        if (host) {
+            if (auto *widget = qobject_cast<VimTextEdit *>(multi)) {
+                const auto suggestions = widget->get_autocomplete_suggestions(prefix);
+                if (suggestions.size() == 1) replace(begin, pos, suggestions.front());
+                else widget->show_autocomplete_suggestions(suggestions);
+            }
+            return;
+        }
+        if (cycle && pos == completion_end && value.mid(completion_begin, completion_end - completion_begin) == completion_text) {
+            completion_index = (completion_index + 1) % completion_candidates.size();
+        } else {
+            if (prefix.isEmpty()) return;
+            completion_begin = begin; completion_end = pos; completion_index = 0;
+            completion_candidates.clear();
+            QStringList before, after;
+            auto matches = QRegularExpression("[\\p{L}\\p{N}_]+").globalMatch(value);
+            while (matches.hasNext()) {
+                auto match = matches.next();
+                if (match.capturedStart() == begin || !match.captured().startsWith(prefix) || match.captured() == prefix) continue;
+                if (match.capturedStart() < begin) before.prepend(match.captured()); else after.append(match.captured());
+            }
+            completion_candidates = before + after;
+            completion_candidates.removeDuplicates();
+            if (completion_candidates.isEmpty()) return;
+            completion_candidates << prefix;
+        }
+        completion_text = completion_candidates[completion_index];
+        replace(completion_begin, completion_end, completion_text);
+        completion_end = position();
+        last_action = LastAction::Completion;
+    }
     struct IncrementalSearch {
         int origin, start, point;
         QString query;
@@ -4962,6 +5003,7 @@ class EmacsEditor : public QObject {
             {"forward-list", Qt::Key_N, true, true, false}, {"backward-list", Qt::Key_P, true, true, false},
             {"backward-up-list", Qt::Key_U, true, true, false}, {"down-list", Qt::Key_D, true, true, false},
             {"kill-sexp", Qt::Key_K, true, true, false}, {"mark-sexp", Qt::Key_Space, true, true, false},
+            {"dabbrev-expand", Qt::Key_Slash, false, true, false}, {"completion-at-point", Qt::Key_Tab, false, true, false},
             {"start-kbd-macro", Qt::Key_ParenLeft, false, false, true},
             {"end-kbd-macro", Qt::Key_ParenRight, false, false, true},
             {"call-last-kbd-macro", Qt::Key_E, false, false, true},
@@ -5687,7 +5729,7 @@ class EmacsEditor : public QObject {
             event->key() == Qt::Key_F || event->key() == Qt::Key_B || event->key() == Qt::Key_N || event->key() == Qt::Key_P ||
             event->key() == Qt::Key_U || event->key() == Qt::Key_D || event->key() == Qt::Key_K || event->key() == Qt::Key_Space || event->key() == Qt::Key_At)) return true;
         if (modifiers.alt && !modifiers.control && !modifiers.command)
-            return event->key() == Qt::Key_X || event->key() == Qt::Key_Q || event->key() == Qt::Key_Percent || event->key() == Qt::Key_A || event->key() == Qt::Key_E || event->key() == Qt::Key_K ||
+            return event->key() == Qt::Key_Slash || event->key() == Qt::Key_X || event->key() == Qt::Key_Q || event->key() == Qt::Key_Percent || event->key() == Qt::Key_A || event->key() == Qt::Key_E || event->key() == Qt::Key_K ||
                    event->key() == Qt::Key_BraceLeft || event->key() == Qt::Key_BraceRight || event->key() == Qt::Key_G || event->key() == Qt::Key_V ||
                    event->key() == Qt::Key_M || event->key() == Qt::Key_AsciiCircum || event->key() == Qt::Key_Space || event->key() == Qt::Key_Backslash ||
                    event->key() == Qt::Key_U || event->key() == Qt::Key_L || event->key() == Qt::Key_C ||
@@ -5877,6 +5919,8 @@ class EmacsEditor : public QObject {
         }
         if (meta && !modifiers.control) {
             switch (key) {
+            case Qt::Key_Slash: complete_word(previous_action == LastAction::Completion, false); return true;
+            case Qt::Key_Tab: complete_word(false, true); return true;
             case Qt::Key_X:
                 request_text("M-x ", [this, count, explicit_argument](const QString &name) { execute_named(name, explicit_argument ? std::optional<int>(count) : std::nullopt); });
                 return true;
