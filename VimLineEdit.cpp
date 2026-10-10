@@ -237,6 +237,11 @@ bool VimEditor::key_press_event(QKeyEvent* event, bool& should_propagate) {
     }
     if (event->key() == Qt::Key_Escape) {
         if (current_mode == VimMode::Normal){
+            action_waiting_for_motion = {};
+            pending_symbol_command = {};
+            current_node = nullptr;
+            current_command_repeat_number.clear();
+            current_paste_register = {};
             return true;
         }
         else{
