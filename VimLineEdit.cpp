@@ -30,6 +30,64 @@ namespace QVimEditor{
 const int SEARCH_HIGHLIGHT_PROPERTY_INDEX = 31;
 
 
+// Translate Vim's default-magic operators to the regular-expression engine
+// shared by searching, highlighting, and substitution.
+static QRegularExpression vim_regex(const QString &pattern) {
+    QString expression;
+    bool very_magic = false, literal = false, in_class = false, in_repeat = false;
+    QRegularExpression::PatternOptions options = QRegularExpression::UseUnicodePropertiesOption | QRegularExpression::MultilineOption;
+    for (int i = 0; i < pattern.size(); ++i) {
+        QChar ch = pattern[i];
+        if (ch == '\\' && i + 1 < pattern.size()) {
+            QChar next = pattern[++i];
+            if (!in_class && (next == 'c' || next == 'C')) {
+                if (next == 'c') options |= QRegularExpression::CaseInsensitiveOption;
+                else options &= ~QRegularExpression::CaseInsensitiveOption;
+            } else if (!in_class && (next == 'v' || next == 'm' || next == 'V')) {
+                very_magic = next == 'v';
+                literal = next == 'V';
+            } else if (!in_class && (next == '<' || next == '>')) {
+                expression += "\\b";
+            } else if (!in_class && !very_magic && QString("()+?|{}").contains(next)) {
+                expression += next;
+                if (next == '{') in_repeat = true;
+            } else if (!in_class && next == '=') {
+                expression += '?';
+            } else {
+                expression += '\\';
+                expression += next;
+            }
+            continue;
+        }
+        if (literal) {
+            expression += QRegularExpression::escape(QString(ch));
+            continue;
+        }
+        if (ch == '[') in_class = true;
+        if (!in_class && !very_magic && QString("()+?|{}").contains(ch) && !(ch == '}' && in_repeat)) {
+            expression += '\\';
+        }
+        expression += ch;
+        if (ch == ']') in_class = false;
+        if (ch == '}') in_repeat = false;
+    }
+    return QRegularExpression(expression, options);
+}
+
+struct PatternMatch { int start; int length; };
+static std::vector<PatternMatch> pattern_matches(const QString &text, const QString &pattern) {
+    std::vector<PatternMatch> result;
+    if (pattern.isEmpty()) return result;
+    auto regex = vim_regex(pattern);
+    if (!regex.isValid()) return result;
+    auto matches = regex.globalMatch(text);
+    while (matches.hasNext()) {
+        auto match = matches.next();
+        result.push_back({static_cast<int>(match.capturedStart()), static_cast<int>(match.capturedLength())});
+    }
+    return result;
+}
+
 class LineEditStyle : public QCommonStyle {
     int font_width;
 
@@ -100,10 +158,6 @@ void VimEditor::highlight_matches(QString pattern){
 
     QString current_text = adapter->get_text();
 
-    int first_index = 0;
-
-    int next_index = current_text.indexOf(pattern, first_index);
-
     QList<QTextEdit::ExtraSelection> selections;
 
 
@@ -119,9 +173,9 @@ void VimEditor::highlight_matches(QString pattern){
 
     // search_highlight_format.setObjectType(int atype)
 
-    while (next_index != -1) {
-        int selection_begin = next_index;
-        int selection_end = next_index + pattern.length();
+    for (const auto &match : pattern_matches(current_text, pattern)) {
+        int selection_begin = match.start;
+        int selection_end = match.start + match.length;
 
         QTextCursor cursor = text_adapter->text_edit->textCursor();
 
@@ -141,9 +195,6 @@ void VimEditor::highlight_matches(QString pattern){
         selections.append(selection);
 
 
-        // Find the next match
-        first_index = next_index + 1;
-        next_index = current_text.indexOf(pattern, first_index);
     }
 
     QList<QTextEdit::ExtraSelection> old_extra_selections = adapter->get_extra_selections();
@@ -182,24 +233,17 @@ void VimEditor::scroll_to_first_match(const QString &new_text) {
 
     bool is_reverse = (pending_text_command.has_value() && pending_text_command.value() == VimLineEditCommand::ReverseSearchCommand) || new_text.startsWith('?');
 
-    if (is_reverse) {
-        int from = 0;
-        int last_before = -1;
-        int last_any = -1;
-        while (from < current_text.length()) {
-            int idx = current_text.indexOf(pattern, from);
-            if (idx == -1) break;
-            last_any = idx;
-            if (idx < current_pos) {
-                last_before = idx;
+    auto matches = pattern_matches(current_text, pattern);
+    if (!matches.empty()) {
+        target_index = is_reverse ? matches.back().start : matches.front().start;
+        if (is_reverse) {
+            for (auto it = matches.rbegin(); it != matches.rend(); ++it) {
+                if (it->start < current_pos) { target_index = it->start; break; }
             }
-            from = idx + 1;
-        }
-        target_index = (last_before != -1) ? last_before : last_any;
-    } else {
-        target_index = current_text.indexOf(pattern, current_pos);
-        if (target_index == -1) {
-            target_index = current_text.indexOf(pattern, 0);
+        } else {
+            for (const auto &match : matches) {
+                if (match.start > current_pos) { target_index = match.start; break; }
+            }
         }
     }
 
@@ -3233,20 +3277,11 @@ void VimEditor::handle_search(bool reverse){
         return;
     }
 
-    QString document_text = adapter->get_text().toLower();
-    QString text = last_search_state->query.value().toLower();
-
-    int from = 0;
     std::vector<int> found_indices;
-    while (from < document_text.length()) {
-        int index = document_text.indexOf(text, from);
-        if (index == -1) {
-            break; // No more occurrences found
-        }
-        found_indices.push_back(index);
-        from = index + text.length(); // Move past the found occurrence
+    for (const auto &match : pattern_matches(adapter->get_text(), last_search_state->query.value_or(""))) {
+        found_indices.push_back(match.start);
     }
-    
+
     if (found_indices.empty()) {
         return; // No matches found
     }
