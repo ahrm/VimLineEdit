@@ -2,6 +2,7 @@
 #include "VimLineEdit.h"
 #include <QAbstractTextDocumentLayout>
 #include <QPainter>
+#include <QKeySequence>
 #include <QScrollBar>
 #include <QtCore/qnamespace.h>
 #include <QtGui/qtextcursor.h>
@@ -913,6 +914,49 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
         current_command_repeat_number = "";
     }
 
+
+    // Ask for more text before taking snapshots; prepending can shift positions.
+    if (auto* vim = dynamic_cast<VimTextEdit*>(editor_widget)) {
+        const int position = get_cursor_position();
+        std::optional<bool> boundary;
+        switch (cmd) {
+        case VimLineEditCommand::MoveUp:
+        case VimLineEditCommand::MoveUpOnScreen:
+            if (get_line_start_position(position) == 0) {
+                boundary = false;
+            }
+            break;
+        case VimLineEditCommand::MoveDown:
+        case VimLineEditCommand::MoveDownOnScreen:
+            if (get_line_end_position(position) == adapter->get_text().size()) {
+                boundary = true;
+            }
+            break;
+        case VimLineEditCommand::MoveWordForward:
+        case VimLineEditCommand::MoveWordForwardWithSymbols:
+            if (calculate_move_word_forward(cmd == VimLineEditCommand::MoveWordForwardWithSymbols) == position) {
+                boundary = true;
+            }
+            break;
+        case VimLineEditCommand::MoveWordBackward:
+        case VimLineEditCommand::MoveWordBackwardWithSymbols:
+            if (calculate_move_word_backward(cmd == VimLineEditCommand::MoveWordBackwardWithSymbols) == position) {
+                boundary = false;
+            }
+            break;
+        case VimLineEditCommand::MoveToEndOfWord:
+        case VimLineEditCommand::MoveToEndOfWordWithSymbols:
+            if (position >= adapter->get_text().size() - 1) {
+                boundary = true;
+            }
+            break;
+        default:
+            break;
+        }
+        if (boundary.has_value()) {
+            emit vim->textBoundaryRequested(*boundary);
+        }
+    }
 
     int new_pos = -1;
     int old_pos = get_cursor_position();
@@ -2244,6 +2288,21 @@ bool VimEditor::handle_surrounding_motion_action() {
         }
     }
     return false;
+}
+
+void VimEditor::text_prepended(int length) {
+    for (int* pos : {&visual_mode_anchor, &last_visual_anchor, &last_visual_pos,
+                     &visual_line_selection_begin, &visual_line_selection_end}) {
+        if (*pos >= 0) {
+            *pos += length;
+        }
+    }
+    for (auto& [name, mark] : marks) {
+        mark.position += length;
+    }
+    for (int& pos : jumps) {
+        pos += length;
+    }
 }
 
 void VimEditor::set_cursor_position(int pos) {
@@ -3737,7 +3796,33 @@ QList<QTextCursor> VimTextEdit::selection_cursors() const {
 
 void VimTextEdit::keyPressEvent(QKeyEvent *event) {
 
-    if (!vim_enabled){
+    if (!vim_enabled) {
+        using Key = QKeySequence::StandardKey;
+        struct Motion {
+            Key move;
+            Key select;
+            QTextCursor::MoveOperation operation;
+            bool forward;
+        };
+        static const Motion motions[] = {
+            {Key::MoveToNextChar, Key::SelectNextChar, QTextCursor::Right, true},
+            {Key::MoveToPreviousChar, Key::SelectPreviousChar, QTextCursor::Left, false},
+            {Key::MoveToNextWord, Key::SelectNextWord, QTextCursor::WordRight, true},
+            {Key::MoveToPreviousWord, Key::SelectPreviousWord, QTextCursor::WordLeft, false},
+            {Key::MoveToNextLine, Key::SelectNextLine, QTextCursor::Down, true},
+            {Key::MoveToPreviousLine, Key::SelectPreviousLine, QTextCursor::Up, false},
+            {Key::MoveToNextPage, Key::SelectNextPage, QTextCursor::Down, true},
+            {Key::MoveToPreviousPage, Key::SelectPreviousPage, QTextCursor::Up, false},
+        };
+        for (const auto& motion : motions) {
+            if (event->matches(motion.move) || event->matches(motion.select)) {
+                auto cursor = textCursor();
+                if (!cursor.movePosition(motion.operation)) {
+                    emit textBoundaryRequested(motion.forward);
+                }
+                break;
+            }
+        }
         return QTextEdit::keyPressEvent(event);
     }
 

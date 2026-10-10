@@ -359,6 +359,8 @@ class VimEditor {
     TextInputAdapter *adapter = nullptr;
     explicit VimEditor(QWidget *editor_widget);
     void update_cursor_style();
+    // Rebase navigation and selection state when a read-only buffer grows.
+    void text_prepended(int length);
 
     bool key_press_event(QKeyEvent *event, bool& should_propagate);
 
@@ -504,6 +506,8 @@ class VimTextEdit : public QTextEdit {
     friend class LineNumberArea;
 
 signals:
+    // Synchronous: a slot may extend the buffer before navigation continues.
+    void textBoundaryRequested(bool forward);
     void quitCommand();
     void forceQuitCommand();
     void writeCommand();
