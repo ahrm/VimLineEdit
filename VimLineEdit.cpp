@@ -4721,6 +4721,60 @@ class EmacsEditor : public QObject {
     std::function<void(const QString &)> prompt_callback;
     bool goto_pending = false;
     int recenter_step = 0;
+    int fill_column = 70;
+
+    void fill_paragraph() {
+        if (!multi || read_only()) return;
+        auto value = text();
+        int pos = position();
+        int begin = line_start(value, pos);
+        while (begin > 0) {
+            int previous = line_start(value, begin - 1);
+            if (value.mid(previous, begin - previous).trimmed().isEmpty()) break;
+            begin = previous;
+        }
+        int end = paragraph_target(begin, true);
+        bool newline = end > begin && value[end - 1] == '\n';
+        QString contents = value.mid(begin, end - begin);
+        auto words = contents.split(QRegularExpression("\\s+"), Qt::SkipEmptyParts);
+        int indent_end = begin;
+        while (indent_end < end && (value[indent_end] == ' ' || value[indent_end] == '\t')) ++indent_end;
+        QString indent = value.mid(begin, indent_end - begin), output = indent;
+        int column = indent.size();
+        for (const auto &word : words) {
+            if (column > indent.size()) {
+                if (column + 1 + word.size() > fill_column) { output += "\n" + indent; column = indent.size(); }
+                else { output += ' '; ++column; }
+            }
+            output += word; column += word.size();
+        }
+        if (newline) output += '\n';
+        replace(begin, end, output);
+        move_to(pos >= end ? pos + output.size() - (end - begin) : std::min(pos, begin + int(output.size())));
+    }
+    void indent(bool region) {
+        if (read_only()) return;
+        const auto value = text();
+        int pos = position();
+        if (region && mark >= 0) {
+            int begin = line_start(value, std::min(pos, mark)), end = std::max(pos, mark);
+            QString contents = value.mid(begin, end - begin);
+            contents.replace(QRegularExpression("(?m)^[ \t]+"), "");
+            replace(begin, end, contents);
+            return;
+        }
+        int start = line_start(value, pos), column = pos - start;
+        int target_column = ((column / 8) + 1) * 8;
+        if (start > 0) {
+            int previous = line_start(value, start - 1);
+            for (int i = previous; i < start - 1; ++i) {
+                if (i - previous > column && !value[i].isSpace() && (i == previous || value[i - 1].isSpace())) {
+                    target_column = i - previous; break;
+                }
+            }
+        }
+        replace(pos, pos, QString(target_column - column, ' '));
+    }
 
     void show_prompt(const QString &message) {
         auto *widget = static_cast<QWidget *>(parent());
@@ -5243,9 +5297,10 @@ class EmacsEditor : public QObject {
     bool handles_shortcut(QKeyEvent *event) const {
         auto modifiers = KeyboardModifierState::from_qt_modifiers(event->modifiers());
         if (replacement || prompt_callback || goto_pending || quoted_count || argument || search || meta_pending || control_x_pending || event->key() == Qt::Key_Escape) return true;
-        if (modifiers.alt && modifiers.control && (event->key() == Qt::Key_S || event->key() == Qt::Key_R || event->key() == Qt::Key_Percent)) return true;
+        if (event->key() == Qt::Key_Tab) return true;
+        if (modifiers.alt && modifiers.control && (event->key() == Qt::Key_S || event->key() == Qt::Key_R || event->key() == Qt::Key_Percent || event->key() == Qt::Key_Backslash)) return true;
         if (modifiers.alt && !modifiers.control && !modifiers.command)
-            return event->key() == Qt::Key_Percent || event->key() == Qt::Key_A || event->key() == Qt::Key_E || event->key() == Qt::Key_K ||
+            return event->key() == Qt::Key_Q || event->key() == Qt::Key_Percent || event->key() == Qt::Key_A || event->key() == Qt::Key_E || event->key() == Qt::Key_K ||
                    event->key() == Qt::Key_BraceLeft || event->key() == Qt::Key_BraceRight || event->key() == Qt::Key_G || event->key() == Qt::Key_V ||
                    event->key() == Qt::Key_M || event->key() == Qt::Key_AsciiCircum || event->key() == Qt::Key_Space || event->key() == Qt::Key_Backslash ||
                    event->key() == Qt::Key_U || event->key() == Qt::Key_L || event->key() == Qt::Key_C ||
@@ -5365,6 +5420,14 @@ class EmacsEditor : public QObject {
         }
         if (control_x_pending) {
             control_x_pending = false;
+            if (!modifiers.control && key == Qt::Key_F) {
+                if (explicit_argument) fill_column = std::max(1, count);
+                else request_text("Fill column: ", [this](const QString &input) {
+                    bool valid; int column = input.toInt(&valid);
+                    if (valid && column > 0) fill_column = column;
+                });
+                return true;
+            }
             if (!modifiers.control && key == Qt::Key_U) { undo(count); return true; }
             if (!modifiers.control && key == Qt::Key_Z) { repeat_command(explicit_argument ? std::optional<int>(count) : std::nullopt); return true; }
             if (modifiers.control && key == Qt::Key_O) { delete_blank_lines(); return true; }
@@ -5386,9 +5449,11 @@ class EmacsEditor : public QObject {
         if (meta && modifiers.control) {
             if (key == Qt::Key_S || key == Qt::Key_R) { begin_search(key == Qt::Key_S, true); return true; }
             if (key == Qt::Key_Percent) { query_replace(true); return true; }
+            if (key == Qt::Key_Backslash) { indent(true); return true; }
         }
         if (meta && !modifiers.control) {
             switch (key) {
+            case Qt::Key_Q: fill_paragraph(); return true;
             case Qt::Key_Percent: query_replace(false); return true;
             case Qt::Key_A: move_to(sentence_target(-count)); return true;
             case Qt::Key_E: move_to(sentence_target(count)); return true;
@@ -5518,6 +5583,7 @@ class EmacsEditor : public QObject {
             default: break;
             }
         }
+        if (!modifiers.control && !meta && key == Qt::Key_Tab) { indent(mark_active); return true; }
         if (!modifiers.control && !meta &&
             (!event->text().isEmpty() || key == Qt::Key_Backspace || key == Qt::Key_Delete)) {
             // Fundamental-mode insertion leaves the region's text intact.
