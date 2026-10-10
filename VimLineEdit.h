@@ -418,7 +418,7 @@ class VimEditor {
     void show_command_line_edit(QString initial_command_text, QString placeholder_text = "");
     void hide_command_line_edit(bool was_escaped);
     void perform_pending_text_command_with_text(QString text);
-    void handle_action_waiting_for_motion(int old_pos, int new_pos, int delete_pos_offset);
+    void handle_action_waiting_for_motion(int old_pos, int new_pos, int delete_pos_offset, bool linewise = false);
     void handle_search(bool reverse = false);
     void highlight_matches(QString pattern);
     void scroll_to_first_match(const QString &new_text);

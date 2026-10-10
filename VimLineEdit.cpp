@@ -1900,7 +1900,9 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
             add_jump(old_pos);
         }
         if (action_waiting_for_motion.has_value() && action_waiting_for_motion->kind != ActionWaitingForMotionKind::Visual) {
-            handle_action_waiting_for_motion(old_pos, new_pos, delete_pos_offset);
+            bool linewise = cmd == VimLineEditCommand::MoveUp || cmd == VimLineEditCommand::MoveDown ||
+                            cmd == VimLineEditCommand::GotoBegin || cmd == VimLineEditCommand::GotoEnd;
+            handle_action_waiting_for_motion(old_pos, new_pos, delete_pos_offset, linewise);
         }
         else if (current_mode == VimMode::Visual) {
             set_cursor_position_with_selection(new_pos + delete_pos_offset);
@@ -2924,9 +2926,28 @@ void VimEditor::perform_pending_text_command_with_text(QString text){
 
 }
 
-void VimEditor::handle_action_waiting_for_motion(int old_pos, int new_pos, int delete_pos_offset){
+void VimEditor::handle_action_waiting_for_motion(int old_pos, int new_pos, int delete_pos_offset, bool linewise){
     if (action_waiting_for_motion.has_value()) {
         QString current_text = adapter->get_text();
+        if (linewise) {
+            auto kind = action_waiting_for_motion->kind;
+            int begin = get_line_start_position(std::min(old_pos, new_pos));
+            int end = get_line_end_position(std::max(old_pos, new_pos));
+            set_last_deleted_text(current_text.mid(begin, end - begin), current_paste_register, true);
+            if (kind == ActionWaitingForMotionKind::Yank) {
+                set_cursor_position(old_pos);
+            } else {
+                if (kind == ActionWaitingForMotionKind::Delete) {
+                    if (end < current_text.size()) ++end;
+                    else if (begin > 0) --begin;
+                }
+                remove_text(begin, end - begin);
+                set_cursor_position(std::min(begin, static_cast<int>(adapter->get_text().size())));
+                if (kind == ActionWaitingForMotionKind::Change) set_mode(VimMode::Insert);
+            }
+            action_waiting_for_motion = {};
+            return;
+        }
         if (action_waiting_for_motion->kind == ActionWaitingForMotionKind::Yank) {
             int begin = std::min(old_pos, new_pos);
             int end = std::max(old_pos, new_pos) + (new_pos >= old_pos ? delete_pos_offset : 0);
