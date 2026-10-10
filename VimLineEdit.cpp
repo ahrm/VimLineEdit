@@ -1688,6 +1688,28 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
         replace_steps.clear();
         break;
     case VimLineEditCommand::ReplaceChar: {
+        if (!symbol) break;
+        if (current_mode == VimMode::Visual || current_mode == VimMode::VisualLine || current_mode == VimMode::VisualBlock) {
+            push_history(current_state);
+            auto replace = [&](QString text) {
+                for (QChar &ch : text) if (ch != '\n') ch = QChar(*symbol);
+                return text;
+            };
+            if (current_mode == VimMode::VisualBlock) {
+                apply_transform_to_visual_block(replace);
+                auto bounds = get_visual_block_bounds();
+                new_pos = bounds.line_starts[bounds.min_line] + bounds.min_col;
+            } else {
+                int begin, end;
+                QString text = get_current_selection(begin, end);
+                insert_text(replace(text), begin, end);
+                new_pos = begin;
+            }
+            action_waiting_for_motion = {};
+            set_mode(VimMode::Normal);
+            adapter->set_extra_selections({});
+            break;
+        }
         int end = get_line_end_position(old_pos);
         if (!symbol || num_repeats > end - old_pos) break;
         push_history(current_state);
