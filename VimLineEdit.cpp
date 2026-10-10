@@ -2464,6 +2464,12 @@ bool VimEditor::handle_surrounding_motion_action() {
             bool found_end = false;
             int begin_to_find = 1;
             int end_to_find = 1;
+            // An opening delimiter under the cursor belongs to this object.
+            if (begin_symbol != end_symbol && cursor_pos < current_text.size() &&
+                current_text[cursor_pos] == begin_symbol) {
+                start = cursor_pos + 1;
+                end = cursor_pos + 1;
+            }
 
             // Find the beginning of the surrounding
             while (start > 0) {
