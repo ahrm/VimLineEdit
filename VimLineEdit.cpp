@@ -3559,6 +3559,18 @@ void VimEditor::set_last_deleted_text(QString text, std::optional<char> reg, boo
     LastDeletedTextState state{text, is_line, block_width};
     is_yank = is_yank || (action_waiting_for_motion && action_waiting_for_motion->kind == ActionWaitingForMotionKind::Yank);
     if (is_yank && (!reg || reg == '"')) paste_registers['0'] = state;
+    if (!is_yank && !text.isEmpty()) {
+        if (is_line || text.contains('\n')) {
+            for (int name = '9'; name > '1'; --name) {
+                auto previous = paste_registers.find(name - 1);
+                if (previous != paste_registers.end()) paste_registers[name] = previous->second;
+                else paste_registers.erase(name);
+            }
+            paste_registers['1'] = state;
+        } else if (!reg || reg == '"') {
+            paste_registers['-'] = state;
+        }
+    }
     last_deleted_text_ = state;
     if (reg && *reg != '"') {
         if (*reg == '+' || *reg == '*') QApplication::clipboard()->setText(text);
