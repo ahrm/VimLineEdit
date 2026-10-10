@@ -1302,7 +1302,7 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<QChar> symb
             new_search_state.direction = cmd == VimLineEditCommand::SearchTextUnderCursor ?  FindDirection::Forward : FindDirection::Backward;
             new_search_state.query = "\\<" + QRegularExpression::escape(word_under_cursor) + "\\>";
             last_search_state = new_search_state;
-            handle_search();
+            handle_search(false, num_repeats);
         }
         break;
     }
@@ -1333,7 +1333,11 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<QChar> symb
         break;
     }
     case VimLineEditCommand::MoveToEndOfLine:{
-        new_pos = get_line_end_position(get_cursor_position()) - 1;
+        new_pos = get_cursor_position();
+        for (int i = 1; i < num_repeats && get_line_end_position(new_pos) < current_state.text.size(); ++i) {
+            new_pos = get_line_end_position(new_pos) + 1;
+        }
+        new_pos = std::max(get_line_start_position(new_pos), get_line_end_position(new_pos) - 1);
         delete_pos_offset = 1;
         break;
     }
@@ -1412,7 +1416,8 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<QChar> symb
         }
 
         if (current_mode == VimMode::Insert && insert_repeat_count > 1) {
-            QString repeated = current_insert_mode_text.repeated(insert_repeat_count - 1);
+            QString unit = (repeat_insert_on_new_lines ? "\n" : "") + current_insert_mode_text;
+            QString repeated = unit.repeated(insert_repeat_count - 1);
             int cursor = get_cursor_position();
             insert_text(repeated, cursor);
             set_cursor_position(cursor + repeated.size());
@@ -1593,10 +1598,10 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<QChar> symb
         break;
     }
     case VimLineEditCommand::Undo:
-        undo();
+        for (int i = 0; i < num_repeats && history.current_index >= 0; ++i) undo();
         break;
     case VimLineEditCommand::Redo:
-        redo();
+        for (int i = 0; i < num_repeats && history.current_index + 1 < static_cast<int>(history.states.size()); ++i) redo();
         break;
     case VimLineEditCommand::MoveWordBackward:
         new_pos = old_pos;
@@ -1776,6 +1781,15 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<QChar> symb
         push_history(current_state);
         int cursor_pos = get_cursor_position();
         int line_end = get_line_end_position(cursor_pos);
+        for (int i = 1; i < num_repeats && line_end < current_state.text.size(); ++i) {
+            line_end = get_line_end_position(line_end + 1);
+        }
+        if (num_repeats > 1 && cmd == VimLineEditCommand::DeleteToEndOfLine &&
+            cursor_pos == get_line_start_position(cursor_pos)) {
+            action_waiting_for_motion = {ActionWaitingForMotionKind::Delete};
+            handle_action_waiting_for_motion(cursor_pos, std::max(cursor_pos, line_end - 1), 0, true);
+            break;
+        }
         int cursor_offset = cmd == VimLineEditCommand::DeleteToEndOfLine ? -1 : 0;
         
         if (cursor_pos < line_end) {
@@ -1837,11 +1851,11 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<QChar> symb
         break;
     }
     case VimLineEditCommand::RepeatSearch: {
-        handle_search();
+        handle_search(false, num_repeats);
         break;
     }
     case VimLineEditCommand::RepeatSearchReverse: {
-        handle_search(true);
+        handle_search(true, num_repeats);
         break;
     }
     case VimLineEditCommand::YankCurrentLine:
@@ -1947,6 +1961,8 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<QChar> symb
         insert_text("\n", line_end);
         new_pos = line_end + 1;
         set_mode(VimMode::Insert);
+        insert_repeat_count = num_repeats;
+        repeat_insert_on_new_lines = true;
         break;
     }
     case VimLineEditCommand::DeletePreviousWord: {
@@ -1989,12 +2005,15 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<QChar> symb
         insert_text("\n", line_start);
         new_pos = line_start;
         set_mode(VimMode::Insert);
+        insert_repeat_count = num_repeats;
+        repeat_insert_on_new_lines = true;
         break;
     }
     case VimLineEditCommand::SearchCommand:
     case VimLineEditCommand::ReverseSearchCommand:
     case VimLineEditCommand::CommandCommand: {
         pending_text_command = cmd;
+        pending_search_count = num_repeats;
         show_command_line_edit(get_initial_command_text(cmd));
         break;
     }
@@ -3307,7 +3326,7 @@ void VimEditor::perform_pending_text_command_with_text(QString text){
             search_state.direction = (pending_text_command.value() == VimLineEditCommand::ReverseSearchCommand) ? FindDirection::Backward : FindDirection::Forward;
             search_state.query = text;
             last_search_state = search_state;
-            handle_search();
+            handle_search(false, pending_search_count);
             break;
         }
         default:
@@ -3425,7 +3444,7 @@ void VimEditor::handle_action_waiting_for_motion(int old_pos, int new_pos, int d
     }
 }
 
-void VimEditor::handle_search(bool reverse){
+void VimEditor::handle_search(bool reverse, int count){
     if (!last_search_state.has_value()) {
         return;
     }
@@ -3473,6 +3492,10 @@ void VimEditor::handle_search(bool reverse){
 
     
     if (target_index != -1) {
+        int match = std::find(found_indices.begin(), found_indices.end(), target_index) - found_indices.begin();
+        int size = found_indices.size();
+        int offset = (count - 1) % size;
+        target_index = found_indices[(match + (is_reversed ? -offset : offset) + size) % size];
         if (target_index != current_pos && !action_waiting_for_motion.has_value()) {
             add_jump(current_pos);
         }
@@ -3885,6 +3908,7 @@ void VimEditor::set_mode(VimMode mode){
     current_mode = mode;
 
     if (mode == VimMode::Insert){
+        repeat_insert_on_new_lines = false;
         current_insert_mode_text = "";
     }
 

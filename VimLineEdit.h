@@ -352,6 +352,8 @@ class VimEditor {
     QString current_command_repeat_number = "";
     int pending_operator_count = 1;
     int insert_repeat_count = 1;
+    bool repeat_insert_on_new_lines = false;
+    int pending_search_count = 1;
     bool replaying_change = false;
     bool recording_change = false;
     QString change_start_text;
@@ -448,7 +450,7 @@ class VimEditor {
     void hide_command_line_edit(bool was_escaped);
     void perform_pending_text_command_with_text(QString text);
     void handle_action_waiting_for_motion(int old_pos, int new_pos, int delete_pos_offset, bool linewise = false);
-    void handle_search(bool reverse = false);
+    void handle_search(bool reverse = false, int count = 1);
     void highlight_matches(QString pattern);
     void scroll_to_first_match(const QString &new_text);
     void set_last_deleted_text(QString text, std::optional<char> reg, bool is_line = false, bool is_yank = false, int block_width = 0);
