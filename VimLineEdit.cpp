@@ -127,8 +127,19 @@ VimEditor::VimEditor(QWidget *editor_widget) : editor_widget(editor_widget) {
     QObject::connect(command_line_edit, &EscapeLineEdit::returnPressed, [&](){
         initial_search_scroll_value = std::nullopt;
         QString text = command_line_edit->text();
+        if (recording_change && !replaying_change) {
+            for (QChar ch : text.mid(1)) {
+                change_keys.emplace_back(new QKeyEvent(QEvent::KeyPress, ch.toUpper().unicode(), Qt::NoModifier, QString(ch)));
+            }
+            change_keys.emplace_back(new QKeyEvent(QEvent::KeyPress, Qt::Key_Return, Qt::NoModifier));
+        }
         perform_pending_text_command_with_text(text.mid(1));
         hide_command_line_edit(false);
+        if (recording_change && !replaying_change && current_mode == VimMode::Normal) {
+            if (adapter->get_text() != change_start_text) last_change_keys = std::move(change_keys);
+            recording_change = false;
+            change_keys.clear();
+        }
 
     });
 
@@ -275,9 +286,11 @@ bool VimEditor::key_press_event(QKeyEvent *event, bool &should_propagate) {
     if (recording_change) change_keys.emplace_back(event->clone());
     bool result = process_key_press_event(event, should_propagate);
     if (pending_text_command) {
-        // The command-line widget owns its own key events.
-        recording_change = false;
-        change_keys.clear();
+        // Preserve an operator's keys; its search motion is recorded on submission.
+        if (!action_waiting_for_motion) {
+            recording_change = false;
+            change_keys.clear();
+        }
     } else if (current_mode == VimMode::Normal && !action_waiting_for_motion &&
                !pending_symbol_command && !current_node && current_command_repeat_number.isEmpty() &&
                !current_paste_register) {
@@ -1574,7 +1587,10 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
         }
         for (size_t i = first; i < last_change_keys.size(); ++i) events.emplace_back(last_change_keys[i]->clone());
         replaying_change = true;
-        for (const auto &event : events) QApplication::sendEvent(editor_widget, event.get());
+        for (const auto &event : events) {
+            QWidget *target = pending_text_command ? command_line_edit : editor_widget;
+            QApplication::sendEvent(target, event.get());
+        }
         replaying_change = false;
         if (has_explicit_count) last_change_keys = std::move(events);
         break;
@@ -3174,6 +3190,12 @@ void VimEditor::show_command_line_edit(QString initial_command_text, QString pla
 }
 
 void VimEditor::hide_command_line_edit(bool was_escaped){
+    pending_text_command = {};
+    if (was_escaped) {
+        action_waiting_for_motion = {};
+        recording_change = false;
+        change_keys.clear();
+    }
     if (initial_search_scroll_value.has_value()) {
         QTextEditAdapter *text_adapter = dynamic_cast<QTextEditAdapter*>(adapter);
         if (text_adapter && text_adapter->text_edit) {
@@ -3185,7 +3207,9 @@ void VimEditor::hide_command_line_edit(bool was_escaped){
         }
     }
 
-    command_line_edit->setText("");
+    command_line_edit->blockSignals(true);
+    command_line_edit->clear();
+    command_line_edit->blockSignals(false);
     command_line_edit->hide();
     adapter->set_focus();
 }
