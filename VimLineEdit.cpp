@@ -2122,7 +2122,18 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<QChar> symb
     case VimLineEditCommand::CommandCommand: {
         pending_text_command = cmd;
         pending_search_count = num_repeats;
-        show_command_line_edit(get_initial_command_text(cmd));
+        QString initial = get_initial_command_text(cmd);
+        if (cmd == VimLineEditCommand::CommandCommand &&
+            (current_mode == VimMode::Visual || current_mode == VimMode::VisualLine || current_mode == VimMode::VisualBlock)) {
+            marks['<'] = {std::min(visual_mode_anchor, old_pos), '<'};
+            marks['>'] = {std::max(visual_mode_anchor, old_pos), '>'};
+            initial += "'<,'>";
+            action_waiting_for_motion = {};
+            set_mode(VimMode::Normal);
+            adapter->set_extra_selections({});
+            visual_line_selection_begin = visual_line_selection_end = -1;
+        }
+        show_command_line_edit(initial);
         break;
     }
     case VimLineEditCommand::DecrementNextNumberOnCurrentLine:
@@ -4215,7 +4226,7 @@ void VimEditor::emit_quit(){
 }
 
 bool VimEditor::handle_substitute(const QString &command) {
-    static const QRegularExpression prefix(R"(^(%|[.$0-9]+(?:,[.$0-9]+)?)?s([^\w\s\\]))");
+    static const QRegularExpression prefix(R"(^(%|(?:[.$0-9]+|'[<>])(?:,(?:[.$0-9]+|'[<>]))?)?s([^\w\s\\]))");
     auto parsed = prefix.match(command);
     if (!parsed.hasMatch()) return false;
     auto *widget = qobject_cast<QTextEdit*>(editor_widget);
@@ -4251,6 +4262,12 @@ bool VimEditor::handle_substitute(const QString &command) {
     int first = current_line, last = current_line;
     QString range = parsed.captured(1);
     auto address = [&](const QString &value) {
+        if (value == "'<" || value == "'>") {
+            auto mark = marks.find(value[1].unicode());
+            int line = current_line, column = 0;
+            if (mark != marks.end()) get_line_and_col(mark->second.position, line, column);
+            return line;
+        }
         if (value == ".") return current_line;
         if (value == "$") return static_cast<int>(starts.size()) - 1;
         return std::clamp(value.toInt() - 1, 0, static_cast<int>(starts.size()) - 1);
