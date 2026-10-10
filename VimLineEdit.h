@@ -14,6 +14,9 @@
 
 namespace QVimEditor {
 class VimTextEdit;
+class EmacsEditor;
+
+enum class KeybindingMode { Standard, Vim, Emacs };
 
 QString swap_case(QString input);
 
@@ -490,7 +493,8 @@ class VimEditor {
 
 class VimLineEdit : public QLineEdit {
     Q_OBJECT
-   bool vim_enabled = true; 
+    KeybindingMode keybinding_mode = KeybindingMode::Vim;
+    EmacsEditor *emacs_editor = nullptr;
 
   public:
     VimEditor *editor = nullptr;
@@ -498,7 +502,10 @@ class VimLineEdit : public QLineEdit {
     void keyPressEvent(QKeyEvent *event) override;
     void resizeEvent(QResizeEvent *event) override;
     void set_vim_enabled(bool enabled);
-    bool get_vim_enabled();
+    bool get_vim_enabled() const;
+    void set_keybinding_mode(KeybindingMode mode);
+    KeybindingMode get_keybinding_mode() const { return keybinding_mode; }
+    bool event(QEvent *event) override;
     bool eventFilter(QObject *watched, QEvent *event) override;
 signals:
     void quitCommand();
@@ -520,7 +527,8 @@ class LineNumberArea : public QWidget {
 
 class VimTextEdit : public QTextEdit {
     Q_OBJECT
-    bool vim_enabled = true;
+    KeybindingMode keybinding_mode = KeybindingMode::Vim;
+    EmacsEditor *emacs_editor = nullptr;
     bool line_numbers_visible = false;
     LineNumberArea *line_number_area = nullptr;
     bool showing_suggestion_menu = false;
@@ -536,7 +544,10 @@ class VimTextEdit : public QTextEdit {
     void keyPressEvent(QKeyEvent *event) override;
     void resizeEvent(QResizeEvent *event) override;
     void set_vim_enabled(bool enabled);
-    bool get_vim_enabled();
+    bool get_vim_enabled() const;
+    void set_keybinding_mode(KeybindingMode mode);
+    KeybindingMode get_keybinding_mode() const { return keybinding_mode; }
+    bool event(QEvent *event) override;
     QList<QTextCursor> selection_cursors() const;
     void set_line_numbers_visible(bool visible);
     bool get_line_numbers_visible() const;

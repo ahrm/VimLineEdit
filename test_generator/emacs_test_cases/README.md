@@ -37,10 +37,8 @@ disabled, and a fresh kill ring. Consecutive typed characters share an undo
 unit; other commands create undo boundaries. Only use trusted editing input,
 not file/process/exit commands. Finish searches with Return or `C-g`.
 
-Compatibility tests return 77 (skipped) until `enable_emacs_bindings()` in
-`tests/EmacsTestRunner.cpp` selects a real Emacs mode. Cases 0–2 also run in
-standard Qt mode to check the infrastructure today. Update the harness test
-that asserts this skip when implementing Emacs bindings.
+Select Emacs bindings with `set_keybinding_mode(KeybindingMode::Emacs)` on
+either widget. Cases 0–2 also run in standard Qt mode to check the harness.
 
 | Cases | Coverage |
 | --- | --- |

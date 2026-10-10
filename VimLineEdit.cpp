@@ -4530,6 +4530,118 @@ void QTextEditAdapter::key_press_event(QKeyEvent *kevent) {
     QCoreApplication::sendEvent(text_edit, kevent);
 }
 
+// Emacs state is independent of Vim's modal commands and registers. Edits use
+// the native widgets so their undo history, signals, and read-only flags work.
+class EmacsEditor : public QObject {
+    QLineEdit *line;
+    QTextEdit *multi;
+    bool meta_pending = false;
+
+    QString text() const { return line ? line->text() : multi->toPlainText(); }
+    int position() const { return line ? line->cursorPosition() : multi->textCursor().position(); }
+    bool read_only() const { return line ? line->isReadOnly() : multi->isReadOnly(); }
+
+    static int next_character(const QString &value, int pos) {
+        if (pos >= value.size()) return value.size();
+        return pos + (value[pos].isHighSurrogate() && pos + 1 < value.size() &&
+                      value[pos + 1].isLowSurrogate() ? 2 : 1);
+    }
+    static int previous_character(const QString &value, int pos) {
+        if (pos <= 0) return 0;
+        return pos - (value[pos - 1].isLowSurrogate() && pos > 1 &&
+                      value[pos - 2].isHighSurrogate() ? 2 : 1);
+    }
+    void move_to(int pos) {
+        pos = std::max(0, std::min(pos, static_cast<int>(text().size())));
+        if (line) line->setCursorPosition(pos);
+        else {
+            auto cursor = multi->textCursor();
+            cursor.setPosition(pos);
+            multi->setTextCursor(cursor);
+        }
+    }
+    void replace(int begin, int end, const QString &replacement) {
+        if (read_only()) return;
+        if (line) {
+            line->setSelection(begin, end - begin);
+            line->insert(replacement);
+        } else {
+            auto cursor = multi->textCursor();
+            cursor.beginEditBlock();
+            cursor.setPosition(begin);
+            cursor.setPosition(end, QTextCursor::KeepAnchor);
+            cursor.insertText(replacement);
+            cursor.endEditBlock();
+            multi->setTextCursor(cursor);
+        }
+    }
+
+  public:
+    explicit EmacsEditor(QWidget *widget) : QObject(widget),
+        line(qobject_cast<QLineEdit *>(widget)), multi(qobject_cast<QTextEdit *>(widget)) {}
+
+    void reset() {
+        meta_pending = false;
+        move_to(position());
+    }
+
+    bool handles_shortcut(QKeyEvent *event) const {
+        auto modifiers = KeyboardModifierState::from_qt_modifiers(event->modifiers());
+        if (meta_pending || event->key() == Qt::Key_Escape) return true;
+        return modifiers.control && !modifiers.alt && !modifiers.command &&
+            (event->key() == Qt::Key_A || event->key() == Qt::Key_E ||
+             event->key() == Qt::Key_B || event->key() == Qt::Key_F || event->key() == Qt::Key_D);
+    }
+
+    bool key_press_event(QKeyEvent *event) {
+        const int key = event->key();
+        if (key == Qt::Key_Control || key == Qt::Key_Shift || key == Qt::Key_Alt || key == Qt::Key_Meta)
+            return false;
+        auto modifiers = KeyboardModifierState::from_qt_modifiers(event->modifiers());
+        if (key == Qt::Key_Escape) { meta_pending = true; return true; }
+        const bool meta = modifiers.alt || meta_pending;
+        meta_pending = false;
+        if (modifiers.command) return false;
+        const auto value = text();
+        const int pos = position();
+        if (modifiers.control && !meta) {
+            switch (key) {
+            case Qt::Key_A:
+                move_to(pos == 0 ? 0 : value.lastIndexOf('\n', pos - 1) + 1); return true;
+            case Qt::Key_E: {
+                const int end = value.indexOf('\n', pos);
+                move_to(end < 0 ? value.size() : end); return true;
+            }
+            case Qt::Key_B: move_to(previous_character(value, pos)); return true;
+            case Qt::Key_F: move_to(next_character(value, pos)); return true;
+            case Qt::Key_D: replace(pos, next_character(value, pos), ""); return true;
+            default: break;
+            }
+        }
+        return false; // Ordinary typing and native shortcuts stay with Qt.
+    }
+};
+
+bool VimLineEdit::event(QEvent *event) {
+    if (keybinding_mode == KeybindingMode::Emacs && emacs_editor &&
+        event->type() == QEvent::ShortcutOverride &&
+        emacs_editor->handles_shortcut(static_cast<QKeyEvent *>(event))) {
+        event->accept();
+        return true;
+    }
+    return QLineEdit::event(event);
+}
+
+bool VimTextEdit::event(QEvent *event) {
+    if (keybinding_mode == KeybindingMode::Emacs && emacs_editor &&
+        event->type() == QEvent::ShortcutOverride &&
+        emacs_editor->handles_shortcut(static_cast<QKeyEvent *>(event))) {
+        event->accept();
+        return true;
+    }
+    return QTextEdit::event(event);
+}
+
 VimLineEdit::VimLineEdit(QWidget *parent) : QLineEdit(parent) {
     for (QObject *child : children()) {
         if (child->inherits("QWidgetLineControl")) {
@@ -4538,17 +4650,23 @@ VimLineEdit::VimLineEdit(QWidget *parent) : QLineEdit(parent) {
         }
     }
     editor = new VimEditor(this);
+    emacs_editor = new EmacsEditor(this);
 }
 
 bool VimLineEdit::eventFilter(QObject *watched, QEvent *event) {
-    if (vim_enabled && event->type() == QEvent::Timer) {
+    if (get_vim_enabled() && event->type() == QEvent::Timer) {
         return true;
     }
     return QLineEdit::eventFilter(watched, event);
 }
 
 void VimLineEdit::keyPressEvent(QKeyEvent *event) {
-    if (!vim_enabled){
+    if (keybinding_mode == KeybindingMode::Emacs && emacs_editor->key_press_event(event)) {
+        event->accept();
+        return;
+    }
+
+    if (!get_vim_enabled()){
         return QLineEdit::keyPressEvent(event);
     }
 
@@ -4592,6 +4710,7 @@ VimTextEdit::VimTextEdit(QWidget *parent) : QTextEdit(parent) {
         }
     }
     editor = new VimEditor(this);
+    emacs_editor = new EmacsEditor(this);
     line_number_area = new LineNumberArea(this);
     line_number_area->hide();
 
@@ -4612,14 +4731,14 @@ VimTextEdit::VimTextEdit(QWidget *parent) : QTextEdit(parent) {
 }
 
 bool VimTextEdit::eventFilter(QObject *watched, QEvent *event) {
-    if (vim_enabled && event->type() == QEvent::Timer) {
+    if (get_vim_enabled() && event->type() == QEvent::Timer) {
         return true;
     }
     return QTextEdit::eventFilter(watched, event);
 }
 
 QList<QTextCursor> VimTextEdit::selection_cursors() const {
-    if (!vim_enabled) {
+    if (!get_vim_enabled()) {
         return {textCursor()};
     }
     const auto mode = editor->get_mode();
@@ -4636,8 +4755,13 @@ QList<QTextCursor> VimTextEdit::selection_cursors() const {
 }
 
 void VimTextEdit::keyPressEvent(QKeyEvent *event) {
+    if (keybinding_mode == KeybindingMode::Emacs && emacs_editor->key_press_event(event)) {
+        event->accept();
+        return;
+    }
 
-    if (!vim_enabled) {
+
+    if (!get_vim_enabled()) {
         using Key = QKeySequence::StandardKey;
         struct Motion {
             Key move;
@@ -4689,32 +4813,37 @@ void VimTextEdit::resizeEvent(QResizeEvent *event) {
 }
 
 
-void VimLineEdit::set_vim_enabled(bool enabled){
-    if (vim_enabled == enabled) {
-        return;
-    }
-    vim_enabled = enabled;
-    if (editor) {
-        editor->update_cursor_style();
-    }
+void VimLineEdit::set_vim_enabled(bool enabled) {
+    set_keybinding_mode(enabled ? KeybindingMode::Vim : KeybindingMode::Standard);
 }
 
-bool VimLineEdit::get_vim_enabled(){
-    return vim_enabled;
+bool VimLineEdit::get_vim_enabled() const {
+    return keybinding_mode == KeybindingMode::Vim;
 }
 
-void VimTextEdit::set_vim_enabled(bool enabled){
-    if (vim_enabled == enabled) {
-        return;
-    }
-    vim_enabled = enabled;
-    if (editor) {
-        editor->update_cursor_style();
-    }
+void VimLineEdit::set_keybinding_mode(KeybindingMode mode) {
+    if (keybinding_mode == mode) return;
+    keybinding_mode = mode;
+    emacs_editor->reset();
+    editor->command_line_edit->hide();
+    editor->update_cursor_style();
 }
 
-bool VimTextEdit::get_vim_enabled(){
-    return vim_enabled;
+void VimTextEdit::set_vim_enabled(bool enabled) {
+    set_keybinding_mode(enabled ? KeybindingMode::Vim : KeybindingMode::Standard);
+}
+
+bool VimTextEdit::get_vim_enabled() const {
+    return keybinding_mode == KeybindingMode::Vim;
+}
+
+void VimTextEdit::set_keybinding_mode(KeybindingMode mode) {
+    if (keybinding_mode == mode) return;
+    keybinding_mode = mode;
+    emacs_editor->reset();
+    setExtraSelections({});
+    editor->command_line_edit->hide();
+    editor->update_cursor_style();
 }
 
 void VimTextEdit::set_line_numbers_visible(bool visible){

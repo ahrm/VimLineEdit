@@ -57,11 +57,10 @@ class InfrastructureTest(unittest.TestCase):
         result = self.run_compare("--mode", "standard")
         self.assertEqual(result.returncode, 1)
 
-    def test_unimplemented_emacs_mode_is_skipped(self):
+    def test_emacs_mode_replays_input(self):
         self.save_reference()
         result = self.run_compare()
-        self.assertEqual(result.returncode, 77, result.stdout + result.stderr)
-        self.assertIn("SKIP", result.stdout)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_control_meta_and_mark_are_replayed_in_emacs(self):
         self.path.write_bytes(b"one two\x01\x00\x1bf\x17\x05\x19")

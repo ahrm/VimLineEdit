@@ -12,10 +12,11 @@
 
 #include "../VimLineEdit.h"
 
-// The only integration point needed when Emacs bindings are implemented.
-// Return true after selecting the real Emacs mode on the requested widget.
-static bool enable_emacs_bindings(QWidget *) {
-    return false;
+static void enable_emacs_bindings(QWidget *widget) {
+    if (auto *line = qobject_cast<QVimEditor::VimLineEdit *>(widget))
+        line->set_keybinding_mode(QVimEditor::KeybindingMode::Emacs);
+    else if (auto *multi = qobject_cast<QVimEditor::VimTextEdit *>(widget))
+        multi->set_keybinding_mode(QVimEditor::KeybindingMode::Emacs);
 }
 
 static int key_code(const QString &key) {
@@ -70,10 +71,7 @@ int main(int argc, char **argv) {
         multi->set_vim_enabled(false);
         multi->setLineWrapMode(QTextEdit::NoWrap);
     }
-    if (arguments[2] == "emacs" && !enable_emacs_bindings(widget.get())) {
-        std::cerr << "Emacs bindings are not implemented; connect enable_emacs_bindings() when available.\n";
-        return 77;
-    }
+    if (arguments[2] == "emacs") enable_emacs_bindings(widget.get());
     widget->resize(800, 600);
     widget->show();
     widget->setFocus();

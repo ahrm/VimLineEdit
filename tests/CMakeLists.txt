@@ -8,6 +8,12 @@ target_link_libraries(vim_lineedit_tests Qt6::Widgets)
 add_executable(emacs_lineedit_tests EmacsTestRunner.cpp ../VimLineEdit.cpp)
 target_link_libraries(emacs_lineedit_tests Qt6::Widgets)
 
+add_executable(emacs_widget_tests EmacsWidgetTests.cpp ../VimLineEdit.cpp)
+target_link_libraries(emacs_widget_tests Qt6::Widgets)
+add_test(NAME emacs_widget_tests COMMAND emacs_widget_tests)
+set_tests_properties(emacs_widget_tests PROPERTIES
+  ENVIRONMENT "QT_QPA_PLATFORM=offscreen" LABELS "emacs" TIMEOUT 30)
+
 find_package(Python3 COMPONENTS Interpreter QUIET)
 find_program(EMACS_EXECUTABLE NAMES emacs)
 if(Python3_Interpreter_FOUND)
@@ -20,7 +26,7 @@ if(Python3_Interpreter_FOUND)
       COMMAND "${Python3_EXECUTABLE}" "${EMACS_GENERATOR}" compare "${fixture}"
               --runner $<TARGET_FILE:emacs_lineedit_tests>)
     set_tests_properties("${case_name}" PROPERTIES
-      SKIP_RETURN_CODE 77 LABELS "emacs;compatibility" TIMEOUT 30)
+      LABELS "emacs;compatibility" TIMEOUT 30)
     if(case_name MATCHES "^emacs_test_case_[012]$")
       add_test(NAME "emacs_infrastructure_${case_name}"
         COMMAND "${Python3_EXECUTABLE}" "${EMACS_GENERATOR}" compare "${fixture}"

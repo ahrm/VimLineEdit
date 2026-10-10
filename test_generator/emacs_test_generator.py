@@ -12,7 +12,6 @@ import tempfile
 
 HERE = Path(__file__).resolve().parent
 CASES = HERE / "emacs_test_cases"
-SKIP = 77
 # Vim's three-byte special-key encoding, also accepted by these fixtures.
 SPECIAL_KEYS = {b"kb": "DEL", b"kl": "LEFT", b"kr": "RIGHT", b"ku": "UP",
                 b"kd": "DOWN", b"kh": "HOME", b"@7": "END", b"kD": "DELETE"}
@@ -106,7 +105,7 @@ def main():
     paths = args.cases or sorted(CASES.glob("emacs_test_case_*.keystrokes.txt"))
     if not paths:
         parser.error("no fixtures found")
-    failures = skipped = 0
+    failures = 0
     for path in paths:
         try:
             output_path = reference_path(path)
@@ -126,10 +125,6 @@ def main():
                 result = subprocess.run([str(args.runner.resolve()), "--mode", args.mode],
                                         input=json.dumps(replay, ensure_ascii=False),
                                         capture_output=True, text=True, env=env, timeout=20)
-                if result.returncode == SKIP:
-                    print(f"SKIP {path.name}: {result.stderr.strip()}")
-                    skipped += 1
-                    continue
                 if result.returncode:
                     raise ValueError(f"Qt replay failed: {result.stdout}{result.stderr}")
                 if not compare(expected, json.loads(result.stdout)):
@@ -140,8 +135,8 @@ def main():
         except (OSError, ValueError, subprocess.TimeoutExpired) as error:
             print(f"FAIL {path.name}: {error}", file=sys.stderr)
             failures += 1
-    print(f"{len(paths)} fixtures; {failures} failed; {skipped} skipped")
-    return 1 if failures else SKIP if skipped else 0
+    print(f"{len(paths)} fixtures; {failures} failed")
+    return 1 if failures else 0
 
 
 if __name__ == "__main__":
