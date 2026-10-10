@@ -135,6 +135,7 @@ VimEditor::VimEditor(QWidget *editor_widget) : editor_widget(editor_widget) {
         }
         perform_pending_text_command_with_text(text.mid(1));
         hide_command_line_edit(false);
+        resume_insert_mode();
         if (recording_change && !replaying_change && current_mode == VimMode::Normal) {
             if (adapter->get_text() != change_start_text) last_change_keys = std::move(change_keys);
             recording_change = false;
@@ -276,7 +277,12 @@ void VimEditor::scroll_to_first_match(const QString &new_text) {
 }
 
 bool VimEditor::key_press_event(QKeyEvent *event, bool &should_propagate) {
-    if (replaying_change) return process_key_press_event(event, should_propagate);
+    bool was_temporary_normal = resume_insert_after_command;
+    if (replaying_change) {
+        bool result = process_key_press_event(event, should_propagate);
+        if (was_temporary_normal) resume_insert_mode();
+        return result;
+    }
     bool was_normal = current_mode == VimMode::Normal;
     if (!recording_change && was_normal) {
         recording_change = true;
@@ -285,13 +291,14 @@ bool VimEditor::key_press_event(QKeyEvent *event, bool &should_propagate) {
     }
     if (recording_change) change_keys.emplace_back(event->clone());
     bool result = process_key_press_event(event, should_propagate);
+    if (was_temporary_normal) resume_insert_mode();
     if (pending_text_command) {
         // Preserve an operator's keys; its search motion is recorded on submission.
         if (!action_waiting_for_motion) {
             recording_change = false;
             change_keys.clear();
         }
-    } else if (current_mode == VimMode::Normal && !action_waiting_for_motion &&
+    } else if (current_mode == VimMode::Normal && !resume_insert_after_command && !action_waiting_for_motion &&
                !pending_symbol_command && !current_node && current_command_repeat_number.isEmpty() &&
                !current_paste_register) {
         auto modifiers = KeyboardModifierState::from_qt_modifiers(event->modifiers());
@@ -305,6 +312,16 @@ bool VimEditor::key_press_event(QKeyEvent *event, bool &should_propagate) {
         change_keys.clear();
     }
     return result;
+}
+
+void VimEditor::resume_insert_mode() {
+    if (!resume_insert_after_command || action_waiting_for_motion || pending_symbol_command ||
+        pending_text_command || current_node || !current_command_repeat_number.isEmpty() || current_paste_register) return;
+    resume_insert_after_command = false;
+    if (current_mode == VimMode::Normal) {
+        current_mode = VimMode::Insert;
+        set_style_for_mode(current_mode);
+    }
 }
 
 bool VimEditor::process_key_press_event(QKeyEvent* event, bool& should_propagate) {
@@ -755,6 +772,7 @@ void VimEditor::add_vim_keybindings() {
     }
 
     std::vector<KeyBinding> insert_mode_keybindings = {
+        KeyBinding{{KeyChord{Qt::Key_O, CONTROL}}, VimLineEditCommand::NormalCommandFromInsert},
         KeyBinding{{KeyChord{Qt::Key_R, CONTROL}}, VimLineEditCommand::InsertRegister},
         KeyBinding{{KeyChord{Qt::Key_W, CONTROL}}, VimLineEditCommand::DeletePreviousWord},
         KeyBinding{{KeyChord{Qt::Key_A, CONTROL}}, VimLineEditCommand::InsertLastInsertModeText},
@@ -1394,6 +1412,13 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<QChar> symb
         }
         break;
     }
+    case VimLineEditCommand::NormalCommandFromInsert:
+        // Keep the insert session intact while one normal command is pending.
+        current_mode = VimMode::Normal;
+        set_style_for_mode(current_mode);
+        resume_insert_after_command = true;
+        new_pos = std::min(old_pos, std::max(get_line_start_position(old_pos), get_line_end_position(old_pos) - 1));
+        break;
     case VimLineEditCommand::InsertRegister:
         waiting_for_insert_register = true;
         break;
