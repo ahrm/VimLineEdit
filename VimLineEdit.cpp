@@ -1890,6 +1890,10 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
         push_history(current_state);
         std::optional<LastDeletedTextState> last_deleted_text = get_last_deleted_text(current_paste_register);
         if (last_deleted_text && last_deleted_text->text.size() > 0) {
+            if (last_deleted_text->block_width > 0) {
+                paste_block(*last_deleted_text, cmd == VimLineEditCommand::PasteForward, num_repeats);
+                break;
+            }
             QString current_text = current_state.text;
             int cursor_pos = get_cursor_position();
 
@@ -1915,6 +1919,10 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
         push_history(current_state);
         std::optional<LastDeletedTextState> last_deleted_text = get_last_deleted_text(current_paste_register);
         if (last_deleted_text && last_deleted_text->text.size() > 0) {
+            if (last_deleted_text->block_width > 0) {
+                paste_block(*last_deleted_text, cmd == VimLineEditCommand::PasteForward, num_repeats);
+                break;
+            }
             QString current_text = current_state.text;
             int cursor_pos = get_cursor_position();
 
@@ -2854,6 +2862,27 @@ void VimEditor::enter_visual_block_insert_mode(bool at_end) {
     set_cursor_position(l_start + col_pos);
 }
 
+void VimEditor::paste_block(const LastDeletedTextState &contents, bool after, int count) {
+    int line, column;
+    get_line_and_col(get_cursor_position(), line, column);
+    if (after && get_cursor_position() < get_line_end_position(get_cursor_position())) ++column;
+    QStringList rows = contents.text.split('\n');
+    int first_position = 0;
+    for (int i = 0; i < rows.size(); ++i) {
+        auto starts = get_line_starts(adapter->get_text());
+        if (line + i >= static_cast<int>(starts.size())) {
+            insert_text("\n", adapter->get_text().size());
+            starts = get_line_starts(adapter->get_text());
+        }
+        int start = starts[line + i];
+        int length = get_line_end_position(start) - start;
+        if (column > length) insert_text(QString(column - length, ' '), start + length);
+        insert_text(rows[i].leftJustified(contents.block_width, ' ').repeated(count), start + column);
+        if (i == 0) first_position = start + column;
+    }
+    set_cursor_position(first_position);
+}
+
 void VimEditor::handle_visual_block_action(VimLineEditCommand cmd) {
     VisualBlockBounds bounds = get_visual_block_bounds();
     if (action_waiting_for_motion.has_value() && action_waiting_for_motion->kind == ActionWaitingForMotionKind::Change) {
@@ -2878,7 +2907,8 @@ void VimEditor::handle_visual_block_action(VimLineEditCommand cmd) {
             yanked_block.append("");
         }
     }
-    set_last_deleted_text(yanked_block.join("\n"), current_paste_register, false);
+    set_last_deleted_text(yanked_block.join("\n"), current_paste_register, false, false,
+                          bounds.max_col - bounds.min_col + 1);
 
     if (cmd != VimLineEditCommand::Yank) {
         for (int l = bounds.max_line; l >= bounds.min_line && l < static_cast<int>(bounds.line_starts.size()); --l) {
@@ -3464,9 +3494,9 @@ void EscapeLineEdit::keyPressEvent(QKeyEvent *event) {
     QLineEdit::keyPressEvent(event);
 }
 
-void VimEditor::set_last_deleted_text(QString text, std::optional<char> reg, bool is_line, bool is_yank) {
+void VimEditor::set_last_deleted_text(QString text, std::optional<char> reg, bool is_line, bool is_yank, int block_width) {
     if (reg == '_') return;
-    LastDeletedTextState state{text, is_line};
+    LastDeletedTextState state{text, is_line, block_width};
     is_yank = is_yank || (action_waiting_for_motion && action_waiting_for_motion->kind == ActionWaitingForMotionKind::Yank);
     if (is_yank && (!reg || reg == '"')) paste_registers['0'] = state;
     last_deleted_text_ = state;

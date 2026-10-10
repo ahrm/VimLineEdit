@@ -264,6 +264,7 @@ class EscapeLineEdit : public QLineEdit {
 struct LastDeletedTextState {
     QString text;
     bool is_line = false;
+    int block_width = 0;
 };
 
 class TextInputAdapter {
@@ -436,6 +437,7 @@ class VimEditor {
     void apply_transform_to_visual_block(const std::function<QString(const QString&)> &transform_fn);
     void enter_visual_block_insert_mode(bool at_end);
     void handle_visual_block_action(VimLineEditCommand cmd);
+    void paste_block(const LastDeletedTextState &contents, bool after, int count);
     void replicate_visual_block_insert_text();
     int get_line_start_position(int cursor_pos);
     int get_line_end_position(int cursor_pos);
@@ -447,7 +449,7 @@ class VimEditor {
     void handle_search(bool reverse = false);
     void highlight_matches(QString pattern);
     void scroll_to_first_match(const QString &new_text);
-    void set_last_deleted_text(QString text, std::optional<char> reg, bool is_line = false, bool is_yank = false);
+    void set_last_deleted_text(QString text, std::optional<char> reg, bool is_line = false, bool is_yank = false, int block_width = 0);
     std::optional<LastDeletedTextState> get_last_deleted_text(std::optional<char> reg);
 
     void handle_number_increment_decrement(bool increment, int count = 1, bool progressive = false);
