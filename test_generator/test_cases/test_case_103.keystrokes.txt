@@ -1,0 +1,1 @@
+ifoo foofoogg0:%s/foo/bar/g:wq
