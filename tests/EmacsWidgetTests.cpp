@@ -1,5 +1,6 @@
 #include <QApplication>
 #include <QKeyEvent>
+#include <QLabel>
 #include <iostream>
 #include <optional>
 #include <variant>
@@ -51,7 +52,15 @@ template<class Widget> static void test_modes() {
     shortcut.ignore();
     QApplication::sendEvent(&widget, &shortcut);
     check(shortcut.isAccepted(), "Emacs should claim its shortcuts before application actions");
+    control(widget, Qt::Key_A);
+    control(widget, Qt::Key_S);
+    QKeyEvent query(QEvent::KeyPress, Qt::Key_B, Qt::NoModifier, "b");
+    QApplication::sendEvent(&widget, &query);
+    check(contents(widget) == "abc" && position(widget) == 2, "Read-only search should move point without editing");
+    auto *prompt = widget.template findChild<QLabel *>("emacsSearchPrompt");
+    check(prompt && !prompt->isHidden() && prompt->text().contains("b"), "Search should display its query");
     widget.set_vim_enabled(false);
+    check(prompt && prompt->isHidden(), "Changing modes should close the search prompt");
     check(widget.get_keybinding_mode() == KeybindingMode::Standard, "Legacy disable selects standard mode");
     widget.set_vim_enabled(true);
     check(widget.get_keybinding_mode() == KeybindingMode::Vim, "Legacy enable selects Vim mode");

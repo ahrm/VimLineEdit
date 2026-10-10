@@ -37,17 +37,17 @@
     (buffer-enable-undo)
     (setq buffer-undo-list nil)
     (add-hook 'pre-command-hook #'reference-undo-boundary nil t)
-    ;; Keep prefix commands and isearch in the same command loop. C-g stops
-    ;; a keyboard macro, so resume with the remaining input after each quit.
-    (let (chunk)
-      (dolist (key keys)
-        (push key chunk)
-        (when (eq key 7)
-          (condition-case nil
-              (execute-kbd-macro (vconcat (nreverse chunk)))
-            (quit nil))
-          (setq chunk nil)))
-      (when chunk (execute-kbd-macro (vconcat (nreverse chunk)))))
+    ;; Resume only when a command really quits. Splitting at every C-g also
+    ;; exits a failing isearch, where C-g should merely remove failed input.
+    (let ((remaining (vconcat keys)) (consumed 0))
+      (add-hook 'pre-command-hook
+                (lambda () (setq consumed executing-kbd-macro-index)) nil t)
+      (while (> (length remaining) 0)
+        (condition-case nil
+            (progn (execute-kbd-macro remaining) (setq remaining []))
+          (quit
+           (unless (> consumed 0) (error "Quit without consuming input"))
+           (setq remaining (substring remaining consumed) consumed 0)))))
     (when (or (active-minibuffer-window)
               (bound-and-true-p isearch-mode)
               (not (equal (buffer-name) " *editing-reference*")))

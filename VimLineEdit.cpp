@@ -25,6 +25,7 @@
 #include <QClipboard>
 #include <QApplication>
 #include <QMenu>
+#include <QLabel>
 
 namespace QVimEditor{
 const int SEARCH_HIGHLIGHT_PROPERTY_INDEX = 31;
@@ -4547,6 +4548,15 @@ class EmacsEditor : public QObject {
     int yank_index = 0;
     int yank_begin = -1, yank_end = -1;
     QString yanked_text;
+    struct IncrementalSearch {
+        int origin, start, point;
+        QString query;
+        bool forward, failed;
+    };
+    std::optional<IncrementalSearch> search;
+    std::vector<IncrementalSearch> search_steps;
+    QString previous_search;
+    QLabel *search_label = nullptr;
 
     QString text() const { return line ? line->text() : multi->toPlainText(); }
     int position() const { return line ? line->cursorPosition() : multi->textCursor().position(); }
@@ -4681,11 +4691,112 @@ class EmacsEditor : public QObject {
         yanked_text = text().mid(yank_begin, yank_end - yank_begin);
         last_action = LastAction::Yank;
     }
+    void show_search() {
+        auto *widget = static_cast<QWidget *>(parent());
+        if (!search_label) {
+            search_label = new QLabel(widget);
+            search_label->setObjectName("emacsSearchPrompt");
+            search_label->setTextFormat(Qt::PlainText);
+            search_label->setAutoFillBackground(true);
+            search_label->setFrameStyle(QFrame::StyledPanel);
+        }
+        search_label->setFont(widget->font());
+        search_label->setText(QString(search->failed ? "Failing " : "") +
+            (search->forward ? "I-search: " : "I-search backward: ") + search->query);
+        const int height = std::min(widget->height(), search_label->sizeHint().height());
+        search_label->setGeometry(0, widget->height() - height, widget->width(), height);
+        search_label->show();
+        search_label->raise();
+    }
+    void update_search() {
+        if (search->query.isEmpty()) {
+            search->point = search->start;
+            search->failed = false;
+        } else {
+            const auto value = text();
+            bool uppercase = false;
+            for (const QChar c : search->query) uppercase |= c.isUpper();
+            const auto sensitivity = uppercase ? Qt::CaseSensitive : Qt::CaseInsensitive;
+            const int last = search->start - search->query.size();
+            const int found = search->forward ? value.indexOf(search->query, search->start, sensitivity) :
+                (last < 0 ? -1 : value.lastIndexOf(search->query, last, sensitivity));
+            search->failed = found < 0;
+            if (found >= 0) search->point = found + (search->forward ? search->query.size() : 0);
+        }
+        move_to(search->point);
+        show_search();
+    }
+    void begin_search(bool forward) {
+        deactivate_mark();
+        search = IncrementalSearch{position(), position(), position(), "", forward, false};
+        search_steps.clear();
+        show_search();
+    }
+    void finish_search(bool cancel) {
+        if (!search) return;
+        if (cancel) move_to(search->origin);
+        else {
+            if (!search->query.isEmpty()) previous_search = search->query;
+            mark = search->origin;
+        }
+        search.reset();
+        search_steps.clear();
+        if (search_label) search_label->hide();
+    }
+    bool search_key(QKeyEvent *event, const KeyboardModifierState &modifiers) {
+        const int key = event->key();
+        if (modifiers.control && key == Qt::Key_G) {
+            if (search->failed) {
+                while (search->failed && !search_steps.empty()) {
+                    search = search_steps.back();
+                    search_steps.pop_back();
+                }
+                move_to(search->point);
+                show_search();
+            } else finish_search(true);
+            return true;
+        }
+        if (key == Qt::Key_Return || key == Qt::Key_Enter) { finish_search(false); return true; }
+        if (key == Qt::Key_Backspace && !modifiers.control && !modifiers.alt) {
+            if (!search_steps.empty()) {
+                search = search_steps.back();
+                search_steps.pop_back();
+                move_to(search->point);
+                show_search();
+            }
+            return true;
+        }
+        if (modifiers.control && (key == Qt::Key_S || key == Qt::Key_R)) {
+            search_steps.push_back(*search);
+            const bool forward = key == Qt::Key_S;
+            search->start = search->failed ? (forward ? 0 : text().size()) : search->point;
+            search->forward = forward;
+            if (search->query.isEmpty()) search->query = previous_search;
+            update_search();
+            return true;
+        }
+        if (!modifiers.control && !modifiers.alt && !modifiers.command && !event->text().isEmpty()) {
+            search_steps.push_back(*search);
+            search->query += event->text();
+            update_search();
+            return true;
+        }
+        finish_search(false);
+        return false; // Apply the command that ended the search normally.
+    }
+
+    bool eventFilter(QObject *watched, QEvent *event) override {
+        if (event->type() == QEvent::Resize && search) show_search();
+        return QObject::eventFilter(watched, event);
+    }
 
   public:
     explicit EmacsEditor(QWidget *widget) : QObject(widget),
         line(qobject_cast<QLineEdit *>(widget)), multi(qobject_cast<QTextEdit *>(widget)), observed_text(text()) {
+        widget->installEventFilter(this);
         auto changed = [this]() {
+            // External edits invalidate the search's saved offsets.
+            finish_search(false);
             const auto current = text();
             int begin = 0;
             while (begin < observed_text.size() && begin < current.size() && observed_text[begin] == current[begin]) ++begin;
@@ -4702,6 +4813,7 @@ class EmacsEditor : public QObject {
     }
 
     void reset() {
+        finish_search(false);
         meta_pending = false;
         desired_column.reset();
         control_x_pending = false;
@@ -4713,7 +4825,7 @@ class EmacsEditor : public QObject {
 
     bool handles_shortcut(QKeyEvent *event) const {
         auto modifiers = KeyboardModifierState::from_qt_modifiers(event->modifiers());
-        if (meta_pending || control_x_pending || event->key() == Qt::Key_Escape) return true;
+        if (search || meta_pending || control_x_pending || event->key() == Qt::Key_Escape) return true;
         if (modifiers.alt && !modifiers.control && !modifiers.command)
             return event->key() == Qt::Key_B || event->key() == Qt::Key_F ||
                    event->key() == Qt::Key_Less || event->key() == Qt::Key_Greater ||
@@ -4725,7 +4837,8 @@ class EmacsEditor : public QObject {
              event->key() == Qt::Key_N || event->key() == Qt::Key_P ||
              event->key() == Qt::Key_Space || event->key() == Qt::Key_X || event->key() == Qt::Key_G ||
              event->key() == Qt::Key_K || event->key() == Qt::Key_W || event->key() == Qt::Key_Y ||
-             event->key() == Qt::Key_Underscore || event->key() == Qt::Key_Slash);
+             event->key() == Qt::Key_Underscore || event->key() == Qt::Key_Slash ||
+             event->key() == Qt::Key_S || event->key() == Qt::Key_R);
     }
 
     bool key_press_event(QKeyEvent *event) {
@@ -4733,6 +4846,7 @@ class EmacsEditor : public QObject {
         if (key == Qt::Key_Control || key == Qt::Key_Shift || key == Qt::Key_Alt || key == Qt::Key_Meta)
             return false;
         auto modifiers = KeyboardModifierState::from_qt_modifiers(event->modifiers());
+        if (search && search_key(event, modifiers)) return true;
         if (modifiers.control && !modifiers.command && key == Qt::Key_G) {
             meta_pending = control_x_pending = false;
             desired_column.reset();
@@ -4816,6 +4930,8 @@ class EmacsEditor : public QObject {
                                     previous_action == LastAction::Kill);
                 return true;
             case Qt::Key_Y: yank(false); return true;
+            case Qt::Key_S: begin_search(true); return true;
+            case Qt::Key_R: begin_search(false); return true;
             case Qt::Key_Underscore:
             case Qt::Key_Slash:
                 if (!read_only()) {

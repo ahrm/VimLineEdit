@@ -20,6 +20,8 @@ if(Python3_Interpreter_FOUND)
   set(EMACS_GENERATOR "${CMAKE_SOURCE_DIR}/test_generator/emacs_test_generator.py")
   file(GLOB EMACS_CASES CONFIGURE_DEPENDS
        "${CMAKE_SOURCE_DIR}/test_generator/emacs_test_cases/emacs_test_case_*.keystrokes.txt")
+  # Fixtures whose setup and edits fit in a single-line widget.
+  set(EMACS_LINE_CASES 0 2 3 4 6 8 9 10 11 12 13 14 15 17 18 19 21 22 23 24 25 26 27 28 29 30)
   foreach(fixture IN LISTS EMACS_CASES)
     get_filename_component(case_name "${fixture}" NAME_WE)
     add_test(NAME "${case_name}"
@@ -27,6 +29,13 @@ if(Python3_Interpreter_FOUND)
               --runner $<TARGET_FILE:emacs_lineedit_tests>)
     set_tests_properties("${case_name}" PROPERTIES
       LABELS "emacs;compatibility" TIMEOUT 30)
+    string(REPLACE "emacs_test_case_" "" case_index "${case_name}")
+    if(case_index IN_LIST EMACS_LINE_CASES)
+      add_test(NAME "${case_name}_line"
+        COMMAND "${Python3_EXECUTABLE}" "${EMACS_GENERATOR}" compare "${fixture}"
+                --runner $<TARGET_FILE:emacs_lineedit_tests> --widget line)
+      set_tests_properties("${case_name}_line" PROPERTIES LABELS "emacs;compatibility" TIMEOUT 30)
+    endif()
     if(case_name MATCHES "^emacs_test_case_[012]$")
       add_test(NAME "emacs_infrastructure_${case_name}"
         COMMAND "${Python3_EXECUTABLE}" "${EMACS_GENERATOR}" compare "${fixture}"

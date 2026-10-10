@@ -48,3 +48,6 @@ either widget. Cases 0–2 also run in standard Qt mode to check the harness.
 | 8–10 | Forward/backward regions and region kill/yank |
 | 11–12 | Exchange point/mark and cancellation |
 | 13–14 | Undo and incremental search |
+| 15–19 | Word boundaries, retained vertical column, Unicode, region insertion, prefix cancellation |
+| 20–24 | Consecutive kills, backward word kill, region copy, undo grouping |
+| 25–30 | Reverse/repeated search, cancellation, query deletion, failing search, smart case |
