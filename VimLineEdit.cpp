@@ -552,6 +552,8 @@ void VimEditor::add_vim_keybindings() {
         KeyBinding{{KeyChord{"x", {}}}, VimLineEditCommand::DeleteChar},
         KeyBinding{{KeyChord{"r", {}}}, VimLineEditCommand::ReplaceChar},
         KeyBinding{{KeyChord{"R", {}}}, VimLineEditCommand::EnterReplaceMode},
+        KeyBinding{{KeyChord{"J", {}}}, VimLineEditCommand::JoinLines},
+        KeyBinding{{KeyChord{"g", {}}, KeyChord{"J", {}}}, VimLineEditCommand::JoinLinesWithoutSpace},
         KeyBinding{{KeyChord{"D", {}}}, VimLineEditCommand::DeleteToEndOfLine},
         KeyBinding{{KeyChord{"C", {}}}, VimLineEditCommand::ChangeToEndOfLine},
         KeyBinding{{KeyChord{"d", {}}}, VimLineEditCommand::Delete},
@@ -902,6 +904,8 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
         case VimLineEditCommand::EnterInsertModeEnd:
         case VimLineEditCommand::EnterInsertModeBeginLine:
         case VimLineEditCommand::EnterInsertModeEndLine:
+        case VimLineEditCommand::JoinLines:
+        case VimLineEditCommand::JoinLinesWithoutSpace:
         case VimLineEditCommand::EnterReplaceMode:
         case VimLineEditCommand::ReplaceChar:
         case VimLineEditCommand::DeleteChar:
@@ -1468,6 +1472,34 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
             new_pos = next;
         }
         break;
+    case VimLineEditCommand::JoinLines:
+    case VimLineEditCommand::JoinLinesWithoutSpace: {
+        push_history(current_state);
+        int start = old_pos;
+        int joins = std::max(2, num_repeats) - 1;
+        if (current_mode == VimMode::Visual || current_mode == VimMode::VisualLine) {
+            start = std::min(old_pos, visual_mode_anchor);
+            joins = current_state.text.mid(start, std::abs(old_pos - visual_mode_anchor)).count('\n');
+        }
+        for (int i = 0; i < joins; ++i) {
+            QString text = adapter->get_text();
+            int end = get_line_end_position(start);
+            if (end >= text.size()) break;
+            int next = end + 1;
+            QString separator;
+            if (cmd == VimLineEditCommand::JoinLines) {
+                while (next < text.size() && (text[next] == ' ' || text[next] == '\t')) ++next;
+                if (end > get_line_start_position(start) && !text[end - 1].isSpace() &&
+                    next < text.size() && text[next] != '\n' && text[next] != ')') separator = " ";
+            }
+            insert_text(separator, end, next);
+            new_pos = end;
+        }
+        action_waiting_for_motion = {};
+        set_mode(VimMode::Normal);
+        adapter->set_extra_selections({});
+        break;
+    }
     case VimLineEditCommand::EnterReplaceMode:
         push_history(current_state);
         set_mode(VimMode::Insert);

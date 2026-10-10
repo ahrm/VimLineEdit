@@ -47,6 +47,8 @@ enum class VimLineEditCommand {
     DeleteChar,
     ReplaceChar,
     EnterReplaceMode,
+    JoinLines,
+    JoinLinesWithoutSpace,
     FindForward,
     FindBackward,
     FindForwardTo,
