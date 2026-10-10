@@ -1532,6 +1532,11 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
         new_pos = old_pos;
         for (int i = 0; i < num_repeats - (change_word ? 1 : 0); ++i) {
             int next = calculate_move_word_forward(with_symbols, new_pos);
+            if (i == num_repeats - 1 && action_waiting_for_motion &&
+                action_waiting_for_motion->kind != ActionWaitingForMotionKind::Visual &&
+                new_pos < current_state.text.size() && !current_state.text[new_pos].isSpace()) {
+                next = std::min(next, get_line_end_position(new_pos));
+            }
             if (next == new_pos) break;
             new_pos = next;
         }
