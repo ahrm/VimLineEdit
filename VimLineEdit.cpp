@@ -4,6 +4,7 @@
 #include <QAbstractTextDocumentLayout>
 #include <QPainter>
 #include <QKeySequence>
+#include <QPointer>
 #include <QScrollBar>
 #include <QtCore/qnamespace.h>
 #include <QtGui/qtextcursor.h>
@@ -4558,6 +4559,34 @@ class EmacsEditor : public QObject {
     bool mark_active = false;
     bool control_x_pending = false;
     bool rectangle_active = false, register_prefix = false;
+    bool register_argument = false;
+    std::function<void(const QString &)> register_callback;
+    struct Register { QString text; QPointer<EmacsEditor> owner; int point = -1; };
+    static QMap<QString, Register> &registers() { static QMap<QString, Register> values; return values; }
+
+    void register_command(int key) {
+        bool remove = register_argument;
+        if (key != Qt::Key_S && key != Qt::Key_I && key != Qt::Key_Space && key != Qt::Key_J) return;
+        show_prompt("Register: ");
+        register_callback = [this, key, remove](const QString &name) {
+            int pos = position();
+            if (key == Qt::Key_S && mark >= 0) {
+                int begin = std::min(pos, mark), end = std::max(pos, mark);
+                registers()[name] = Register{text().mid(begin, end - begin), nullptr, -1};
+                if (remove) replace(begin, end, ""); else deactivate_mark();
+            } else if (key == Qt::Key_Space) registers()[name] = Register{QString(), this, pos};
+            else if (registers().contains(name)) {
+                const auto saved = registers().value(name);
+                if (key == Qt::Key_I && saved.point < 0) {
+                    push_mark(pos); replace(pos, pos, saved.text);
+                } else if (key == Qt::Key_J && saved.owner) {
+                    saved.owner->push_mark(saved.owner->position());
+                    saved.owner->move_to(saved.point);
+                    static_cast<QWidget *>(saved.owner->parent())->setFocus();
+                }
+            }
+        };
+    }
     static QStringList &killed_rectangle() { static QStringList rows; return rows; }
 
     static int column_at(const QString &value, int pos) {
@@ -5614,6 +5643,8 @@ class EmacsEditor : public QObject {
             };
             rebase(mark);
             for (int &point : mark_ring) rebase(point);
+            for (auto it = registers().begin(); it != registers().end(); ++it)
+                if (it->owner == this) rebase(it->point);
             observed_text = current;
             last_action = LastAction::Other;
         };
@@ -5632,6 +5663,7 @@ class EmacsEditor : public QObject {
         desired_column.reset();
         control_x_pending = false;
         register_prefix = rectangle_active = false;
+        register_callback = nullptr;
         if (multi) multi->setExtraSelections({});
         quoted_count = 0;
         repeated_command.reset();
@@ -5649,7 +5681,7 @@ class EmacsEditor : public QObject {
 
     bool handles_shortcut(QKeyEvent *event) const {
         auto modifiers = KeyboardModifierState::from_qt_modifiers(event->modifiers());
-        if (register_prefix || replacement || prompt_callback || goto_pending || quoted_count || argument || search || meta_pending || control_x_pending || event->key() == Qt::Key_Escape) return true;
+        if (register_callback || register_prefix || replacement || prompt_callback || goto_pending || quoted_count || argument || search || meta_pending || control_x_pending || event->key() == Qt::Key_Escape) return true;
         if (event->key() == Qt::Key_Tab || event->key() == Qt::Key_F3 || event->key() == Qt::Key_F4) return true;
         if (modifiers.alt && modifiers.control && (event->key() == Qt::Key_S || event->key() == Qt::Key_R || event->key() == Qt::Key_Percent || event->key() == Qt::Key_Backslash ||
             event->key() == Qt::Key_F || event->key() == Qt::Key_B || event->key() == Qt::Key_N || event->key() == Qt::Key_P ||
@@ -5699,6 +5731,13 @@ class EmacsEditor : public QObject {
             repeat_command(std::nullopt); return true;
         }
         repeat_pending = false;
+        if (register_callback) {
+            auto callback = std::move(register_callback);
+            register_callback = nullptr;
+            if (search_label) search_label->hide();
+            if (!(modifiers.control && key == Qt::Key_G) && !event->text().isEmpty()) callback(event->text());
+            return true;
+        }
         if (replacement) return replacement_key(event, modifiers);
         if (prompt_callback) return prompt_key(event, modifiers);
         if (quoted_count) {
@@ -5757,7 +5796,7 @@ class EmacsEditor : public QObject {
         last_action = LastAction::Other;
         if (register_prefix) {
             register_prefix = false;
-            rectangle_command(key, meta);
+            if (!rectangle_command(key, meta)) register_command(key);
             return true;
         }
         if (key == Qt::Key_F3) { start_macro(explicit_argument); return true; }
@@ -5790,7 +5829,7 @@ class EmacsEditor : public QObject {
         }
         if (control_x_pending) {
             control_x_pending = false;
-            if (!modifiers.control && key == Qt::Key_R) { register_prefix = true; return true; }
+            if (!modifiers.control && key == Qt::Key_R) { register_prefix = true; register_argument = explicit_argument; return true; }
             if (!modifiers.control && key == Qt::Key_Space) {
                 rectangle_active = !rectangle_active;
                 if (rectangle_active) { push_mark(pos); mark_active = true; } else deactivate_mark();
