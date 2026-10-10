@@ -4835,8 +4835,8 @@ class EmacsEditor : public QObject {
     void next_replacement() {
         if (!replacement) return;
         auto &r = *replacement;
-        r.match = r.expression.match(text(), r.next);
-        if (!r.match.hasMatch() || r.match.capturedEnd() > r.limit) {
+        if (r.next <= r.limit) r.match = r.expression.match(text(), r.next);
+        if (r.next > r.limit || !r.match.hasMatch() || r.match.capturedEnd() > r.limit) {
             replacement.reset();
             if (search_label) search_label->hide();
             return;
@@ -4866,7 +4866,7 @@ class EmacsEditor : public QObject {
         replace(begin, end, inserted);
         r.limit += inserted.size() - (end - begin);
         r.next = begin + inserted.size();
-        if (begin == end) r.next = next_character(text(), r.next);
+        if (begin == end) r.next = r.next >= r.limit ? r.limit + 1 : next_character(text(), r.next);
     }
     bool replacement_key(QKeyEvent *event, const KeyboardModifierState &modifiers) {
         int key = event->key();
@@ -4887,7 +4887,8 @@ class EmacsEditor : public QObject {
             if (key == Qt::Key_Period) { replacement.reset(); search_label->hide(); }
             else next_replacement();
         } else if (key == Qt::Key_N || key == Qt::Key_Backspace) {
-            replacement->next = replacement->end > replacement->begin ? replacement->end : next_character(text(), replacement->end);
+            replacement->next = replacement->end > replacement->begin ? replacement->end :
+                replacement->end >= replacement->limit ? replacement->limit + 1 : next_character(text(), replacement->end);
             next_replacement();
         }
         return true;
