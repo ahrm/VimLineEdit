@@ -160,6 +160,7 @@ enum class SurroundingKind {
     Backticks,
     Word,
     WORD,
+    Paragraph,
 };
 
 struct ActionWaitingForMotion {

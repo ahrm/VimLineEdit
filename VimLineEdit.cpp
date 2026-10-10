@@ -439,6 +439,9 @@ bool VimEditor::process_key_press_event(QKeyEvent* event, bool& should_propagate
                 case Qt::Key_QuoteDbl:
                     action_waiting_for_motion->surrounding_kind = SurroundingKind::DoubleQuotes;
                     break;
+                case Qt::Key_P:
+                    action_waiting_for_motion->surrounding_kind = SurroundingKind::Paragraph;
+                    break;
                 case Qt::Key_W:
                     action_waiting_for_motion->surrounding_kind = event->text() == "W" ? SurroundingKind::WORD : SurroundingKind::Word;
                     break;
@@ -2631,6 +2634,30 @@ void VimEditor::apply_text_object(int begin, int end, bool linewise) {
 
 bool VimEditor::handle_surrounding_motion_action() {
     if (action_waiting_for_motion.has_value()) {
+        if (action_waiting_for_motion->surrounding_kind == SurroundingKind::Paragraph) {
+            QString text = adapter->get_text();
+            auto starts = get_line_starts(text);
+            int line, column;
+            get_line_and_col(get_cursor_position(), line, column);
+            auto blank = [&](int i) { return starts[i] == get_line_end_position(starts[i]); };
+            int first = line, last = line;
+            while (first > 0 && blank(first - 1) == blank(line)) --first;
+            bool around = action_waiting_for_motion->surrounding_scope == SurroundingScope::Around;
+            int count = std::min<qint64>(starts.size(),
+                static_cast<qint64>(std::max(1, current_command_repeat_number.toInt())) * pending_operator_count);
+            for (int i = 0; i < count && last < static_cast<int>(starts.size()); ++i) {
+                bool empty = blank(last);
+                do { ++last; } while (last < static_cast<int>(starts.size()) && blank(last) == empty);
+                if (around) {
+                    while (last < static_cast<int>(starts.size()) && blank(last) != empty) ++last;
+                }
+            }
+            if (around && last == static_cast<int>(starts.size()) && !blank(last - 1)) {
+                while (first > 0 && blank(first - 1)) --first;
+            }
+            apply_text_object(starts[first], last < static_cast<int>(starts.size()) ? starts[last] : text.size(), true);
+            return true;
+        }
         if (action_waiting_for_motion->surrounding_kind == SurroundingKind::Word ||
             action_waiting_for_motion->surrounding_kind == SurroundingKind::WORD) {
             QString text = adapter->get_text();
