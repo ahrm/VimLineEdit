@@ -1218,12 +1218,13 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
         }
         break;
     case VimLineEditCommand::GotoEnd:
-        if (num_repeats <= 1){
-            new_pos = get_line_end_position(current_state.text.length());
-        }
-        else {
+        if (!has_explicit_count) {
+            new_pos = get_line_start_position(current_state.text.size());
+        } else {
             new_pos = get_ith_line_start_position(num_repeats - 1);
         }
+        while (new_pos < get_line_end_position(new_pos) &&
+               (current_state.text[new_pos] == ' ' || current_state.text[new_pos] == '\t')) ++new_pos;
         break;
     case VimLineEditCommand::MoveToFirstNonblank:
         new_pos = get_line_start_position(old_pos);
