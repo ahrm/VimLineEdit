@@ -4844,6 +4844,10 @@ class EmacsEditor : public QObject {
             {"query-replace-regexp", Qt::Key_Percent, true, true, false}, {"fill-paragraph", Qt::Key_Q, false, true, false},
             {"set-fill-column", Qt::Key_F, false, false, true}, {"indent-region", Qt::Key_Backslash, true, true, false},
             {"indent-for-tab-command", Qt::Key_Tab, false, false, false},
+            {"forward-sexp", Qt::Key_F, true, true, false}, {"backward-sexp", Qt::Key_B, true, true, false},
+            {"forward-list", Qt::Key_N, true, true, false}, {"backward-list", Qt::Key_P, true, true, false},
+            {"backward-up-list", Qt::Key_U, true, true, false}, {"down-list", Qt::Key_D, true, true, false},
+            {"kill-sexp", Qt::Key_K, true, true, false}, {"mark-sexp", Qt::Key_Space, true, true, false},
             {"start-kbd-macro", Qt::Key_ParenLeft, false, false, true},
             {"end-kbd-macro", Qt::Key_ParenRight, false, false, true},
             {"call-last-kbd-macro", Qt::Key_E, false, false, true},
@@ -5133,6 +5137,89 @@ class EmacsEditor : public QObject {
         }
         pending_edit.reset();
         deactivate_mark();
+    }
+    struct ExpressionSpan { int begin, end; bool list; };
+    std::vector<ExpressionSpan> expression_spans() const {
+        const auto value = text();
+        std::vector<ExpressionSpan> spans;
+        std::function<int(int)> scan = [&](int begin) -> int {
+            int pos = begin;
+            QChar c = value[pos++];
+            int opening = QString("([{ ").indexOf(c);
+            bool list = opening >= 0 && opening < 3;
+            if (list) {
+                QChar closing = QString(")]}")[opening];
+                while (pos < value.size()) {
+                    if (value[pos] == closing) { ++pos; break; }
+                    if (value[pos].isSpace()) { ++pos; continue; }
+                    if (QString(")]}").contains(value[pos])) return begin;
+                    int end = scan(pos);
+                    if (end <= pos) return begin;
+                    pos = end;
+                }
+                if (pos > value.size() || value[pos - 1] != closing) return begin;
+            } else if (c == '"') {
+                while (pos < value.size() && value[pos] != '"') {
+                    if (value[pos] == '\\' && pos + 1 < value.size()) ++pos;
+                    ++pos;
+                }
+                if (pos == value.size()) return begin;
+                ++pos;
+            } else {
+                if (QString(")]}").contains(c)) return begin;
+                while (pos < value.size() && !value[pos].isSpace() && !QString("()[]{}\"").contains(value[pos])) {
+                    if (value[pos] == '\\' && pos + 1 < value.size()) ++pos;
+                    ++pos;
+                }
+            }
+            spans.push_back({begin, pos, list});
+            return pos;
+        };
+        for (int pos = 0; pos < value.size();) {
+            if (value[pos].isSpace()) { ++pos; continue; }
+            int end = scan(pos);
+            pos = end > pos ? end : pos + 1;
+        }
+        return spans;
+    }
+    int sexp_target(int count, int origin = -1, bool lists_only = false) const {
+        int target = origin < 0 ? position() : origin;
+        const auto spans = expression_spans();
+        const auto value = text();
+        for (int i = 0; i < std::abs(count); ++i) {
+            int best = -1, result = target;
+            for (const auto &span : spans) {
+                if (lists_only && !span.list) continue;
+                if (count > 0 && span.end > target && (!span.list || span.begin >= target)) {
+                    int begin = std::max(span.begin, target);
+                    if (best < 0 || begin < best || (begin == best && span.end > result)) { best = begin; result = span.end; }
+                } else if (count < 0 && span.begin < target && (!span.list || span.end <= target)) {
+                    int end = std::min(span.end, target);
+                    if (end > best || (end == best && span.begin < result)) { best = end; result = span.begin; }
+                }
+            }
+            if (best < 0) break;
+            target = result;
+        }
+        return target;
+    }
+    void expression_command(int key, int count, LastAction previous) {
+        int pos = position();
+        if (key == Qt::Key_U || key == Qt::Key_D) {
+            int target = -1;
+            for (const auto &span : expression_spans()) if (span.list) {
+                if (key == Qt::Key_U && span.begin < pos && span.end >= pos && span.begin > target) target = span.begin;
+                if (key == Qt::Key_D && span.begin >= pos && (target < 0 || span.begin + 1 < target)) target = span.begin + 1;
+            }
+            if (target >= 0) move_to(target);
+            return;
+        }
+        int target = sexp_target((key == Qt::Key_B || key == Qt::Key_P) ? -count : count, -1, key == Qt::Key_N || key == Qt::Key_P);
+        if (key == Qt::Key_K) kill(std::min(pos, target), std::max(pos, target), target < pos, previous == LastAction::Kill);
+        else if (key == Qt::Key_Space || key == Qt::Key_At) {
+            if (mark_active) mark = sexp_target(count, mark); else push_mark(target);
+            mark_active = true; move_to(pos);
+        } else move_to(target);
     }
     void horizontal_space(bool cycle, int count) {
         const auto value = text();
@@ -5449,7 +5536,9 @@ class EmacsEditor : public QObject {
         auto modifiers = KeyboardModifierState::from_qt_modifiers(event->modifiers());
         if (replacement || prompt_callback || goto_pending || quoted_count || argument || search || meta_pending || control_x_pending || event->key() == Qt::Key_Escape) return true;
         if (event->key() == Qt::Key_Tab || event->key() == Qt::Key_F3 || event->key() == Qt::Key_F4) return true;
-        if (modifiers.alt && modifiers.control && (event->key() == Qt::Key_S || event->key() == Qt::Key_R || event->key() == Qt::Key_Percent || event->key() == Qt::Key_Backslash)) return true;
+        if (modifiers.alt && modifiers.control && (event->key() == Qt::Key_S || event->key() == Qt::Key_R || event->key() == Qt::Key_Percent || event->key() == Qt::Key_Backslash ||
+            event->key() == Qt::Key_F || event->key() == Qt::Key_B || event->key() == Qt::Key_N || event->key() == Qt::Key_P ||
+            event->key() == Qt::Key_U || event->key() == Qt::Key_D || event->key() == Qt::Key_K || event->key() == Qt::Key_Space || event->key() == Qt::Key_At)) return true;
         if (modifiers.alt && !modifiers.control && !modifiers.command)
             return event->key() == Qt::Key_X || event->key() == Qt::Key_Q || event->key() == Qt::Key_Percent || event->key() == Qt::Key_A || event->key() == Qt::Key_E || event->key() == Qt::Key_K ||
                    event->key() == Qt::Key_BraceLeft || event->key() == Qt::Key_BraceRight || event->key() == Qt::Key_G || event->key() == Qt::Key_V ||
@@ -5611,6 +5700,12 @@ class EmacsEditor : public QObject {
             return true;
         }
         if (meta && modifiers.control) {
+            switch (key) {
+            case Qt::Key_F: case Qt::Key_B: case Qt::Key_N: case Qt::Key_P:
+            case Qt::Key_U: case Qt::Key_D: case Qt::Key_K: case Qt::Key_Space: case Qt::Key_At:
+                expression_command(key, count, previous_action); return true;
+            default: break;
+            }
             if (key == Qt::Key_S || key == Qt::Key_R) { begin_search(key == Qt::Key_S, true); return true; }
             if (key == Qt::Key_Percent) { query_replace(true); return true; }
             if (key == Qt::Key_Backslash) { indent(true); return true; }
