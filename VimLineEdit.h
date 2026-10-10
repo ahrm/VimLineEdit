@@ -331,6 +331,8 @@ class VimEditor {
     QString last_insert_mode_text = "";
     QString current_insert_mode_text = "";
     QString current_command_repeat_number = "";
+    int pending_operator_count = 1;
+    int insert_repeat_count = 1;
 
     std::unordered_map<int, Mark> marks;
     std::unordered_map<int, Macro> macros;
@@ -381,9 +383,9 @@ class VimEditor {
     // void resizeEvent(QResizeEvent* event);
 
   private:
-    int calculate_move_word_forward(bool with_symbols) const;
-    int calculate_move_to_end_of_word(bool with_symbols) const;
-    int calculate_move_word_backward(bool with_symbols) const;
+    int calculate_move_word_forward(bool with_symbols, int pos = -1) const;
+    int calculate_move_to_end_of_word(bool with_symbols, int pos = -1) const;
+    int calculate_move_word_backward(bool with_symbols, int pos = -1) const;
 
     int calculate_move_down(int old_pos);
     int calculate_move_up(int old_pos);

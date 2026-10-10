@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <climits>
 #include "VimLineEdit.h"
 #include <QAbstractTextDocumentLayout>
 #include <QPainter>
@@ -241,6 +242,7 @@ bool VimEditor::key_press_event(QKeyEvent* event, bool& should_propagate) {
             pending_symbol_command = {};
             current_node = nullptr;
             current_command_repeat_number.clear();
+            pending_operator_count = 1;
             current_paste_register = {};
             return true;
         }
@@ -260,10 +262,13 @@ bool VimEditor::key_press_event(QKeyEvent* event, bool& should_propagate) {
         bool is_keypress_a_modifier = event_key == Qt::Key_Shift || event_key == Qt::Key_Control ||
                                       event_key == Qt::Key_Alt || event_key == Qt::Key_Meta;
 
-        bool is_key_a_number = (event_key >= Qt::Key_0 && event_key <= Qt::Key_9);
-
-        if (!is_keypress_a_modifier && !action_waiting_for_motion.has_value() && is_key_a_number){
+        bool is_key_a_number = event->text().size() == 1 &&
+                               event->text().at(0).isDigit() &&
+                               !(event->modifiers() & (Qt::ControlModifier | Qt::MetaModifier | Qt::AltModifier));
+        if (is_key_a_number && !pending_symbol_command &&
+            (event->text() != "0" || !current_command_repeat_number.isEmpty())) {
             current_command_repeat_number.append(event->text());
+            return false;
         }
 
         if (!is_keypress_a_modifier && pending_symbol_command.has_value()) {
@@ -904,21 +909,15 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
         }
     }
 
-    // don't handle the 0 key while we are typing a repeat number
-    if (cmd == VimLineEditCommand::MoveToBeginningOfLine && current_command_repeat_number.size() > 1) {
-        return;
-    }
-
-    int num_repeats = 1;
-    if (current_command_repeat_number.size() > 0){
-        bool ok;
-        num_repeats = current_command_repeat_number.toInt(&ok);
-        if (!ok) {
-            num_repeats = 1;
-        }
-        current_command_repeat_number = "";
-    }
-
+    const bool has_explicit_count = !current_command_repeat_number.isEmpty();
+    bool valid_count = false;
+    int num_repeats = current_command_repeat_number.toInt(&valid_count);
+    if (!valid_count || num_repeats < 1) num_repeats = 1;
+    current_command_repeat_number.clear();
+    // Clamp arithmetic to the largest count representable by this editor.
+    num_repeats = static_cast<int>(std::min<qint64>(
+        static_cast<qint64>(num_repeats) * pending_operator_count, INT_MAX));
+    pending_operator_count = 1;
 
     // Ask for more text before taking snapshots; prepending can shift positions.
     if (auto* vim = dynamic_cast<VimTextEdit*>(editor_widget)) {
@@ -985,10 +984,12 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
 
     switch (cmd) {
     case VimLineEditCommand::EnterInsertMode:
+        insert_repeat_count = num_repeats;
         push_history(current_state);
         set_mode(VimMode::Insert);
         break;
     case VimLineEditCommand::EnterInsertModeAfter:{
+        insert_repeat_count = num_repeats;
         push_history(current_state);
         set_mode(VimMode::Insert);
         int current_pos = get_cursor_position();
@@ -1046,6 +1047,7 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
 
     }
     case VimLineEditCommand::EnterInsertModeBeginLine:
+        insert_repeat_count = num_repeats;
         push_history(current_state);
         if (current_mode == VimMode::VisualBlock) {
             enter_visual_block_insert_mode(false);
@@ -1055,6 +1057,7 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
         new_pos = get_line_start_position(get_cursor_position());
         break;
     case VimLineEditCommand::EnterInsertModeEndLine:
+        insert_repeat_count = num_repeats;
         push_history(current_state);
         if (current_mode == VimMode::VisualBlock) {
             enter_visual_block_insert_mode(true);
@@ -1213,6 +1216,14 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
             adapter->set_extra_selections(QList<QTextEdit::ExtraSelection>());
         }
 
+        if (current_mode == VimMode::Insert && insert_repeat_count > 1) {
+            QString repeated = current_insert_mode_text.repeated(insert_repeat_count - 1);
+            int cursor = get_cursor_position();
+            insert_text(repeated, cursor);
+            set_cursor_position(cursor + repeated.size());
+        }
+        insert_repeat_count = 1;
+
         VimMode previous_mode = current_mode;
         set_mode(VimMode::Normal);
 
@@ -1237,7 +1248,7 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
             }
 
             replicate_visual_block_insert_text();
-            bool is_at_beginning_of_line = (new_pos > 0 && current_state.text[new_pos - 1] == '\n');
+            bool is_at_beginning_of_line = (new_pos > 0 && adapter->get_text()[new_pos - 1] == '\n');
             if (get_cursor_position() > 0) {
                 if (!is_at_beginning_of_line) {
                     new_pos = get_cursor_position() - 1;
@@ -1328,18 +1339,38 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
         new_pos = calculate_move_down_on_screen();
         break;
     case VimLineEditCommand::MoveWordForward:
-        new_pos = calculate_move_word_forward(false);
+        new_pos = old_pos;
+        for (int i = 0; i < num_repeats; ++i) {
+            int next = calculate_move_word_forward(false, new_pos);
+            if (next == new_pos) break;
+            new_pos = next;
+        }
         break;
     case VimLineEditCommand::MoveWordForwardWithSymbols:
-        new_pos = calculate_move_word_forward(true);
+        new_pos = old_pos;
+        for (int i = 0; i < num_repeats; ++i) {
+            int next = calculate_move_word_forward(true, new_pos);
+            if (next == new_pos) break;
+            new_pos = next;
+        }
         break;
     case VimLineEditCommand::MoveToEndOfWord:
         delete_pos_offset = 1;
-        new_pos = calculate_move_to_end_of_word(false);
+        new_pos = old_pos;
+        for (int i = 0; i < num_repeats; ++i) {
+            int next = calculate_move_to_end_of_word(false, new_pos);
+            if (next == new_pos) break;
+            new_pos = next;
+        }
         break;
     case VimLineEditCommand::MoveToEndOfWordWithSymbols:
         delete_pos_offset = 1;
-        new_pos = calculate_move_to_end_of_word(true);
+        new_pos = old_pos;
+        for (int i = 0; i < num_repeats; ++i) {
+            int next = calculate_move_to_end_of_word(true, new_pos);
+            if (next == new_pos) break;
+            new_pos = next;
+        }
         break;
     case VimLineEditCommand::Undo:
         undo();
@@ -1348,10 +1379,20 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
         redo();
         break;
     case VimLineEditCommand::MoveWordBackward:
-        new_pos = calculate_move_word_backward(false);
+        new_pos = old_pos;
+        for (int i = 0; i < num_repeats; ++i) {
+            int next = calculate_move_word_backward(false, new_pos);
+            if (next == new_pos) break;
+            new_pos = next;
+        }
         break;
     case VimLineEditCommand::MoveWordBackwardWithSymbols:
-        new_pos = calculate_move_word_backward(true);
+        new_pos = old_pos;
+        for (int i = 0; i < num_repeats; ++i) {
+            int next = calculate_move_word_backward(true, new_pos);
+            if (next == new_pos) break;
+            new_pos = next;
+        }
         break;
     case VimLineEditCommand::DeleteCharAndEnterInsertMode:
     case VimLineEditCommand::DeleteChar:
@@ -1375,15 +1416,18 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
         break;
     case VimLineEditCommand::Delete:
         push_history(current_state);
+        pending_operator_count = num_repeats;
         action_waiting_for_motion = {ActionWaitingForMotionKind::Delete, SurroundingScope::None,
                                      SurroundingKind::None};
         break;
     case VimLineEditCommand::Change:
         push_history(current_state);
+        pending_operator_count = num_repeats;
         action_waiting_for_motion = {ActionWaitingForMotionKind::Change, SurroundingScope::None,
                                      SurroundingKind::None};
         break;
     case VimLineEditCommand::Yank:
+        pending_operator_count = num_repeats;
         action_waiting_for_motion = {ActionWaitingForMotionKind::Yank, SurroundingScope::None,
                                      SurroundingKind::None};
         break;
@@ -1468,6 +1512,10 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<char> symbo
         int cursor_pos = get_cursor_position();
         int line_start = get_line_start_position(cursor_pos);
         int line_end = get_line_end_position(cursor_pos);
+
+        for (int i = 1; i < num_repeats && line_end < current_state.text.size(); ++i) {
+            line_end = get_line_end_position(line_end + 1);
+        }
 
         set_last_deleted_text(current_state.text.mid(line_start, line_end - line_start), current_paste_register, true);
 
@@ -1911,8 +1959,8 @@ int VimEditor::calculate_find(FindState find_state, bool reverse) const {
     return get_cursor_position();
 }
 
-int VimEditor::calculate_move_word_forward(bool with_symbols) const {
-    int pos = get_cursor_position();
+int VimEditor::calculate_move_word_forward(bool with_symbols, int pos) const {
+    if (pos < 0) pos = get_cursor_position();
     const QString t = adapter->get_text();
     int len = t.length();
 
@@ -1947,8 +1995,8 @@ int VimEditor::calculate_move_word_forward(bool with_symbols) const {
     return pos;
 }
 
-int VimEditor::calculate_move_to_end_of_word(bool with_symbols) const {
-    int pos = get_cursor_position();
+int VimEditor::calculate_move_to_end_of_word(bool with_symbols, int pos) const {
+    if (pos < 0) pos = get_cursor_position();
     const QString t = adapter->get_text();
     int len = t.length();
 
@@ -1997,8 +2045,8 @@ int VimEditor::calculate_move_to_end_of_word(bool with_symbols) const {
     return next_pos;
 }
 
-int VimEditor::calculate_move_word_backward(bool with_symbols) const {
-    int pos = get_cursor_position();
+int VimEditor::calculate_move_word_backward(bool with_symbols, int pos) const {
+    if (pos < 0) pos = get_cursor_position();
     const QString t = adapter->get_text();
 
     if (pos <= 0) {
