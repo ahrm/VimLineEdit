@@ -432,6 +432,7 @@ class VimEditor {
 
     int calculate_move_down(int old_pos);
     int calculate_move_up(int old_pos);
+    int calculate_move_vertical(int old_pos, bool forward);
 
     int calculate_move_down_on_screen();
     int calculate_move_up_on_screen();

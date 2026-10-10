@@ -231,6 +231,60 @@ static void test_external_edit_cancels_prompt() {
     check(widget.toPlainText() == "Xnew", "An external buffer replacement should cancel pending Emacs prompts");
 }
 
+static void test_replacement_dialects() {
+    VimTextEdit widget;
+    widget.setPlainText("ab ab");
+    widget.editor->handle_command(VimLineEditCommand::CommandCommand);
+    widget.editor->command_line_edit->setText(R"(:%s/\(a\)b/[&]-\1-\&-\r/g)");
+    QKeyEvent submit(QEvent::KeyPress, Qt::Key_Return, Qt::NoModifier);
+    QApplication::sendEvent(widget.editor->command_line_edit, &submit);
+    check(widget.toPlainText() == "[ab]-a-&-\n [ab]-a-&-\n", "Vim replacement expansion should preserve its ampersand and newline rules");
+    widget.setPlainText("ab ab");
+    widget.set_keybinding_mode(KeybindingMode::Emacs);
+    QKeyEvent prompt(QEvent::KeyPress, Qt::Key_X, Qt::AltModifier);
+    QApplication::sendEvent(&widget, &prompt);
+    for (const auto &input : {QString("replace-regexp"), QString(R"(\(a\)b)"), QString(R"([\&]-\1-&-\\)")}) {
+        QKeyEvent typed(QEvent::KeyPress, Qt::Key_unknown, Qt::NoModifier, input);
+        QKeyEvent enter(QEvent::KeyPress, Qt::Key_Return, Qt::NoModifier);
+        QApplication::sendEvent(&widget, &typed);
+        QApplication::sendEvent(&widget, &enter);
+    }
+    check(widget.toPlainText() == "[ab]-a-&-\\ [ab]-a-&-\\", "Emacs replacement expansion should preserve its distinct escaping rules");
+}
+
+template<class Widget> static void test_named_command_repetition() {
+    Widget widget;
+    widget.set_keybinding_mode(KeybindingMode::Emacs);
+    auto key = [&](int code, Qt::KeyboardModifiers modifiers = Qt::NoModifier, QString text = {}) {
+        QKeyEvent event(QEvent::KeyPress, code, modifiers, text);
+        QApplication::sendEvent(&widget, &event);
+    };
+    key(Qt::Key_unknown, Qt::NoModifier, "abcdefghij");
+    control(widget, Qt::Key_A);
+    control(widget, Qt::Key_U);
+    key(Qt::Key_2, Qt::NoModifier, "2");
+    key(Qt::Key_X, Qt::AltModifier);
+    key(Qt::Key_unknown, Qt::NoModifier, "delete-char");
+    key(Qt::Key_Return);
+    check(contents(widget) == "cdefghij", "M-x should pass the numeric argument to the selected command");
+    control(widget, Qt::Key_X); key(Qt::Key_Z);
+    check(contents(widget) == "efghij", "Repeat should retain the named command's numeric argument");
+    key(Qt::Key_Z);
+    check(contents(widget) == "ghij", "A following z should repeat the same command again");
+    control(widget, Qt::Key_U);
+    key(Qt::Key_1, Qt::NoModifier, "1");
+    control(widget, Qt::Key_X); key(Qt::Key_Z);
+    check(contents(widget) == "hij", "An explicit repeat argument should override the original count");
+    control(widget, Qt::Key_G);
+    key(Qt::Key_Delete);
+    control(widget, Qt::Key_X); key(Qt::Key_Z);
+    check(contents(widget) == "j", "Delete should replace the previous repeat command");
+    control(widget, Qt::Key_X); key(Qt::Key_R);
+    control(widget, Qt::Key_G);
+    key(Qt::Key_S, Qt::NoModifier, "s");
+    check(contents(widget) == "sj", "Cancelling a register prefix should restore ordinary typing");
+}
+
 int main(int argc, char **argv) {
     QApplication application(argc, argv);
     test_modes<VimLineEdit>();
@@ -244,5 +298,8 @@ int main(int argc, char **argv) {
     test_mouse_selection_and_wrapping();
     test_command_help();
     test_external_edit_cancels_prompt();
+    test_replacement_dialects();
+    test_named_command_repetition<VimLineEdit>();
+    test_named_command_repetition<VimTextEdit>();
     return failures ? 1 : 0;
 }
