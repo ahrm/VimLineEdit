@@ -5763,8 +5763,14 @@ class EmacsEditor : public QObject {
         line(qobject_cast<QLineEdit *>(widget)), multi(qobject_cast<QTextEdit *>(widget)), observed_text(text()) {
         widget->installEventFilter(this);
         auto changed = [this]() {
-            // External edits invalidate the search's saved offsets.
+            // External edits invalidate saved prompt and replacement offsets.
             finish_search(false);
+            if (!pending_edit) {
+                prompt_callback = nullptr;
+                register_callback = nullptr;
+                replacement.reset();
+                if (search_label) search_label->hide();
+            }
             const auto current = text();
             int begin, old_end, new_end;
             if (pending_edit) {

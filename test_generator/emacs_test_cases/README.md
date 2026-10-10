@@ -61,4 +61,4 @@ either widget. Cases 0–2 also run in standard Qt mode to check the harness.
 | 59–67 | Filling, indentation, named commands and command completion |
 | 68–73 | Keyboard macros and balanced expressions |
 | 74–82 | Rectangles, text/position registers and word expansion |
-| 83–96 | Prefix, paragraph, Unicode, empty-regexp and named-command regressions |
+| 83–99 | Prefix, paragraph, Unicode, empty-regexp and named-command regressions |

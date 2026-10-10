@@ -220,6 +220,17 @@ static void test_command_help() {
     if (help) help->close();
 }
 
+static void test_external_edit_cancels_prompt() {
+    VimTextEdit widget;
+    widget.set_keybinding_mode(KeybindingMode::Emacs);
+    QKeyEvent prompt(QEvent::KeyPress, Qt::Key_X, Qt::AltModifier);
+    QApplication::sendEvent(&widget, &prompt);
+    widget.setPlainText("new");
+    QKeyEvent typed(QEvent::KeyPress, Qt::Key_X, Qt::NoModifier, "X");
+    QApplication::sendEvent(&widget, &typed);
+    check(widget.toPlainText() == "Xnew", "An external buffer replacement should cancel pending Emacs prompts");
+}
+
 int main(int argc, char **argv) {
     QApplication application(argc, argv);
     test_modes<VimLineEdit>();
@@ -232,5 +243,6 @@ int main(int argc, char **argv) {
     test_open_command();
     test_mouse_selection_and_wrapping();
     test_command_help();
+    test_external_edit_cancels_prompt();
     return failures ? 1 : 0;
 }
