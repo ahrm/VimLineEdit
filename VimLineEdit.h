@@ -47,6 +47,9 @@ enum class VimLineEditCommand {
     DeleteChar,
     ReplaceChar,
     EnterReplaceMode,
+    Indent,
+    Unindent,
+    TransformCurrentLine,
     JoinLines,
     JoinLinesWithoutSpace,
     FindForward,
@@ -110,6 +113,8 @@ enum class VimLineEditCommand {
 };
 
 enum class ActionWaitingForMotionKind {
+    Indent,
+    Unindent,
     Delete,
     Change,
     Yank,
