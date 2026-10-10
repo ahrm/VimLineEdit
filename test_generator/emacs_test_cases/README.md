@@ -51,3 +51,4 @@ either widget. Cases 0–2 also run in standard Qt mode to check the harness.
 | 15–19 | Word boundaries, retained vertical column, Unicode, region insertion, prefix cancellation |
 | 20–24 | Consecutive kills, backward word kill, region copy, undo grouping |
 | 25–30 | Reverse/repeated search, cancellation, query deletion, failing search, smart case |
+| 31–32 | Mark positions after inserting or deleting repeated characters |

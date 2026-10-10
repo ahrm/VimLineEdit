@@ -41,6 +41,8 @@ template<class Widget> static void test_modes() {
     widget.setReadOnly(true);
     control(widget, Qt::Key_D);
     check(contents(widget) == "abc", "Read-only Emacs deletion changed text");
+    control(widget, Qt::Key_Underscore);
+    check(contents(widget) == "abc", "Read-only Emacs undo changed text");
     control(widget, Qt::Key_F);
     check(position(widget) == 1, "Read-only navigation should still work");
     control(widget, Qt::Key_Space);
@@ -64,6 +66,17 @@ template<class Widget> static void test_modes() {
     check(widget.get_keybinding_mode() == KeybindingMode::Standard, "Legacy disable selects standard mode");
     widget.set_vim_enabled(true);
     check(widget.get_keybinding_mode() == KeybindingMode::Vim, "Legacy enable selects Vim mode");
+    widget.setReadOnly(false);
+    widget.set_keybinding_mode(KeybindingMode::Emacs);
+    QKeyEvent escape(QEvent::KeyPress, Qt::Key_Escape, Qt::NoModifier);
+    QKeyEvent backward_word(QEvent::KeyPress, Qt::Key_B, Qt::NoModifier, "b");
+    QApplication::sendEvent(&widget, &escape);
+    QApplication::sendEvent(&widget, &backward_word);
+    check(position(widget) == 0 && contents(widget) == "abc", "Escape prefix should work like Meta");
+    QApplication::sendEvent(&widget, &escape);
+    QKeyEvent unsupported(QEvent::KeyPress, Qt::Key_Q, Qt::NoModifier, "q");
+    QApplication::sendEvent(&widget, &unsupported);
+    check(contents(widget) == "abc", "Unsupported Escape-prefixed commands must not type their final key");
 }
 
 int main(int argc, char **argv) {

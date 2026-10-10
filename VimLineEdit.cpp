@@ -4542,6 +4542,7 @@ class EmacsEditor : public QObject {
     bool mark_active = false;
     bool control_x_pending = false;
     QString observed_text;
+    std::optional<std::pair<int, int>> pending_edit;
     enum class LastAction { Other, Kill, Yank };
     LastAction last_action = LastAction::Other;
     std::deque<QString> kill_ring;
@@ -4646,6 +4647,7 @@ class EmacsEditor : public QObject {
     }
     void replace(int begin, int end, const QString &replacement) {
         if (read_only()) return;
+        pending_edit = std::make_pair(begin, end);
         if (line) {
             line->setSelection(begin, end - begin);
             line->insert(replacement);
@@ -4658,6 +4660,7 @@ class EmacsEditor : public QObject {
             cursor.endEditBlock();
             multi->setTextCursor(cursor);
         }
+        pending_edit.reset();
         deactivate_mark();
     }
     void save_kill(const QString &contents, bool append, bool backward) {
@@ -4798,11 +4801,20 @@ class EmacsEditor : public QObject {
             // External edits invalidate the search's saved offsets.
             finish_search(false);
             const auto current = text();
-            int begin = 0;
-            while (begin < observed_text.size() && begin < current.size() && observed_text[begin] == current[begin]) ++begin;
-            int old_end = observed_text.size(), new_end = current.size();
-            while (old_end > begin && new_end > begin && observed_text[old_end - 1] == current[new_end - 1]) {
-                --old_end; --new_end;
+            int begin, old_end, new_end;
+            if (pending_edit) {
+                // A text diff cannot locate an insertion among repeated characters.
+                begin = pending_edit->first;
+                old_end = pending_edit->second;
+                new_end = old_end + current.size() - observed_text.size();
+            } else {
+                begin = 0;
+                while (begin < observed_text.size() && begin < current.size() && observed_text[begin] == current[begin]) ++begin;
+                old_end = observed_text.size();
+                new_end = current.size();
+                while (old_end > begin && new_end > begin && observed_text[old_end - 1] == current[new_end - 1]) {
+                    --old_end; --new_end;
+                }
             }
             if (mark > begin) mark = mark <= old_end ? begin : mark + new_end - old_end;
             observed_text = current;
@@ -4823,6 +4835,8 @@ class EmacsEditor : public QObject {
         move_to(position());
     }
 
+    void finish_key_event() { pending_edit.reset(); }
+
     bool handles_shortcut(QKeyEvent *event) const {
         auto modifiers = KeyboardModifierState::from_qt_modifiers(event->modifiers());
         if (search || meta_pending || control_x_pending || event->key() == Qt::Key_Escape) return true;
@@ -4842,6 +4856,7 @@ class EmacsEditor : public QObject {
     }
 
     bool key_press_event(QKeyEvent *event) {
+        pending_edit.reset();
         const int key = event->key();
         if (key == Qt::Key_Control || key == Qt::Key_Shift || key == Qt::Key_Alt || key == Qt::Key_Meta)
             return false;
@@ -4857,7 +4872,8 @@ class EmacsEditor : public QObject {
         if (key == Qt::Key_Escape) { meta_pending = true; return true; }
         const LastAction previous_action = last_action;
         last_action = LastAction::Other;
-        const bool meta = modifiers.alt || meta_pending;
+        const bool escape_prefix = meta_pending;
+        const bool meta = modifiers.alt || escape_prefix;
         meta_pending = false;
         const bool vertical = modifiers.control && !meta && (key == Qt::Key_N || key == Qt::Key_P);
         if (!vertical) desired_column.reset();
@@ -4947,8 +4963,12 @@ class EmacsEditor : public QObject {
             (!event->text().isEmpty() || key == Qt::Key_Backspace || key == Qt::Key_Delete)) {
             // Fundamental-mode insertion leaves the region's text intact.
             deactivate_mark();
+            if (key == Qt::Key_Backspace) { replace(previous_character(value, pos), pos, ""); return true; }
+            if (key == Qt::Key_Delete) { replace(pos, next_character(value, pos), ""); return true; }
+            pending_edit = std::make_pair(pos, pos);
         }
-        return false; // Ordinary typing and native shortcuts stay with Qt.
+        // An unknown Escape-prefixed command must not insert its final key.
+        return escape_prefix; // Otherwise let Qt handle typing and native shortcuts.
     }
 };
 
@@ -4997,7 +5017,9 @@ void VimLineEdit::keyPressEvent(QKeyEvent *event) {
     }
 
     if (!get_vim_enabled()){
-        return QLineEdit::keyPressEvent(event);
+        QLineEdit::keyPressEvent(event);
+        emacs_editor->finish_key_event();
+        return;
     }
 
     bool should_propagate = false;
@@ -5118,7 +5140,9 @@ void VimTextEdit::keyPressEvent(QKeyEvent *event) {
                 break;
             }
         }
-        return QTextEdit::keyPressEvent(event);
+        QTextEdit::keyPressEvent(event);
+        emacs_editor->finish_key_event();
+        return;
     }
 
     bool should_propagate = false;
