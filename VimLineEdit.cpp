@@ -1105,6 +1105,33 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<QChar> symb
     auto* text_edit = qobject_cast<QTextEdit*>(editor_widget);
     if (text_edit && text_edit->isReadOnly()) {
         switch (cmd) {
+        case VimLineEditCommand::Uppercasify:
+            if (auto* vim = dynamic_cast<VimTextEdit*>(text_edit)) {
+                const auto selections = vim->selection_cursors();
+                for (const auto& selection : selections) {
+                    if (selection.hasSelection()) {
+                        emit vim->readOnlyUppercaseRequested(selection.selectionStart(), selection.selectionEnd());
+                    }
+                }
+                set_mode(VimMode::Normal);
+                adapter->set_extra_selections({});
+                if (!selections.isEmpty()) set_cursor_position(selections.front().selectionStart());
+            }
+            current_command_repeat_number.clear();
+            return;
+        case VimLineEditCommand::DeleteCharBackward:
+        case VimLineEditCommand::DeleteChar:
+        case VimLineEditCommand::Delete:
+        case VimLineEditCommand::DeleteToEndOfLine:
+        case VimLineEditCommand::DeleteCurrentLine:
+        case VimLineEditCommand::DeletePreviousWord:
+            if (dynamic_cast<VimTextEdit*>(text_edit)) {
+                if (current_mode == VimMode::Visual || current_mode == VimMode::VisualLine ||
+                    current_mode == VimMode::VisualBlock) cmd = VimLineEditCommand::Delete;
+                break;
+            }
+            current_command_repeat_number.clear();
+            return;
         case VimLineEditCommand::EnterInsertMode:
         case VimLineEditCommand::EnterInsertModeAfter:
         case VimLineEditCommand::EnterInsertModeBegin:
@@ -1121,11 +1148,7 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<QChar> symb
         case VimLineEditCommand::JoinLinesWithoutSpace:
         case VimLineEditCommand::EnterReplaceMode:
         case VimLineEditCommand::ReplaceChar:
-        case VimLineEditCommand::DeleteCharBackward:
-    case VimLineEditCommand::DeleteChar:
-        case VimLineEditCommand::Delete:
         case VimLineEditCommand::Change:
-        case VimLineEditCommand::DeleteToEndOfLine:
         case VimLineEditCommand::ChangeToEndOfLine:
         case VimLineEditCommand::PasteForward:
         case VimLineEditCommand::PasteBackward:
@@ -1135,15 +1158,12 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<QChar> symb
         case VimLineEditCommand::InsertLineBelow:
         case VimLineEditCommand::InsertLineAbove:
         case VimLineEditCommand::DeleteCharAndEnterInsertMode:
-        case VimLineEditCommand::DeleteCurrentLine:
         case VimLineEditCommand::ChangeCurrentLine:
-        case VimLineEditCommand::DeletePreviousWord:
         case VimLineEditCommand::IncrementNextNumberOnCurrentLine:
         case VimLineEditCommand::DecrementNextNumberOnCurrentLine:
         case VimLineEditCommand::ProgressiveIncrement:
         case VimLineEditCommand::ProgressiveDecrement:
         case VimLineEditCommand::InsertLastInsertModeText:
-        case VimLineEditCommand::Uppercasify:
         case VimLineEditCommand::SwapCaseCharacterUnderCursor:
         case VimLineEditCommand::SwapCaseSelection:
         case VimLineEditCommand::ToggleComment:
@@ -4060,6 +4080,10 @@ void VimEditor::set_mode(VimMode mode){
 }
 
 void VimEditor::remove_text(int begin, int num){
+    if (auto* vim = dynamic_cast<VimTextEdit*>(editor_widget); vim && vim->isReadOnly()) {
+        if (num > 0) emit vim->readOnlyDeleteRequested(begin, begin + num);
+        return;
+    }
     insert_text("", begin, begin + num);
 }
 
@@ -5393,7 +5417,14 @@ class EmacsEditor : public QObject {
         move_to(position());
     }
     void replace(int begin, int end, const QString &replacement) {
-        if (read_only()) return;
+        if (read_only()) {
+            if (multi && replacement.isEmpty() && end > begin) {
+                emit multi->readOnlyDeleteRequested(begin, end);
+                deactivate_mark();
+                move_to(begin);
+            }
+            return;
+        }
         pending_edit = std::make_pair(begin, end);
         if (line) {
             line->setSelection(begin, end - begin);
@@ -5602,7 +5633,11 @@ class EmacsEditor : public QObject {
         QApplication::clipboard()->setText(last_clipboard);
     }
     void kill(int begin, int end, bool backward, bool append) {
-        if (read_only() || begin == end) return;
+        if (begin == end) return;
+        if (read_only()) {
+            replace(begin, end, "");
+            return;
+        }
         save_kill(text().mid(begin, end - begin), append, backward);
         publish_kill();
         replace(begin, end, "");
@@ -6071,6 +6106,25 @@ void VimTextEdit::keyPressEvent(QKeyEvent *event) {
 
     if (!get_vim_enabled()) {
         using Key = QKeySequence::StandardKey;
+        if (isReadOnly()) {
+            QTextCursor::MoveOperation deletion = QTextCursor::NoMove;
+            if (event->matches(Key::Delete)) deletion = QTextCursor::NextCharacter;
+            else if (event->matches(Key::Backspace)) deletion = QTextCursor::PreviousCharacter;
+            else if (event->matches(Key::DeleteStartOfWord)) deletion = QTextCursor::PreviousWord;
+            else if (event->matches(Key::DeleteEndOfWord)) deletion = QTextCursor::NextWord;
+            else if (event->matches(Key::DeleteEndOfLine)) deletion = QTextCursor::EndOfBlock;
+            if (deletion != QTextCursor::NoMove || event->matches(Key::Cut)) {
+                auto cursor = textCursor();
+                if (!cursor.hasSelection()) cursor.movePosition(deletion, QTextCursor::KeepAnchor);
+                if (cursor.hasSelection()) {
+                    emit readOnlyDeleteRequested(cursor.selectionStart(), cursor.selectionEnd());
+                    cursor.setPosition(cursor.selectionStart());
+                    setTextCursor(cursor);
+                }
+                event->accept();
+                return;
+            }
+        }
         struct Motion {
             Key move;
             Key select;

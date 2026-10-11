@@ -7,6 +7,7 @@
 #include <vector>
 #include <string>
 #include <deque>
+#include <functional>
 #include <memory>
 #include <unordered_map>
 #include <QTextEdit>
@@ -569,6 +570,9 @@ class VimTextEdit : public QTextEdit {
 signals:
     // Synchronous: a slot may extend the buffer before navigation continues.
     void textBoundaryRequested(bool forward);
+    // The buffer stays unchanged; end is exclusive.
+    void readOnlyDeleteRequested(int begin, int end);
+    void readOnlyUppercaseRequested(int begin, int end);
     void quitCommand();
     void forceQuitCommand();
     void writeCommand();
