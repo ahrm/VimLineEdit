@@ -1105,17 +1105,30 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<QChar> symb
     auto* text_edit = qobject_cast<QTextEdit*>(editor_widget);
     if (text_edit && text_edit->isReadOnly()) {
         switch (cmd) {
+        case VimLineEditCommand::Undo:
+        case VimLineEditCommand::Lowercase:
         case VimLineEditCommand::Uppercasify:
             if (auto* vim = dynamic_cast<VimTextEdit*>(text_edit)) {
                 const auto selections = vim->selection_cursors();
                 for (const auto& selection : selections) {
                     if (selection.hasSelection()) {
-                        emit vim->readOnlyUppercaseRequested(selection.selectionStart(), selection.selectionEnd());
+                        if (cmd == VimLineEditCommand::Uppercasify) {
+                            emit vim->readOnlyUppercaseRequested(selection.selectionStart(), selection.selectionEnd());
+                        } else {
+                            emit vim->readOnlyLowercaseRequested(selection.selectionStart(), selection.selectionEnd());
+                        }
                     }
                 }
                 set_mode(VimMode::Normal);
                 adapter->set_extra_selections({});
                 if (!selections.isEmpty()) set_cursor_position(selections.front().selectionStart());
+            }
+            current_command_repeat_number.clear();
+            return;
+        case VimLineEditCommand::SwapCaseCharacterUnderCursor:
+        case VimLineEditCommand::SwapCaseSelection:
+            if (auto* vim = dynamic_cast<VimTextEdit*>(text_edit)) {
+                emit vim->readOnlySwapCaseRequested();
             }
             current_command_repeat_number.clear();
             return;
@@ -1141,7 +1154,6 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<QChar> symb
         case VimLineEditCommand::Indent:
         case VimLineEditCommand::Unindent:
         case VimLineEditCommand::Reindent:
-        case VimLineEditCommand::Lowercase:
         case VimLineEditCommand::Uppercase:
         case VimLineEditCommand::TransformCurrentLine:
         case VimLineEditCommand::JoinLines:
@@ -1153,7 +1165,6 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<QChar> symb
         case VimLineEditCommand::PasteForward:
         case VimLineEditCommand::PasteBackward:
         case VimLineEditCommand::RepeatLastChange:
-        case VimLineEditCommand::Undo:
         case VimLineEditCommand::Redo:
         case VimLineEditCommand::InsertLineBelow:
         case VimLineEditCommand::InsertLineAbove:
@@ -1164,8 +1175,6 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<QChar> symb
         case VimLineEditCommand::ProgressiveIncrement:
         case VimLineEditCommand::ProgressiveDecrement:
         case VimLineEditCommand::InsertLastInsertModeText:
-        case VimLineEditCommand::SwapCaseCharacterUnderCursor:
-        case VimLineEditCommand::SwapCaseSelection:
         case VimLineEditCommand::ToggleComment:
         case VimLineEditCommand::AutoComplete:
             current_command_repeat_number.clear();
