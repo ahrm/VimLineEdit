@@ -1105,6 +1105,9 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<QChar> symb
     auto* text_edit = qobject_cast<QTextEdit*>(editor_widget);
     if (text_edit && text_edit->isReadOnly()) {
         switch (cmd) {
+        case VimLineEditCommand::Change:
+            if (dynamic_cast<VimTextEdit*>(text_edit) && current_mode == VimMode::Normal) break;
+            [[fallthrough]];
         case VimLineEditCommand::Undo:
         case VimLineEditCommand::Lowercase:
         case VimLineEditCommand::Uppercasify:
@@ -1112,7 +1115,9 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<QChar> symb
                 const auto selections = vim->selection_cursors();
                 for (const auto& selection : selections) {
                     if (selection.hasSelection()) {
-                        if (cmd == VimLineEditCommand::Uppercasify) {
+                        if (cmd == VimLineEditCommand::Change) {
+                            emit vim->readOnlyChangeRequested(selection.selectionStart(), selection.selectionEnd());
+                        } else if (cmd == VimLineEditCommand::Uppercasify) {
                             emit vim->readOnlyUppercaseRequested(selection.selectionStart(), selection.selectionEnd());
                         } else {
                             emit vim->readOnlyLowercaseRequested(selection.selectionStart(), selection.selectionEnd());
@@ -1122,6 +1127,12 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<QChar> symb
                 set_mode(VimMode::Normal);
                 adapter->set_extra_selections({});
                 if (!selections.isEmpty()) set_cursor_position(selections.front().selectionStart());
+                if (cmd == VimLineEditCommand::Change) {
+                    action_waiting_for_motion = {};
+                    pending_operator_count = 1;
+                    current_paste_register = {};
+                    visual_line_selection_begin = visual_line_selection_end = -1;
+                }
             }
             current_command_repeat_number.clear();
             return;
@@ -1130,6 +1141,10 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<QChar> symb
             if (auto* vim = dynamic_cast<VimTextEdit*>(text_edit)) {
                 emit vim->readOnlySwapCaseRequested();
             }
+            current_command_repeat_number.clear();
+            return;
+        case VimLineEditCommand::ChangeCurrentLine:
+            if (dynamic_cast<VimTextEdit*>(text_edit) && current_mode == VimMode::Normal) break;
             current_command_repeat_number.clear();
             return;
         case VimLineEditCommand::DeleteCharBackward:
@@ -1160,7 +1175,6 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<QChar> symb
         case VimLineEditCommand::JoinLinesWithoutSpace:
         case VimLineEditCommand::EnterReplaceMode:
         case VimLineEditCommand::ReplaceChar:
-        case VimLineEditCommand::Change:
         case VimLineEditCommand::ChangeToEndOfLine:
         case VimLineEditCommand::PasteForward:
         case VimLineEditCommand::PasteBackward:
@@ -1169,7 +1183,6 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<QChar> symb
         case VimLineEditCommand::InsertLineBelow:
         case VimLineEditCommand::InsertLineAbove:
         case VimLineEditCommand::DeleteCharAndEnterInsertMode:
-        case VimLineEditCommand::ChangeCurrentLine:
         case VimLineEditCommand::IncrementNextNumberOnCurrentLine:
         case VimLineEditCommand::DecrementNextNumberOnCurrentLine:
         case VimLineEditCommand::ProgressiveIncrement:
@@ -2051,6 +2064,13 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<QChar> symb
 
         for (int i = 1; i < num_repeats && line_end < current_state.text.size(); ++i) {
             line_end = get_line_end_position(line_end + 1);
+        }
+
+        if (auto* vim = dynamic_cast<VimTextEdit*>(text_edit);
+            vim && vim->isReadOnly() && cmd == VimLineEditCommand::ChangeCurrentLine) {
+            if (line_end > line_start) emit vim->readOnlyChangeRequested(line_start, line_end);
+            new_pos = line_start;
+            break;
         }
 
         set_last_deleted_text(current_state.text.mid(line_start, line_end - line_start), current_paste_register, true,
@@ -3485,6 +3505,22 @@ void VimEditor::handle_action_waiting_for_motion(int old_pos, int new_pos, int d
     if (action_waiting_for_motion.has_value()) {
         QString current_text = adapter->get_text();
         auto kind = action_waiting_for_motion->kind;
+        if (auto* vim = dynamic_cast<VimTextEdit*>(editor_widget);
+            vim && vim->isReadOnly() && kind == ActionWaitingForMotionKind::Change) {
+            int begin = std::min(old_pos, new_pos);
+            int end = std::max(old_pos, new_pos) + (new_pos >= old_pos ? delete_pos_offset : 0);
+            if (linewise) {
+                begin = get_line_start_position(begin);
+                end = get_line_end_position(std::max(old_pos, new_pos));
+            }
+            if (end > begin) emit vim->readOnlyChangeRequested(begin, end);
+            set_cursor_position(begin);
+            action_waiting_for_motion = {};
+            pending_operator_count = 1;
+            current_paste_register = {};
+            set_mode(VimMode::Normal);
+            return;
+        }
         if (kind == ActionWaitingForMotionKind::Lowercase || kind == ActionWaitingForMotionKind::Uppercase) {
             int begin = std::min(old_pos, new_pos);
             int end = std::max(old_pos, new_pos) + (new_pos >= old_pos ? delete_pos_offset : 0);
