@@ -2512,7 +2512,9 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<QChar> symb
             handle_action_waiting_for_motion(old_pos, new_pos, delete_pos_offset, linewise);
         }
         else if (current_mode == VimMode::Visual) {
-            set_cursor_position_with_selection(new_pos + delete_pos_offset);
+            // Visual selections already include the cursor character. The
+            // operator's inclusive-end offset must not move the visual cursor.
+            set_cursor_position_with_selection(new_pos);
         }
         else if (current_mode == VimMode::VisualLine) {
             set_cursor_position_with_line_selection(new_pos);
