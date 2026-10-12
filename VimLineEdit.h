@@ -572,6 +572,7 @@ signals:
     void textBoundaryRequested(bool forward);
     // The buffer stays unchanged; end is exclusive.
     void readOnlyDeleteRequested(int begin, int end);
+    void readOnlyDeleteCharRequested();
     void readOnlyChangeRequested(int begin, int end);
     void readOnlyLowercaseRequested(int begin, int end);
     void readOnlyUppercaseRequested(int begin, int end);

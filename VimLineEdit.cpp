@@ -1147,8 +1147,13 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<QChar> symb
             if (dynamic_cast<VimTextEdit*>(text_edit) && current_mode == VimMode::Normal) break;
             current_command_repeat_number.clear();
             return;
-        case VimLineEditCommand::DeleteCharBackward:
         case VimLineEditCommand::DeleteChar:
+            if (auto* vim = dynamic_cast<VimTextEdit*>(text_edit)) {
+                emit vim->readOnlyDeleteCharRequested();
+            }
+            current_command_repeat_number.clear();
+            return;
+        case VimLineEditCommand::DeleteCharBackward:
         case VimLineEditCommand::Delete:
         case VimLineEditCommand::DeleteToEndOfLine:
         case VimLineEditCommand::DeleteCurrentLine:
