@@ -524,8 +524,15 @@ bool VimEditor::process_key_press_event(QKeyEvent* event, bool& should_propagate
         }
 
         if (!is_keypress_a_modifier) {
+            const bool standalone_key = current_node == nullptr;
             std::optional<VimLineEditCommand> command =
                 handle_key_event(event->text(), event_key, event->modifiers());
+            if (standalone_key && command == VimLineEditCommand::Lowercase) {
+                if (auto* vim = dynamic_cast<VimTextEdit*>(editor_widget); vim && vim->isReadOnly()) {
+                    // Visual-mode u restores a host annotation just like normal-mode u.
+                    command = VimLineEditCommand::Undo;
+                }
+            }
             if (command.has_value()) {
                 if (requires_symbol(command.value())) {
                     // If the command requires a symbol, we need to wait for the next key press
@@ -1105,10 +1112,15 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<QChar> symb
     auto* text_edit = qobject_cast<QTextEdit*>(editor_widget);
     if (text_edit && text_edit->isReadOnly()) {
         switch (cmd) {
+        case VimLineEditCommand::Undo:
+            if (auto* vim = dynamic_cast<VimTextEdit*>(text_edit)) {
+                emit vim->readOnlyUndoRequested();
+            }
+            current_command_repeat_number.clear();
+            return;
         case VimLineEditCommand::Change:
             if (dynamic_cast<VimTextEdit*>(text_edit) && current_mode == VimMode::Normal) break;
             [[fallthrough]];
-        case VimLineEditCommand::Undo:
         case VimLineEditCommand::Lowercase:
         case VimLineEditCommand::Uppercasify:
             if (auto* vim = dynamic_cast<VimTextEdit*>(text_edit)) {

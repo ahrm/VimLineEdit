@@ -573,6 +573,7 @@ signals:
     // The buffer stays unchanged; end is exclusive.
     void readOnlyDeleteRequested(int begin, int end);
     void readOnlyDeleteCharRequested(bool backward);
+    void readOnlyUndoRequested();
     void readOnlyChangeRequested(int begin, int end);
     void readOnlyLowercaseRequested(int begin, int end);
     void readOnlyUppercaseRequested(int begin, int end);
