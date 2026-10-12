@@ -1178,10 +1178,17 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<QChar> symb
             current_command_repeat_number.clear();
             return;
         case VimLineEditCommand::EnterInsertMode:
+        case VimLineEditCommand::EnterInsertModeBeginLine:
+            if (auto* vim = dynamic_cast<VimTextEdit*>(text_edit)) {
+                if (current_mode == VimMode::Normal) {
+                    emit vim->readOnlyInsertRequested(cmd == VimLineEditCommand::EnterInsertModeBeginLine);
+                }
+            }
+            current_command_repeat_number.clear();
+            return;
         case VimLineEditCommand::EnterInsertModeAfter:
         case VimLineEditCommand::EnterInsertModeBegin:
         case VimLineEditCommand::EnterInsertModeEnd:
-        case VimLineEditCommand::EnterInsertModeBeginLine:
         case VimLineEditCommand::EnterInsertModeEndLine:
         case VimLineEditCommand::Indent:
         case VimLineEditCommand::Unindent:

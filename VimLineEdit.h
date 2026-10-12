@@ -578,6 +578,7 @@ signals:
     void readOnlyLowercaseRequested(int begin, int end);
     void readOnlyUppercaseRequested(int begin, int end);
     void readOnlySwapCaseRequested();
+    void readOnlyInsertRequested(bool at_line_begin);
     void quitCommand();
     void forceQuitCommand();
     void writeCommand();
