@@ -6381,6 +6381,9 @@ void VimEditor::goto_line(int line_number){
 }
 
 void VimEditor::center_on_cursor(){
+    if (auto* vim = dynamic_cast<VimTextEdit*>(editor_widget)) {
+        emit vim->centerOnCursorRequested();
+    }
     // try to center the view on the cursor position
     QTextEdit* text_edit = dynamic_cast<QTextEdit*>(editor_widget);
     if (text_edit) {

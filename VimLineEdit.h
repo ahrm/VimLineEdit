@@ -570,6 +570,7 @@ class VimTextEdit : public QTextEdit {
 signals:
     // Synchronous: a slot may extend the buffer before navigation continues.
     void textBoundaryRequested(bool forward);
+    void centerOnCursorRequested();
     // The buffer stays unchanged; end is exclusive.
     void readOnlyDeleteRequested(int begin, int end);
     void readOnlyDeleteCharRequested(bool backward);
