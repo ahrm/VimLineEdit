@@ -578,6 +578,7 @@ signals:
     void readOnlyChangeRequested(int begin, int end);
     void readOnlyLowercaseRequested(int begin, int end);
     void readOnlyUppercaseRequested(int begin, int end);
+    void readOnlySwapCaseRequested();
     void readOnlyChangeToEndOfLineRequested();
     void readOnlyInsertRequested(bool at_line_begin);
     void quitCommand();

@@ -1185,6 +1185,13 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<QChar> symb
             }
             current_command_repeat_number.clear();
             return;
+        case VimLineEditCommand::SwapCaseCharacterUnderCursor:
+        case VimLineEditCommand::SwapCaseSelection:
+            if (auto* vim = dynamic_cast<VimTextEdit*>(text_edit)) {
+                emit vim->readOnlySwapCaseRequested();
+            }
+            current_command_repeat_number.clear();
+            return;
         case VimLineEditCommand::EnterInsertModeAfter:
         case VimLineEditCommand::EnterInsertModeBegin:
         case VimLineEditCommand::EnterInsertModeEnd:
@@ -1198,8 +1205,6 @@ void VimEditor::handle_command(VimLineEditCommand cmd, std::optional<QChar> symb
         case VimLineEditCommand::JoinLinesWithoutSpace:
         case VimLineEditCommand::EnterReplaceMode:
         case VimLineEditCommand::ReplaceChar:
-        case VimLineEditCommand::SwapCaseCharacterUnderCursor:
-        case VimLineEditCommand::SwapCaseSelection:
         case VimLineEditCommand::PasteForward:
         case VimLineEditCommand::PasteBackward:
         case VimLineEditCommand::RepeatLastChange:
